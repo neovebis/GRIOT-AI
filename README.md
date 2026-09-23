@@ -1,47 +1,26 @@
-# GRIOT Semantic Engine v0.1.0
+# GRIOT Semantic Engine
 
-GRIOT is the engine itself. QUIDs are atomic semantic representations used by GRIOT; a QUID is exactly one Unicode code point and is never a multi-character token.
+## Releases
 
-## Four semantic bases
+- v0.1.0: foundational numeric/semantic engine, QUID registry, four bases, ten families, graph reasoning, simulation, persistence and API.
+- v0.2.0: additive QUID-grounded semantic intermediate representation.
 
-- Base 1: primitive semantic operators
-- Base 2: foundational concepts — action, result, state, cause/effect, condition, time, space and agency
-- Base 3: scenes — one-character scene QUIDs whose contents live in graph relations
-- Base 4: rich QUIDs — one-character high-level concepts linked to lower-level structure. Example: 🦁 = Panthera leo.
+## v0.2.0
 
-## Ten fixed semantic families
+GRIOT is the engine itself. QUIDs are atomic representations; every QUID is exactly one Unicode code point. Rich definitions, properties, evidence, events and learned relations live outside the symbol.
 
-1. ONTOLOGY
-2. RELATION
-3. PROPERTY
-4. ACTION
-5. STATE
-6. CAUSALITY
-7. LOGIC
-8. SPATIOTEMPORAL
-9. AGENCY
-10. EPISTEMIC
+The semantic IR compiles text into:
+- entity and event nodes backed by QUIDs
+- typed semantic edges
+- agent/patient roles for actions
+- negation
+- modality
+- temporal context
+- numeric constraints
+- deterministic composed meaning vectors
 
-Family IDs are numeric and may be serialized with padding (01 or 0000000001) without changing identity.
+The learning facade inserts the compiled semantic facts into the existing GRIOT graph.
 
-## Implemented
+The original v0.1.0 engine remains in griot_engine.py. The v0.2.0 layer is in griot_semantic_ir.py and is additive, preserving rollback/recovery.
 
-- intent detection and semantic frames
-- numeric signatures and cosine operations
-- knowledge graph with provenance, confidence, negative evidence and contradiction detection
-- transitive and causal rule inference
-- safe mathematical expression evaluation
-- determinants and Gaussian-elimination linear solving
-- deterministic transition simulation and Monte Carlo simulation
-- hygienized Portuguese text induction
-- JSON snapshots
-- localhost HTTP API
-- automated tests
-
-This is a symbolic/numeric cognitive substrate, not a pretrained LLM and not a claim of human-level language understanding.
-
-Run locally:
-```bash
-PYTHONPATH=. python -m unittest discover -s tests -v
-PYTHONPATH=. python -m griot_engine
-```
+This remains a symbolic/numeric research engine, not a claim of unrestricted natural-language understanding.

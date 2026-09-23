@@ -1,0 +1,18 @@
+{
+  "release": "0.2.0",
+  "core": "GRIOT is the intelligence engine; QUID is an atomic representation",
+  "quid_invariant": "exactly_one_unicode_code_point",
+  "bases": 4,
+  "families": 10,
+  "artifacts": [
+    "griot_semantic_ir.py",
+    "tests/test_semantic_ir.py",
+    "RELEASES/v0.2.0.md"
+  ],
+  "validation": {
+    "local_core_tests": 14,
+    "local_semantic_ir_tests": 5,
+    "total": 19,
+    "result": "PASS"
+  }
+}
