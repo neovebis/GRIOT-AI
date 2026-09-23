@@ -1,0 +1,23 @@
+{
+  "version": "0.1.0",
+  "quid_invariant": "exactly_one_unicode_code_point",
+  "family_count": 10,
+  "families": {
+    "1": "ONTOLOGY",
+    "2": "RELATION",
+    "3": "PROPERTY",
+    "4": "ACTION",
+    "5": "STATE",
+    "6": "CAUSALITY",
+    "7": "LOGIC",
+    "8": "SPATIOTEMPORAL",
+    "9": "AGENCY",
+    "10": "EPISTEMIC"
+  },
+  "bases": {
+    "base1": "primitive semantic operators",
+    "base2": "foundational concepts and transitions",
+    "base3": "scene representations",
+    "base4": "rich high-level concepts"
+  }
+}
