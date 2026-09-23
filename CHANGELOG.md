@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.0
+- Added operational causal world state simulation.
+- Added multi-step consequence propagation and fixed-point termination.
+- Added isolated counterfactual world comparison.
+- Added backward causal planning.
+
+# Changelog
+
 ## 0.6.0
 - Added metacognitive self-assessment.
 - Added evidence diversity and inference-depth measurements.

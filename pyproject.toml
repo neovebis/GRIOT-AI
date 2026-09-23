@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "griot-semantic-engine"
-version = "0.6.0"
-description = "GRIOT: numeric semantic engine with atomic QUID representations, semantic IR, structured induction, proof reasoning and hypothesis exploration, metacognitive evaluation and experiment planning."
+version = "0.7.0"
+description = "GRIOT: numeric semantic engine with atomic QUID representations, semantic IR, structured induction, proof reasoning and hypothesis exploration, metacognitive evaluation and experiment planning and operational causal world models."
 requires-python = ">=3.11"
 readme = "README.md"
 license = {text = "Proprietary"}

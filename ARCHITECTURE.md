@@ -97,3 +97,7 @@ The v0.6 layer evaluates conclusions using proof class, confidence, provenance d
 The planner takes a provisional hypothesis and derives graph-based predictions in an isolated sandbox. Predicted consequences are observations to test; they are never written as durable facts automatically.
 
 Future work: richer world models, stronger language understanding and tool-grounded action.
+
+## Operational world model
+
+The v0.7 layer interprets supported causal edges as transition rules over a simulated active-state world. It records transition events, propagates consequences to a fixed point, compares counterfactual interventions and searches backward causal chains for target states. Simulation is isolated from durable semantic memory.

@@ -48,3 +48,7 @@ Adds provisional hypothesis generation (analogy, composition and causal patterns
 ## v0.6.0
 
 Adds self-assessment of conclusions and hypothesis-to-prediction experiment planning. The metacognitive layer reports caveats and verification actions without mutating durable knowledge.
+
+## v0.7.0
+
+Adds an operational causal world model with multi-step simulation, fixed-point propagation, isolated counterfactual world comparison and backward causal planning.
