@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0
+- Added provisional analogy, composition and causal hypotheses.
+- Kept hypotheses separate from durable facts.
+- Added isolated counterfactual interventions and before/after comparison.
+- Avoided deepcopy of QUID allocators by cloning engine state explicitly.
+
+# Changelog
+
 ## 0.4.0
 - Added proof-oriented reasoning controller.
 - Added explicit supported/refuted/conflict/unknown states.

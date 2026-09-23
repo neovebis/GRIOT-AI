@@ -84,4 +84,8 @@ The graph remains separate from QUID identity so learning can extend knowledge w
 
 Each release is additive where practical. v0.1.0 remains recoverable, while semantic IR, structured induction and proof reasoning are layered on top.
 
-Future work: hypothesis generation, counterfactual reasoning, self-evaluation, experiment planning, richer world models, stronger language understanding and tool-grounded action.
+## Hypothesis and counterfactual layer
+
+The v0.5 layer explores unknown propositions without mutating durable memory. It can generate provisional analogical, compositional and causal hypotheses and run isolated counterfactual interventions. Hypotheses remain explicitly heuristic and are never promoted to facts automatically.
+
+Future work: self-evaluation, experiment planning, richer world models, stronger language understanding and tool-grounded action.

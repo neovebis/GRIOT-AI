@@ -40,3 +40,7 @@ Endpoints:
 - POST /learn
 - POST /ask
 - POST /calculate
+
+## v0.5.0
+
+Adds provisional hypothesis generation (analogy, composition and causal patterns) plus isolated counterfactual interventions. Hypotheses are never automatically committed to memory.
