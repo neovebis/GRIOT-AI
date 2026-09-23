@@ -2,44 +2,86 @@
 
 ## Core distinction
 
-GRIOT is the intelligence engine. QUIDs are its representations.
+**GRIOT is the intelligence engine. QUIDs are its representations.**
 
 A QUID is not an LLM, not a model and not a sentence token. The invariant is strict: one QUID equals one Unicode code point.
 
-Long names, definitions, properties, evidence, provenance, relations and learned structure live outside the QUID symbol in the numeric and graph layers.
+Long names, definitions, properties, evidence, provenance, relations and learned structure live outside the QUID symbol in numeric and graph layers.
 
 ## Base hierarchy
 
 ### Base 1 - Primitive
-Atomic semantic operators such as existence, identity, part-of, relation, action, change, causality, negation, conjunction, time, space and goal.
+Atomic semantic operators: existence, identity, part-of, membership, property, action, change, causality, negation, conjunction, disjunction, time, space, agency and epistemic markers.
 
 ### Base 2 - Foundation
-Reusable cognitive primitives such as action, result, state, event, cause, effect, reaction, condition, duration and interaction.
+Reusable concepts for action/result, state/change, event, cause/effect, reaction, condition, interaction, duration, agency and temporal structure.
 
 ### Base 3 - Scene
-A scene is represented by one QUID symbol. Its internal structure is external: component QUIDs and graph relations compose the scene.
+A scene is represented by one QUID. Its internal structure is external: component QUIDs and typed edges compose the scene.
 
 ### Base 4 - Rich
-High-level concepts represented by one QUID and backed by richer graph structure. Example: the lion QUID is the single symbol 🦁 whose canonical label is Panthera leo; properties such as mane, mass and behavior are learned graph facts.
+High-level concepts/entities are represented by one QUID and backed by richer graph structure. Example: `🦁` represents *Panthera leo*; mane, mass, habitat and behavior remain graph knowledge rather than characters inside the QUID.
 
 ## Ten semantic families
 
-Families are fixed at IDs 1..10. IDs may be padded for serialization, but the semantic identity is the same.
+Families are fixed at IDs 1..10. IDs can be padded for serialization without changing identity.
 
-## Numerical substrate
+1. ONTOLOGY
+2. RELATION
+3. PROPERTY
+4. ACTION
+5. STATE
+6. CAUSALITY
+7. LOGIC
+8. SPATIOTEMPORAL
+9. AGENCY
+10. EPISTEMIC
 
-The numeric kernel provides deterministic signatures, vector algebra, cosine similarity, matrix operations, determinant calculation, linear solving, exact fractions, statistics and a restricted expression evaluator.
+## Numeric substrate
 
-Deterministic signatures are a representation mechanism; they are not claimed to be trained embeddings.
+The numeric kernel provides deterministic signatures, vector algebra, cosine similarity, weighted composition, matrix multiplication, determinant calculation, linear-system solving, exact fractions, statistics and restricted safe expression evaluation.
 
-## Knowledge substrate
+Deterministic signatures are representation tools, not claimed trained embeddings.
 
-The graph stores positive and negative facts, confidence, provenance, evidence text, contradictions, transitive inference and explicit rule inference.
+## Semantic intermediate representation
 
-The graph is intentionally separate from QUID identity so learning does not mutate the meaning of a QUID by changing its symbol.
+Text can be compiled into a typed semantic graph containing:
+- entity nodes backed by QUIDs;
+- event/scene nodes backed by one QUID;
+- semantic relations;
+- agent/patient roles;
+- polarity/negation;
+- modality;
+- temporal context;
+- numeric constraints;
+- deterministic composed meaning vectors.
 
-## Phase 2 learning bridge
+## Structured knowledge induction
 
-Hygienized text is converted into propositions and then graph facts. Unknown concepts converge to newly allocated one-character QUIDs. This is a deterministic induction bridge, not model training.
+Phase-2 induction extracts reusable structures from hygienized text:
+- nested definitions;
+- properties;
+- numeric ranges and units;
+- conditional implication structures;
+- causal explanations;
+- contradiction evidence.
 
-Future work can add richer parsers, formal concept induction, probabilistic inference, self-evaluation, experiment planning and external tools without changing the atomic QUID invariant.
+No neural training is performed by these layers.
+
+## Proof-oriented reasoning
+
+The reasoning controller classifies a proposition as:
+- supported;
+- refuted;
+- conflict;
+- unknown.
+
+Proof steps include relation, confidence, rule and provenance. Transitive support and causal lookup provide explicit evidence trails.
+
+The graph remains separate from QUID identity so learning can extend knowledge without mutating the atomic QUID symbol.
+
+## Versioning invariant
+
+Each release is additive where practical. v0.1.0 remains recoverable, while semantic IR, structured induction and proof reasoning are layered on top.
+
+Future work: hypothesis generation, counterfactual reasoning, self-evaluation, experiment planning, richer world models, stronger language understanding and tool-grounded action.
