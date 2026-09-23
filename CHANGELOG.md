@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0
+- Added metacognitive self-assessment.
+- Added evidence diversity and inference-depth measurements.
+- Added explicit caveats and verification recommendations.
+- Added hypothesis-to-prediction experiment planning.
+- Kept predictions isolated from durable memory.
+
 ## 0.5.0
 - Added provisional analogy, composition and causal hypotheses.
 - Kept hypotheses separate from durable facts.

@@ -88,4 +88,12 @@ Each release is additive where practical. v0.1.0 remains recoverable, while sema
 
 The v0.5 layer explores unknown propositions without mutating durable memory. It can generate provisional analogical, compositional and causal hypotheses and run isolated counterfactual interventions. Hypotheses remain explicitly heuristic and are never promoted to facts automatically.
 
-Future work: self-evaluation, experiment planning, richer world models, stronger language understanding and tool-grounded action.
+## Metacognitive layer
+
+The v0.6 layer evaluates conclusions using proof class, confidence, provenance diversity and inference depth. It emits explicit caveats and verification recommendations.
+
+## Experiment planning
+
+The planner takes a provisional hypothesis and derives graph-based predictions in an isolated sandbox. Predicted consequences are observations to test; they are never written as durable facts automatically.
+
+Future work: richer world models, stronger language understanding and tool-grounded action.

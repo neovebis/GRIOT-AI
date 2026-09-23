@@ -44,3 +44,7 @@ Endpoints:
 ## v0.5.0
 
 Adds provisional hypothesis generation (analogy, composition and causal patterns) plus isolated counterfactual interventions. Hypotheses are never automatically committed to memory.
+
+## v0.6.0
+
+Adds self-assessment of conclusions and hypothesis-to-prediction experiment planning. The metacognitive layer reports caveats and verification actions without mutating durable knowledge.
