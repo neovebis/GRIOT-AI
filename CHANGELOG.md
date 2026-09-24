@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0
+- Added explicit atomic action schemas.
+- Added preconditions and add/remove effects.
+- Added cost-aware symbolic goal search.
+- Added causal propagation after action application.
+- Added replay-based plan verification.
+- Kept planning isolated from durable memory.
+
 ## 0.7.0
 - Added operational causal world state simulation.
 - Added multi-step consequence propagation and fixed-point termination.

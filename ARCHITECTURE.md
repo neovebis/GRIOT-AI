@@ -101,3 +101,8 @@ Future work: richer world models, stronger language understanding and tool-groun
 ## Operational world model
 
 The v0.7 layer interprets supported causal edges as transition rules over a simulated active-state world. It records transition events, propagates consequences to a fixed point, compares counterfactual interventions and searches backward causal chains for target states. Simulation is isolated from durable semantic memory.
+
+
+## Goal-oriented planning
+
+The v0.8 layer represents actions with one scene QUID plus explicit preconditions, add/remove effects, cost, confidence and provenance. A deterministic cost-aware search explores transient QUID world states. Each candidate plan is replayed and verified after search; planning does not mutate durable memory.

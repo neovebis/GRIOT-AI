@@ -52,3 +52,7 @@ Adds self-assessment of conclusions and hypothesis-to-prediction experiment plan
 ## v0.7.0
 
 Adds an operational causal world model with multi-step simulation, fixed-point propagation, isolated counterfactual world comparison and backward causal planning.
+
+## v0.8.0
+
+Adds explicit action schemas, preconditions/effects, cost-aware symbolic goal search, causal consequence propagation after actions and replay-based plan verification.
