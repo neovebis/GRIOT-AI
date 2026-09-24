@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0
+- Added two-phase autonomous knowledge acquisition.
+- Added staging ledger separated from durable memory.
+- Added confidence/corroboration consolidation gates.
+- Added source-diversity tracking.
+- Added conflict hold state.
+- Preserved the one-code-point QUID invariant.
+
 ## 0.8.0
 - Added explicit atomic action schemas.
 - Added preconditions and add/remove effects.

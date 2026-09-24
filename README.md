@@ -56,3 +56,7 @@ Adds an operational causal world model with multi-step simulation, fixed-point p
 ## v0.8.0
 
 Adds explicit action schemas, preconditions/effects, cost-aware symbolic goal search, causal consequence propagation after actions and replay-based plan verification.
+
+## v0.9.0
+
+Adds two-phase autonomous learning: staging/induction first, then gated consolidation with corroboration and conflict holds. Durable memory is never updated during observation.

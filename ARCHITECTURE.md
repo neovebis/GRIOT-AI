@@ -106,3 +106,8 @@ The v0.7 layer interprets supported causal edges as transition rules over a simu
 ## Goal-oriented planning
 
 The v0.8 layer represents actions with one scene QUID plus explicit preconditions, add/remove effects, cost, confidence and provenance. A deterministic cost-aware search explores transient QUID world states. Each candidate plan is replayed and verified after search; planning does not mutate durable memory.
+
+
+## Autonomous learning loop
+
+The v0.9 layer separates observation from consolidation. Hygienized text is compiled into candidate facts in a staging ledger; candidates are grouped, checked for opposite-polarity conflicts, evaluated by confidence and source diversity, and only accepted candidates enter durable memory. Held candidates remain unresolved rather than being overwritten.
