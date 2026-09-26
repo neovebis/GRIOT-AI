@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SHEOL Continuity Capsule",
+  "type": "object",
+  "required": ["phaseId", "status", "artifactRefs", "invariants", "acceptance", "unresolved"],
+  "properties": {
+    "phaseId": {"type": "string", "minLength": 1},
+    "status": {"enum": ["COMMITTED"]},
+    "artifactRefs": {"type": "array", "items": {"type": "string"}},
+    "invariants": {"type": "array", "items": {"type": "string"}},
+    "acceptance": {"type": "array", "items": {"type": "string"}},
+    "architectureFacts": {"type": "array", "items": {"type": "string"}},
+    "interfaces": {"type": "array", "items": {"type": "string"}},
+    "decisions": {"type": "array", "items": {"type": "string"}},
+    "unresolved": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

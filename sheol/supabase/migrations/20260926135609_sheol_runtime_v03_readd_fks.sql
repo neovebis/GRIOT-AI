@@ -1,0 +1,16 @@
+alter table private.sheol_plans add constraint sheol_plans_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_phases add constraint sheol_phases_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_attempts add constraint sheol_attempts_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_attempts add constraint sheol_attempts_phase_id_fkey foreign key (phase_id) references private.sheol_phases(phase_id) on delete cascade;
+alter table private.sheol_artifacts add constraint sheol_artifacts_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_artifacts add constraint sheol_artifacts_phase_id_fkey foreign key (phase_id) references private.sheol_phases(phase_id) on delete cascade;
+alter table private.sheol_artifacts add constraint sheol_artifacts_attempt_id_fkey foreign key (attempt_id) references private.sheol_attempts(attempt_id) on delete cascade;
+alter table private.sheol_gates add constraint sheol_gates_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_gates add constraint sheol_gates_phase_id_fkey foreign key (phase_id) references private.sheol_phases(phase_id) on delete cascade;
+alter table private.sheol_gates add constraint sheol_gates_attempt_id_fkey foreign key (attempt_id) references private.sheol_attempts(attempt_id) on delete cascade;
+alter table private.sheol_capsules add constraint sheol_capsules_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_capsules add constraint sheol_capsules_phase_id_fkey foreign key (phase_id) references private.sheol_phases(phase_id) on delete cascade;
+alter table private.sheol_replans add constraint sheol_replans_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_events add constraint sheol_events_mission_id_fkey foreign key (mission_id) references private.sheol_missions(mission_id) on delete cascade;
+alter table private.sheol_events add constraint sheol_events_phase_id_fkey foreign key (phase_id) references private.sheol_phases(phase_id) on delete set null;
+alter table private.sheol_events add constraint sheol_events_attempt_id_fkey foreign key (attempt_id) references private.sheol_attempts(attempt_id) on delete set null;

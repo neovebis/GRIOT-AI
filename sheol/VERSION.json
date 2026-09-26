@@ -1,0 +1,10 @@
+{
+  "name": "SHEOL",
+  "version": "0.5.0",
+  "stage": "executor-agnostic-runtime",
+  "status": "validated-locally-and-github-synced",
+  "tests": 21,
+  "execution_planes": ["local", "griot-sandbox", "remote", "custom"],
+  "source_storage": "native-github-files",
+  "supabase_integration": "deferred-until-sheol-core-is-stable"
+}

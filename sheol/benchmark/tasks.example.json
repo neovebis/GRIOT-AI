@@ -1,0 +1,22 @@
+[
+  {
+    "id": "software-mission-example",
+    "version": "0.1",
+    "family": "software",
+    "difficulty": 8,
+    "mission": "Replace this with a real repository task that requires architecture, implementation and objective verification.",
+    "hardRequirements": [
+      "All specified requirements are satisfied",
+      "No forbidden scope is introduced",
+      "The final artifact passes the task evaluator"
+    ],
+    "evaluation": {
+      "evaluator": "external-repository-evaluator",
+      "requiredEvidence": [
+        "test-results",
+        "artifact-manifest",
+        "requirement-check"
+      ]
+    }
+  }
+]
