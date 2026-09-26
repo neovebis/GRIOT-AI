@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SHEOL Mission",
+  "type": "object",
+  "required": ["id", "objective", "hardInvariants", "scope", "forbiddenScope", "acceptanceCriteria"],
+  "properties": {
+    "id": {"type": "string", "minLength": 1},
+    "objective": {"type": "string", "minLength": 1},
+    "hardInvariants": {"type": "array", "items": {"type": "string"}},
+    "scope": {"type": "array", "items": {"type": "string"}},
+    "forbiddenScope": {"type": "array", "items": {"type": "string"}},
+    "acceptanceCriteria": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": false
+}

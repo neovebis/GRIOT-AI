@@ -1,0 +1,15 @@
+alter table private.sheol_plans drop constraint if exists sheol_plans_mission_id_fkey;
+alter table private.sheol_phases drop constraint if exists sheol_phases_mission_id_fkey;
+alter table private.sheol_attempts drop constraint if exists sheol_attempts_mission_id_fkey;
+alter table private.sheol_attempts drop constraint if exists sheol_attempts_phase_id_fkey;
+alter table private.sheol_artifacts drop constraint if exists sheol_artifacts_mission_id_fkey;
+alter table private.sheol_artifacts drop constraint if exists sheol_artifacts_phase_id_fkey;
+alter table private.sheol_artifacts drop constraint if exists sheol_artifacts_attempt_id_fkey;
+alter table private.sheol_gates drop constraint if exists sheol_gates_mission_id_fkey;
+alter table private.sheol_gates drop constraint if exists sheol_gates_phase_id_fkey;
+alter table private.sheol_gates drop constraint if exists sheol_gates_attempt_id_fkey;
+alter table private.sheol_capsules drop constraint if exists sheol_capsules_mission_id_fkey;
+alter table private.sheol_replans drop constraint if exists sheol_replans_mission_id_fkey;
+alter table private.sheol_events drop constraint if exists sheol_events_mission_id_fkey;
+alter table private.sheol_events drop constraint if exists sheol_events_phase_id_fkey;
+alter table private.sheol_events drop constraint if exists sheol_events_attempt_id_fkey;

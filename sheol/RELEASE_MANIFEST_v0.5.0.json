@@ -1,0 +1,14 @@
+{
+  "name": "SHEOL",
+  "version": "0.5.0",
+  "tests": 21,
+  "execution_model": "executor-agnostic",
+  "execution_planes": ["local", "griot-sandbox", "remote", "custom"],
+  "source_storage": "native-github-files",
+  "supabase_integration": "deferred-until-sheol-core-is-stable",
+  "benchmark_5x": {
+    "target_relative_lift": 5,
+    "target_is_hypothesis": true,
+    "status": "harness_validated_no_real_model_run_claimed"
+  }
+}
