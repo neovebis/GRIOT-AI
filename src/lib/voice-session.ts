@@ -14,7 +14,7 @@
  */
 
 import { TranscriptStabilizer } from "./transcript-stabilizer";
-import { getStoredVoiceUri, setPreferredVoice } from "@/lib/tts-voice";
+import { getStoredVoiceUri, setPreferredVoice, resolveStableVoice } from "@/lib/tts-voice";
 import { concatFloat32, encodeWav } from "./audio-wav";
 import { startNeuralVad, VAD_SAMPLE_RATE, type NeuralVadHandle } from "./neural-vad";
 import { transcribeAudioElite, resolveSpeechLanguage } from "./speech-transcriber";
@@ -47,11 +47,11 @@ type Options = {
   onInterrupt?: () => void;
 };
 
-/** Limites do turno ultra-responsivos estilo ChatGPT */
-const MAX_TURN_MS = 24000;
-const MIN_TURN_MS = 250;
-const SILENCE_MS = 380;
-const SILENCE_TERMINAL_MS = 250;
+/** Limites do turno conversacional natural estilo humano */
+const MAX_TURN_MS = 28000;
+const MIN_TURN_MS = 300;
+const SILENCE_MS = 750;
+const SILENCE_TERMINAL_MS = 600;
 const PARTIAL_EVERY_MS = 800;
 const SEGMENT_MS = 1400;
 const SEGMENT_OVERLAP_MS = 300;
@@ -216,6 +216,7 @@ export class VoiceSession {
   private neural = false;
   private neuralProb = 0;
   private turnAudio: Float32Array[] = [];
+  private preSpeechBuffer: Float32Array[] = [];
   private turnActive = false;
 
   private recorder: MediaRecorder | null = null;
@@ -297,6 +298,10 @@ export class VoiceSession {
 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.getVoices();
+      const stable = resolveStableVoice();
+      if (stable) {
+        this.stableVoiceUri = stable.voiceURI;
+      }
     }
 
     void this.initNeuralVad();
@@ -347,7 +352,15 @@ export class VoiceSession {
     const handle = await startNeuralVad(this.stream, {
       onFrame: (probability, frame) => {
         this.neuralProb = probability;
-        if (this.turnActive) this.turnAudio.push(new Float32Array(frame));
+        if (this.turnActive) {
+          this.turnAudio.push(new Float32Array(frame));
+        } else if (this.state === "listening") {
+          // Mantém buffer circular dos últimos ~500ms (16 frames de 512 amostras = 512ms a 16kHz)
+          this.preSpeechBuffer.push(new Float32Array(frame));
+          if (this.preSpeechBuffer.length > 16) {
+            this.preSpeechBuffer.shift();
+          }
+        }
       },
       onSpeechStart: () => {
         if (!this.active || this.state !== "listening") return;
@@ -365,7 +378,10 @@ export class VoiceSession {
         this.turnActive = false;
         this.stopLiveRecognizer();
         this.stopPartials();
-        void this.closeTurn(audio);
+        const turnData = audio && audio.length > VAD_SAMPLE_RATE * 0.28
+          ? audio
+          : concatFloat32(this.turnAudio);
+        void this.closeTurn(turnData);
       },
     });
     if (!this.active) {
@@ -381,7 +397,9 @@ export class VoiceSession {
 
   private beginTurn() {
     this.turnActive = true;
-    this.turnAudio = [];
+    // PREPENDE o áudio pré-fala guardado nos últimos 500ms para NUNCA cortar a primeira sílaba
+    this.turnAudio = [...this.preSpeechBuffer];
+    this.preSpeechBuffer = [];
     this.partialText = "";
     this.stabilizer.reset();
     this.segCursor = 0;
@@ -390,7 +408,6 @@ export class VoiceSession {
     this.recordingSince = performance.now();
     void this.ctx?.resume().catch(() => undefined);
     this.startLiveRecognizer();
-    this.startNeuralPartials();
   }
 
   stop() {
@@ -587,26 +604,15 @@ export class VoiceSession {
       }
       if (turn !== this.turn || !this.active) break;
 
-      let stream = next ?? this.streamSentence(sentence);
-      next = null;
-
-      const upcoming = this.queue[0];
-      if (upcoming) next = this.streamSentence(upcoming);
-
-      await stream.done;
-
-      if (stream.chunks.length > 0 && !stream.failed) {
-        await this.speak(stream, turn);
-      } else {
-        // Fallback robusto e instantâneo: Web Speech nativo estritamente no idioma do app
-        await this.speakNative(sentence, turn);
-      }
+      // Executa o TTS gratuito e fixado com a melhor voz neural do dispositivo
+      await this.speakNative(sentence, turn);
     }
 
     this.playing = false;
     this.currentSpokenSentence = "";
     if (this.active && turn === this.turn && this.streamDone && !this.isPausedForEvaluation) {
-      await sleep(140);
+      // Pausa conversacional natural antes de reabrir o microfone
+      await sleep(240);
       if (this.active && turn === this.turn) this.resumeListening();
     }
   }

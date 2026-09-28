@@ -26,6 +26,24 @@ function OAuthCallbackPage() {
         let providerToken = hashParams.get("provider_token") || searchParams.get("provider_token");
         let accessToken = hashParams.get("access_token") || searchParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token") || searchParams.get("refresh_token");
+        const code = searchParams.get("code");
+
+        // Se o provedor retornou código PKCE, troca pelo token e sessão
+        if (code) {
+          try {
+            const { data: codeData, error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
+            if (!codeErr && codeData?.session) {
+              if (codeData.session.provider_token) {
+                providerToken = codeData.session.provider_token;
+              }
+              if (codeData.session.access_token) {
+                accessToken = codeData.session.access_token;
+              }
+            }
+          } catch (codeExErr) {
+            console.warn("[OAuthCallback] Falha ao trocar código PKCE:", codeExErr);
+          }
+        }
 
         // Se houver access_token do Supabase, restaura a sessão
         if (accessToken && refreshToken) {
@@ -53,13 +71,20 @@ function OAuthCallbackPage() {
           }
         }
 
+        // Se obtivemos um provider_token, persistir para reaproveitamento nos plugins
+        if (providerToken && typeof window !== "undefined") {
+          try {
+            localStorage.setItem("griot_latest_provider_token", providerToken);
+          } catch {}
+        }
+
         // 2. Se estiver numa janela Popup (window.opener)
         if (window.opener && window.opener !== window) {
           try {
             window.opener.postMessage(
               {
                 type: "GRIOT_PLUGIN_OAUTH_CALLBACK",
-                providerToken: providerToken || accessToken,
+                providerToken: providerToken || null,
                 accessToken,
                 hash,
                 search,

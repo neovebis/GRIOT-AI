@@ -514,6 +514,7 @@ export function ChatSurface({ userId }: { userId: string }) {
   const dictationChunksRef = useRef<Blob[]>([]);
   const dictationStreamRef = useRef<MediaStream | null>(null);
   const lastAnswerRef = useRef("");
+  const lastVoiceSpokenIndexRef = useRef(0);
   const sessionRef = useRef<VoiceSession | null>(null);
   // Callbacks da sessão de voz vivem para lá de um render: estes refs garantem
   // que cada turno usa o histórico e as funções mais recentes.
@@ -719,6 +720,21 @@ export function ChatSurface({ userId }: { userId: string }) {
       setExecutionPhase(execState.currentPhase || "thinking");
       setActionDetail(execState.currentActionDetail || "");
       setExecutionStepsList(execState.stepsList || []);
+
+      // Transmissão de voz fluida em tempo real para a sessão de voz ativa do GRIOT
+      if (sessionRef.current && sessionRef.current.active) {
+        if (execState.streaming) {
+          const delta = execState.streaming.slice(lastVoiceSpokenIndexRef.current);
+          if (delta) {
+            lastVoiceSpokenIndexRef.current = execState.streaming.length;
+            sessionRef.current.feed(delta);
+          }
+        }
+        if (!execState.busy && (lastVoiceSpokenIndexRef.current > 0 || sessionRef.current.state === "thinking")) {
+          lastVoiceSpokenIndexRef.current = 0;
+          sessionRef.current.finish();
+        }
+      }
 
       if (execState.approvalRequest) {
         setPlugin({
@@ -1678,8 +1694,14 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
       speed: SPEECH_SPEEDS[String(prefs["voiceSpeed"])] ?? 1.0,
       languageName: appLang,
       allowInterrupt: prefs["allowInterrupt"] !== false,
-      // Barge-in (voz ou orbe) aborta também o stream do modelo.
-      onInterrupt: () => abortRef.current?.abort(),
+      // Barge-in (voz ou orbe) aborta imediatamente a resposta e o áudio anterior
+      onInterrupt: () => {
+        lastVoiceSpokenIndexRef.current = 0;
+        abortRef.current?.abort();
+        if (conversationId) {
+          chatExecutionManager.stopExecution(conversationId);
+        }
+      },
       onState: (state) => {
         setVoiceState(state);
         if (state === "listening") {
@@ -1704,52 +1726,8 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
       onError: (message) => toast.error(t(message)),
       onTranscript: async (said) => {
         lastAnswerRef.current = "";
+        lastVoiceSpokenIndexRef.current = 0;
         await sendRef.current?.(said, { effort: "low", voice: true });
-        sessionRef.current?.finish();
-      },
-      // Reconciliação: a transcrição de alta precisão divergiu do arranque
-      // otimista — corrige a mensagem e refaz a resposta.
-      onCorrected: async (said) => {
-        abortRef.current?.abort();
-        lastAnswerRef.current = "";
-        const rows = messagesRef.current;
-        let index = -1;
-        for (let i = rows.length - 1; i >= 0; i -= 1) {
-          if (rows[i]?.role === "user") {
-            index = i;
-            break;
-          }
-        }
-        const base = (index >= 0 ? rows.slice(0, index) : rows).map((m) => ({
-          role: m.role as "user" | "assistant",
-          content: m.content,
-        }));
-        const target = index >= 0 ? rows[index] : undefined;
-        if (target) {
-          const removed = rows.slice(index + 1).map((m) => m.id);
-          if (removed.length > 0) {
-            await (supabase as any)
-              .from("griot_messages")
-              .delete()
-              .in("id", removed)
-              .catch(() => null);
-          }
-          await (supabase as any)
-            .from("griot_messages")
-            .update({ content: said } as never)
-            .eq("id", target.id)
-            .catch(() => null);
-          setMessages((current) =>
-            current
-              .slice(0, index + 1)
-              .map((m) => (m.id === target.id ? { ...m, content: said } : m)),
-          );
-        }
-        await runRef.current?.([...base, { role: "user", content: said }], {
-          effort: "low",
-          voice: true,
-        });
-        sessionRef.current?.finish();
       },
     });
 
@@ -1765,8 +1743,12 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
   }
 
   function stopVoiceChat() {
+    lastVoiceSpokenIndexRef.current = 0;
     // Cancela também o stream do modelo: nada continua a falar nem a gastar tokens.
     abortRef.current?.abort();
+    if (conversationId) {
+      chatExecutionManager.stopExecution(conversationId);
+    }
     sessionRef.current?.stop();
     sessionRef.current = null;
     setVoiceText("");

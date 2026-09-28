@@ -47,16 +47,14 @@ export async function startNeuralVad(
       baseAssetPath: "/vad/",
       onnxWASMBasePath: ORT_WASM_BASE,
       getStream: async () => stream,
-      // Sensibilidade: abre com confiança razoável e fecha depressa, porque o
-      // endpointing fino é feito por cima (pontuação da transcrição parcial).
-      positiveSpeechThreshold: 0.55,
-      negativeSpeechThreshold: 0.38,
-      // ~290 ms de silêncio confirmam o fim do turno.
-      redemptionMs: 290,
-      // Menos de ~190 ms de fala é ruído, não um turno.
-      minSpeechMs: 190,
-      // Guarda o arranque da frase para nada ser cortado no início.
-      preSpeechPadMs: 260,
+      positiveSpeechThreshold: 0.50,
+      negativeSpeechThreshold: 0.35,
+      // ~650 ms de silêncio natural para pausa conversacional humana sem cortar frases
+      redemptionMs: 650,
+      // Menos de ~180 ms de fala é ruído descartável
+      minSpeechMs: 180,
+      // Guarda 500 ms de áudio antes do início para garantir que nenhuma consoante ou sílaba inicial é cortada
+      preSpeechPadMs: 500,
       startOnLoad: true,
       onSpeechStart: () => events.onSpeechStart(),
       onSpeechRealStart: () => events.onSpeechRealStart(),

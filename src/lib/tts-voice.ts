@@ -19,13 +19,15 @@ function preferenceScore(voice: SpeechSynthesisVoice, lang: string): number {
   else if (voiceLang.startsWith(base)) score += 60;
   else return -1;
 
-  // Motores de melhor qualidade disponíveis em Android / Chrome / iOS
-  if (name.includes("google")) score += 40;
-  if (name.includes("neural") || name.includes("natural")) score += 30;
-  if (name.includes("enhanced") || name.includes("premium")) score += 25;
-  if (name.includes("siri")) score += 20;
+  // Prioridade absoluta para vozes neurais e naturais de estúdio gratuitas
+  if (name.includes("online (natural)") || name.includes("natural")) score += 65;
+  if (name.includes("neural")) score += 60;
+  if (name.includes("google")) score += 45;
+  if (name.includes("siri")) score += 40;
+  if (name.includes("enhanced") || name.includes("premium")) score += 35;
   if (voice.localService) score += 10;
-  if (name.includes("compact") || name.includes("espeak")) score -= 25;
+  // Penaliza vozes mecânicas/robóticas legadas
+  if (name.includes("compact") || name.includes("espeak") || name.includes("robotic")) score -= 60;
 
   return score;
 }

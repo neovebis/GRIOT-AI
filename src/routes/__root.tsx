@@ -19,6 +19,7 @@ import { AiPermissionDialog } from "../components/griot/ai-permission-dialog";
 import { TermsDialog } from "../components/griot/terms-dialog";
 import { initNativeNotificationListeners } from "../lib/native-notifications";
 import { initNativeBackButtonListener } from "../lib/native-back-button";
+import { autonomousTaskEngine } from "../lib/autonomous-task-engine";
 import {
   installExtensionErrorSuppression,
   EXTENSION_GUARD_INLINE_SCRIPT,

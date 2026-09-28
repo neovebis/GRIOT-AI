@@ -13,7 +13,11 @@ import {
   Lock,
   Calendar,
   GitBranch,
+  Play,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
+import { autonomousTaskEngine, type AutonomousTaskProgress } from "@/lib/autonomous-task-engine";
 import {
   setActiveProject,
   deleteProject,
@@ -114,6 +118,28 @@ export function ProjectDetailView({ projectId, onBack, onDeleted }: ProjectDetai
   const [showBindInput, setShowBindInput] = useState(false);
   const [repoInput, setRepoInput] = useState("");
   const [isBinding, setIsBinding] = useState(false);
+  const [taskProgressMap, setTaskProgressMap] = useState<Record<string, AutonomousTaskProgress>>({});
+
+  useEffect(() => {
+    const unsub = autonomousTaskEngine.subscribeGlobal((prog) => {
+      setTaskProgressMap((prev) => ({ ...prev, [prog.taskId]: prog }));
+      if (prog.stage === "completed" || prog.stage === "failed") {
+        void fetchProjectTasksFromDb(projectId).then((dbTasks) => {
+          if (Array.isArray(dbTasks)) setTasks(dbTasks);
+        });
+      }
+    });
+    return unsub;
+  }, [projectId]);
+
+  async function handleExecuteTask(taskItem: ProjectTaskItem) {
+    toast.info(t("Iniciando execução autónoma..."));
+    try {
+      await autonomousTaskEngine.executeTask(taskItem.id, { taskItem });
+    } catch (err: any) {
+      toast.error(err?.message || t("Erro ao executar tarefa."));
+    }
+  }
 
   useEffect(() => {
     if (!projectId) return;
@@ -545,71 +571,141 @@ export function ProjectDetailView({ projectId, onBack, onDeleted }: ProjectDetai
       {/* TAB 1: TAREFAS */}
       {activeTab === "tasks" && (
         <div className="space-y-3 rise">
-          {tasks.map((task) => (
-            <div
-              key={task.id}
-              onClick={() => cycleTaskStatus(task.id)}
-              className="flex cursor-pointer flex-col gap-2 rounded-[22px] border border-hairline bg-surface p-4 shadow-xs active:scale-[0.99] transition-transform"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  {task.autonomous && <Sparkles className="size-4 shrink-0 text-primary" />}
-                  <span className="text-[15px] font-semibold text-foreground tracking-snug truncate">
-                    {task.title}
-                  </span>
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider shrink-0 ${
-                    task.status === "done" || task.status === "completed"
-                      ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/20"
-                      : task.status === "doing" || task.status === "running"
-                        ? "bg-amber-500/15 text-amber-500 border border-amber-500/20"
-                        : task.status === "scheduled"
-                          ? "bg-sky-500/15 text-sky-500 border border-sky-500/20"
-                          : task.status === "failed"
-                            ? "bg-destructive/15 text-destructive border border-destructive/20"
-                            : "bg-secondary text-muted-foreground border border-hairline"
-                  }`}
-                >
-                  {task.status}
-                </span>
-              </div>
+          {tasks.map((task) => {
+            const taskProgress = taskProgressMap[task.id];
+            const isRunning =
+              task.status === "running" ||
+              Boolean(
+                taskProgress &&
+                  taskProgress.stage !== "completed" &&
+                  taskProgress.stage !== "failed" &&
+                  taskProgress.stage !== "idle",
+              );
 
-              {task.autonomous && (
-                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-hairline/50 text-[11px] text-muted-foreground">
-                  {task.autonomous.runAtTime && (
-                    <span className="flex items-center gap-1 font-mono">
-                      <Clock className="size-3 text-muted-foreground" />
-                      {task.autonomous.runAtTime}
+            return (
+              <div
+                key={task.id}
+                className="flex flex-col gap-2 rounded-[22px] border border-hairline bg-surface p-4 shadow-xs transition-transform"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div
+                    onClick={() => cycleTaskStatus(task.id)}
+                    className="flex cursor-pointer items-center gap-2 min-w-0 flex-1 hover:opacity-85"
+                  >
+                    {task.autonomous && <Sparkles className="size-4 shrink-0 text-primary" />}
+                    <span className="text-[15px] font-semibold text-foreground tracking-snug truncate">
+                      {task.title}
                     </span>
-                  )}
-                  {task.autonomous.repeat && (
-                    <span className="flex items-center gap-1 capitalize">
-                      • {task.autonomous.repeat}
-                    </span>
-                  )}
-                  {task.autonomous.secretRefs && task.autonomous.secretRefs.length > 0 && (
-                    <span className="flex items-center gap-1">
-                      <Lock className="size-3 text-muted-foreground" />
-                      {task.autonomous.secretRefs.length} secrets
-                    </span>
-                  )}
-                  {task.autonomous.pipeline && task.autonomous.pipeline.length > 0 && (
-                    <div className="flex items-center gap-1 ml-auto">
-                      {task.autonomous.pipeline.map((p) => (
-                        <span
-                          key={p}
-                          className="rounded-md border border-hairline bg-background/80 px-1.5 py-0.2 text-[9.5px] uppercase font-mono font-medium"
-                        >
-                          {p}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {task.status !== "done" && task.status !== "completed" && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleExecuteTask(task);
+                        }}
+                        disabled={isRunning}
+                        className="flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/25 px-2.5 py-1 text-[11px] font-medium text-primary hover:bg-primary/20 active:scale-95 transition-all disabled:opacity-50"
+                      >
+                        {isRunning ? (
+                          <>
+                            <Loader2 className="size-3 animate-spin" />
+                            <span>{t("A executar...")}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="size-3 fill-current" />
+                            <span>{t("Executar")}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => cycleTaskStatus(task.id)}
+                      className={`rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wider shrink-0 transition-colors ${
+                        task.status === "done" || task.status === "completed"
+                          ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/20"
+                          : task.status === "doing" || task.status === "running"
+                            ? "bg-amber-500/15 text-amber-500 border border-amber-500/20"
+                            : task.status === "scheduled"
+                              ? "bg-sky-500/15 text-sky-500 border border-sky-500/20"
+                              : task.status === "failed"
+                                ? "bg-destructive/15 text-destructive border border-destructive/20"
+                                : "bg-secondary text-muted-foreground border border-hairline"
+                      }`}
+                    >
+                      {task.status}
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {isRunning && taskProgress && (
+                  <div className="mt-1 space-y-1.5 rounded-xl border border-primary/25 bg-primary/5 p-3 animate-fade-in">
+                    <div className="flex items-center justify-between text-[11.5px] font-medium text-primary">
+                      <span className="flex items-center gap-1.5 truncate">
+                        <Loader2 className="size-3.5 animate-spin shrink-0" />
+                        <span>{taskProgress.activeStepLabel}</span>
+                      </span>
+                      <span className="font-mono text-[11px] shrink-0">{taskProgress.stageProgress}%</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-primary/15 overflow-hidden">
+                      <div
+                        className="h-full bg-primary transition-all duration-300"
+                        style={{ width: `${taskProgress.stageProgress}%` }}
+                      />
+                    </div>
+                    {taskProgress.logs.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground truncate font-mono pt-0.5">
+                        ↳ {taskProgress.logs[taskProgress.logs.length - 1].message}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {task.autonomous && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-hairline/50 text-[11px] text-muted-foreground">
+                    {task.autonomous.runAtTime && (
+                      <span className="flex items-center gap-1 font-mono">
+                        <Clock className="size-3 text-muted-foreground" />
+                        {task.autonomous.runAtTime}
+                      </span>
+                    )}
+                    {task.autonomous.repeat && (
+                      <span className="flex items-center gap-1 capitalize">
+                        • {task.autonomous.repeat}
+                      </span>
+                    )}
+                    {task.autonomous.secretRefs && task.autonomous.secretRefs.length > 0 && (
+                      <span className="flex items-center gap-1">
+                        <Lock className="size-3 text-muted-foreground" />
+                        {task.autonomous.secretRefs.length} secrets
+                      </span>
+                    )}
+                    {task.autonomous.pipeline && task.autonomous.pipeline.length > 0 && (
+                      <div className="flex items-center gap-1 ml-auto">
+                        {task.autonomous.pipeline.map((p) => (
+                          <span
+                            key={p}
+                            className={`rounded-md border px-1.5 py-0.2 text-[9.5px] uppercase font-mono font-medium ${
+                              taskProgress?.stage === p || (isRunning && taskProgress?.stage?.startsWith(p))
+                                ? "border-primary bg-primary text-primary-foreground animate-pulse"
+                                : "border-hairline bg-background/80"
+                            }`}
+                          >
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
 
           {tasks.length === 0 && (
             <div className="rounded-[22px] border border-hairline bg-surface p-6 text-center text-muted-foreground text-[14px]">

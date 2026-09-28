@@ -20,6 +20,7 @@ import {
   type ProjectTaskItem,
 } from "@/lib/project-service";
 import { getAvailableSecretReferences } from "@/lib/plugins-service";
+import { autonomousTaskEngine } from "@/lib/autonomous-task-engine";
 import { toast } from "sonner";
 
 export interface AutonomousTaskModalProps {
@@ -134,17 +135,70 @@ export function AutonomousTaskModal({
     setIsTesting(true);
     setTestResult(null);
 
-    // Simula verificação estrita de pipeline, secrets e sandbox
-    await new Promise((r) => setTimeout(r, 900));
+    const payload: AutonomousTaskPayload = {
+      instruction: instruction.trim(),
+      runAtTime,
+      runAtDate,
+      timezone,
+      repeat,
+      secretRefs: selectedSecrets,
+      pipeline,
+      createdFrom,
+    };
 
+    const validation = await autonomousTaskEngine.validateTask(payload, projectId);
     setIsTesting(false);
+
     setTestResult({
-      success: true,
-      message: t(
-        "Validação concluída: pipeline configurado, referências de secrets válidas e runtime sandbox acessível.",
-      ),
+      success: validation.success,
+      message: validation.message,
     });
-    toast.success(t("Teste do pipeline autónomo passou com sucesso!"));
+
+    if (validation.success) {
+      toast.success(t("Validação aprovada: pipeline e ambiente prontos!"));
+    } else {
+      toast.error(validation.message);
+    }
+  };
+
+  const handleRunNow = async () => {
+    if (!projectId) {
+      toast.error(t("Projeto não encontrado."));
+      return;
+    }
+    if (!instruction.trim()) {
+      toast.error(t("Escreve a instrução da tarefa."));
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const payload: AutonomousTaskPayload = {
+        instruction: instruction.trim(),
+        runAtTime: "",
+        runAtDate: "",
+        timezone,
+        repeat: "once",
+        secretRefs: selectedSecrets,
+        pipeline,
+        createdFrom,
+      };
+
+      const created = await createProjectTaskInDb(projectId, payload, "running");
+      if (created) {
+        toast.info(t("Autonomous Task iniciada agora!"));
+        onTaskCreated?.(created);
+        onClose();
+        // Dispara a execução imediatamente em background
+        void autonomousTaskEngine.executeTask(created.id, { taskItem: created });
+      } else {
+        toast.error(t("Não foi possível criar a tarefa."));
+      }
+    } catch (err: any) {
+      toast.error(err.message || t("Erro ao iniciar tarefa."));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleSaveTask = async () => {
@@ -419,12 +473,12 @@ export function AutonomousTaskModal({
         )}
 
         {/* Botões de Ação */}
-        <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-hairline/60">
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-hairline/60">
           <button
             type="button"
             disabled={isSaving || isTesting}
             onClick={handleRunTest}
-            className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-4 py-2 text-[13px] font-medium text-foreground hover:bg-surface active:scale-95 transition-all disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-full border border-hairline px-3.5 py-2 text-[12.5px] font-medium text-foreground hover:bg-surface active:scale-95 transition-all disabled:opacity-50"
           >
             {isTesting ? (
               <>
@@ -443,7 +497,7 @@ export function AutonomousTaskModal({
             type="button"
             disabled={isSaving || isTesting}
             onClick={handleSaveTask}
-            className="inline-flex items-center justify-center gap-1.5 rounded-full bg-primary px-5 py-2 text-[13px] font-medium text-primary-foreground shadow-xs active:scale-95 transition-all disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-4 py-2 text-[12.5px] font-medium text-primary active:scale-95 transition-all disabled:opacity-50"
           >
             {isSaving ? (
               <>
@@ -452,8 +506,27 @@ export function AutonomousTaskModal({
               </>
             ) : (
               <>
-                <ShieldCheck className="size-3.5" />
-                <span>{t("Save task")}</span>
+                <Clock className="size-3.5" />
+                <span>{t("Agendar")}</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            disabled={isSaving || isTesting}
+            onClick={handleRunNow}
+            className="inline-flex items-center justify-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12.5px] font-medium text-primary-foreground shadow-xs active:scale-95 transition-all disabled:opacity-50"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                <span>{t("Iniciando...")}</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="size-3.5" />
+                <span>{t("Executar Agora")}</span>
               </>
             )}
           </button>
