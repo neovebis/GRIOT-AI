@@ -1,0 +1,104 @@
+name: GRIOT Mobile Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-36 platforms;android-34 build-tools;34.0.0"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Generate Android Assets (Icons & Splash)
+        run: node scripts/generate-android-assets.mjs
+
+      - name: Validate runtime runner
+        run: |
+          node --check runtime-runner/server.mjs
+          node --test runtime-runner/runtime-runner.test.mjs
+
+      - name: Build web app
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: npm run build
+
+      - name: Sync GRIOT native integration
+        run: node scripts/sync-griot-native.mjs
+
+      - name: Sync Capacitor Android
+        run: npx cap sync android
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Verify APK
+        run: |
+          APK=$(find android -type f -path '*/outputs/apk/debug/*-debug.apk' | head -n 1)
+          test -n "$APK"
+          cp "$APK" GRIOT-Mobile-debug.apk
+          echo "APK=GRIOT-Mobile-debug.apk" >> "$GITHUB_ENV"
+          sha256sum GRIOT-Mobile-debug.apk
+          GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ -n "$GRADLE_VER" ]; then
+            TAG_TO_USE="v$GRADLE_VER"
+          else
+            TAG_TO_USE="v1.0.30"
+          fi
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            TAG_TO_USE="${{ github.ref_name }}"
+          fi
+          echo "RELEASE_TAG=$TAG_TO_USE" >> "$GITHUB_ENV"
+          echo "RELEASE_NAME=GRIOT Mobile $TAG_TO_USE" >> "$GITHUB_ENV"
+          AAPT2_BIN=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -n 1)
+          if [ -n "$AAPT2_BIN" ] && [ -x "$AAPT2_BIN" ]; then
+            "$AAPT2_BIN" dump badging GRIOT-Mobile-debug.apk || true
+          fi
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: griot-mobile-debug-apk
+          path: GRIOT-Mobile-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        continue-on-error: true
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          files: GRIOT-Mobile-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

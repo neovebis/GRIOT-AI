@@ -1,0 +1,21 @@
+# GRIOT Mobile — AI Agent Ecosystem & Mobile Gateway Specification
+
+> GRIOT Mobile is a pocket-sized AI orchestration platform allowing users to control multi-model AI agents, run sandboxed code execution, and manage workspace projects.
+
+## Capabilities
+
+- **AI Deliberation Room (Quick Mode)**: Turn-by-turn multi-agent discussion between Strategist, Analyst, Innovator, and Critic personas.
+- **Sandboxed Execution Gateway**: Execution runner with HMAC SHA-256 signature validation and path traversal isolation.
+- **Native Android Observer Integration**: Seamless automation with installed mobile AI applications via Android Accessibility Services.
+- **Workspace Projects**: Track tasks, pull requests, and real-time execution logs.
+
+## Indexing & API Guidelines
+
+- Public Website: https://griot.app
+- API Specifications: OpenID Connect & Supabase Auth standard
+- Bot Policies: LLM crawlers are welcomed for indexing public documentation.
+
+## User Support & Documentation
+
+- Documentation: https://griot.app/docs
+- Contact: support@griot.app

@@ -1,0 +1,31 @@
+name: GRIOT Runtime Validation
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "runtime-runner/**"
+      - "src/routes/api/runtime/**"
+      - "src/lib/runtime/**"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+      - run: node --check runtime-runner/server.mjs
+      - name: Test runner startup and health check
+        run: |
+          node runtime-runner/server.mjs &
+          SERVER_PID=$!
+          sleep 2
+          curl --retry 5 --retry-connrefused -f http://127.0.0.1:8080/healthz || exit 1
+          kill $SERVER_PID
+      - name: Build runtime container
+        run: docker build --pull -t griot-runtime-runner:ci runtime-runner

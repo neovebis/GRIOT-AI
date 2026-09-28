@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GRIOT</string>
+    <string name="title_activity_main">GRIOT</string>
+    <string name="package_name">com.griot.app</string>
+    <string name="custom_url_scheme">com.griot.app</string>
+    <string name="accessibility_service_description">Permite ao GRIOT Observer analisar comandos de IA na tela para automação e execução de tarefas sem API externa.</string>
+    <string name="channel_approvals_name">GRIOT - Aprovações</string>
+    <string name="channel_approvals_desc">Notificações para aprovar ou rejeitar comandos e ações críticas do sistema.</string>
+    <string name="channel_messages_name">GRIOT - Mensagens</string>
+    <string name="channel_messages_desc">Alertas de novas mensagens geradas pelos modelos de IA e pelo GRIOT Core.</string>
+    <string name="channel_deploys_name">GRIOT - Deploys</string>
+    <string name="channel_deploys_desc">Notificações de sites e projetos compilados e deployados com sucesso.</string>
+    <string name="channel_tasks_name">GRIOT - Tarefas</string>
+    <string name="channel_tasks_desc">Alertas de conclusão de tarefas em segundo plano.</string>
+</resources>

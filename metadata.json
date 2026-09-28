@@ -1,0 +1,6 @@
+{
+  "name": "GRIOT Mobile",
+  "description": "Mobile companion and control center for the GRIOT ecosystem with chat, project tracking, capture, and ModelOS controls.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

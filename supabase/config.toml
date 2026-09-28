@@ -1,0 +1,4 @@
+project_id = "dslccwkaitihiszetdlh"
+
+# Production/remote project reference only.
+# Secrets must be supplied through the environment, never committed here.
