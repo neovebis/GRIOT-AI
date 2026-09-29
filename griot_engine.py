@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from griot_context import ContextEngine
+from griot_discourse import DiscourseContextEngine
 
 
 # ============================================================
@@ -724,6 +725,7 @@ class GRIOT:
     simulator: Simulator
     version: str = "0.1.0"
     context: ContextEngine = field(default_factory=ContextEngine)
+    discourse: DiscourseContextEngine = field(default_factory=DiscourseContextEngine)
 
     @classmethod
     def create(cls, dimension: int = 64) -> "GRIOT":
@@ -811,6 +813,11 @@ class GRIOT:
                 "records": len(self.context),
                 "active_quids": self.context.active_quids(),
                 "topic_quids": self.context.topic_quids(),
+            },
+            "discourse": {
+                "turn": self.discourse.turn,
+                "active_segment_id": self.discourse.state().active_segment_id,
+                "active_topic": self.discourse.state().active_topic,
             },
         }
 
