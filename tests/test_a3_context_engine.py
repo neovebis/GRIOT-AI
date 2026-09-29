@@ -40,7 +40,8 @@ class ContextEngineTests(unittest.TestCase):
         self.assertEqual(view.matches[0].record_id, 1)
         self.assertIn("🦁", view.matches[0].shared_quids)
         self.assertIn("is_a", view.matches[0].shared_relations)
-        self.assertEqual(view.active_quids[0], "🦁")
+        self.assertIn("🦁", view.active_quids)
+        self.assertEqual(view.topic_quids[0], "🐺")
 
     def test_context_is_bounded_and_evicts_old_records(self) -> None:
         bounded = ContextEngine(max_records=2)
