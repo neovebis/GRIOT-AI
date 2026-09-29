@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Compile
-        run: python -m compileall -q griot_engine.py griot_context.py griot_gir.py griot_semantic_ir.py griot_reasoning_v040.py griot_cognition_v100.py griot_provenance.py griot_working_graph.py griot_query_planner.py griot_ambiguity.py griot_polysemy.py griot_coreference.py griot_discourse.py griot_metaphor.py griot_intent.py quid_core.py
+        run: python -m compileall -q griot_engine.py griot_context.py griot_gir.py griot_semantic_ir.py griot_reasoning_v040.py griot_cognition_v100.py griot_provenance.py griot_working_graph.py griot_query_planner.py griot_ambiguity.py griot_polysemy.py griot_coreference.py griot_discourse.py griot_metaphor.py griot_intent.py griot_math.py quid_core.py
       - name: A1 integration tests
         run: python -m unittest tests.test_a1_core_integration -v
       - name: A2 GIR contract tests
@@ -50,5 +50,7 @@ jobs:
         run: python -m unittest tests.test_b5_metaphor -v
       - name: B6 semantic intent tests
         run: python -m unittest tests.test_b6_semantic_intent -v
+      - name: C1 mathematics tests
+        run: python -m unittest tests.test_c1_mathematics -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
