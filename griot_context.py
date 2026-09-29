@@ -93,7 +93,7 @@ class ContextEngine:
         for node in gir.nodes:
             node_weights[node.quid] = max(node_weights.get(node.quid, 0.0), float(node.confidence))
 
-        quids = tuple(sorted(node_weights))
+        quids = tuple(node_weights)
         relations = tuple(sorted({edge.relation for edge in gir.edges}))
         quid_weights = tuple(sorted((quid, weight) for quid, weight in node_weights.items()))
         salience = max(node_weights.values(), default=0.0)
@@ -133,7 +133,12 @@ class ContextEngine:
         return tuple(ranked[:limit])
 
     def topic_quids(self, limit: int = 3) -> tuple[str, ...]:
-        return self.active_quids(limit)
+        self._validate_limit(limit)
+        if not self._records:
+            return ()
+        # Preserve discourse mention order from the most recent GIR rather
+        # than letting globally repeated generic concepts dominate the topic.
+        return self._records[-1].quids[:limit]
 
     def view(self, query: "GIR", limit: int = 8) -> ContextView:
         if query is None or not hasattr(query, "validate"):
