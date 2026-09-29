@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
 from griot_context import ContextView
 from griot_engine import Fact, GRIOT, Inference
 from griot_gir import GIR
@@ -21,6 +22,8 @@ class QuidAnalysis:
     gir: GIR
     reasoning: ReasoningResult
     context: ContextView
+    epistemic: Assessment
+    provenance_trace: ProvenanceTrace
     answer: bool | None
     epistemic_status: TruthStatus
     confidence: float
@@ -42,6 +45,7 @@ class Quid:
         self.engine = engine or GRIOT.create()
         self.semantic = SemanticGRIOT(self.engine)
         self.reasoning = ReasoningEngine(self.semantic)
+        self.epistemic = EpistemicStateEngine()
 
     def analisar(self, text: str) -> QuidAnalysis:
         if not isinstance(text, str):
@@ -52,6 +56,7 @@ class Quid:
         gir = self.semantic.understand(text)
         context_view = self.engine.context.view(gir)
         result = self.reasoning.reason_meaning(text, gir, context_view)
+        assessment = self.epistemic.assess(result, text)
         self.engine.context.ingest(gir, source="query")
 
         answer: bool | None
@@ -79,17 +84,7 @@ class Quid:
             break
 
         resolved = tuple(dict.fromkeys(node.quid for node in gir.nodes))
-        provenance = tuple(
-            sorted(
-                {
-                    p
-                    for p in (
-                        (*gir.provenance, *(step.provenance for step in result.proofs))
-                    )
-                    if p
-                }
-            )
-        )
+        provenance = assessment.provenance.sources
 
         explanation = self._explanation(result)
 
@@ -98,6 +93,8 @@ class Quid:
             gir=gir,
             reasoning=result,
             context=result.context or context_view,
+            epistemic=assessment,
+            provenance_trace=assessment.provenance,
             answer=answer,
             epistemic_status=result.status,
             confidence=result.confidence,
