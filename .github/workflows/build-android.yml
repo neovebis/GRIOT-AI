@@ -91,6 +91,7 @@ jobs:
               --ks-pass pass:GriotMobileApp2026! \
               --ks-key-alias griot-release \
               --key-pass pass:GriotMobileApp2026! \
+              --min-sdk-version 21 \
               --v1-signing-enabled true \
               --v2-signing-enabled true \
               --v3-signing-enabled true \
@@ -105,16 +106,30 @@ jobs:
             cp "$RELEASE_APK" GRIOT-Mobile-release.apk
           fi
           
-          if [ -n "$DEBUG_APK" ]; then
+          if [ -n "$DEBUG_APK" ] && [ -f "$KEYSTORE" ]; then
+            echo "Aligning and signing Debug APK with v1 + v2 schemes..."
+            "$ZIPALIGN_BIN" -p -f -v 4 "$DEBUG_APK" aligned-debug.apk
+            "$APKSIGNER_BIN" sign \
+              --ks "$KEYSTORE" \
+              --ks-pass pass:GriotMobileApp2026! \
+              --ks-key-alias griot-release \
+              --key-pass pass:GriotMobileApp2026! \
+              --min-sdk-version 21 \
+              --v1-signing-enabled true \
+              --v2-signing-enabled true \
+              --v3-signing-enabled true \
+              --v4-signing-enabled false \
+              --out GRIOT-Mobile-debug.apk \
+              aligned-debug.apk
+          elif [ -n "$DEBUG_APK" ]; then
             cp "$DEBUG_APK" GRIOT-Mobile-debug.apk
-            echo "Debug APK: $DEBUG_APK"
           fi
 
           ls -lh GRIOT-Mobile*.apk
           sha256sum GRIOT-Mobile*.apk
 
           GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-          TAG_TO_USE="v${GRADLE_VER:-1.0.83}"
+          TAG_TO_USE="v${GRADLE_VER:-1.0.84}"
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_TO_USE="${{ github.ref_name }}"
           fi
