@@ -6,6 +6,7 @@ from griot_causality import CausalAnalysis, CausalityEngine
 from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
 from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
 from griot_extraction import ExtractionBatch, KnowledgeExtractor
+from griot_validation import KnowledgeValidator, ValidationReport
 from griot_verification import VerificationEngine, VerificationReport
 from griot_context import ContextView
 from griot_discourse import DiscourseState
@@ -79,6 +80,9 @@ class Quid:
 
     def extract_knowledge(self, text: str) -> ExtractionBatch:
         return self.extractor.extract(text)
+
+    def validate_knowledge(self, batch: ExtractionBatch) -> ValidationReport:
+        return self.validator.validate(batch)
 
     def generate_hypotheses(self, query: str, *, limit: int = 8) -> HypothesisReport:
         return self.hypotheses.generate(query, limit=limit)
