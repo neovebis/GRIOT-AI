@@ -5,8 +5,7 @@ from dataclasses import dataclass
 from itertools import count
 from typing import Iterable
 
-from griot.engine import GRIOT
-from griot.types import Fact, BaseLayer
+from griot_engine import BaseLayer, GRIOT
 from griot_worldmodel_v070 import WorldModel, WorldState
 
 
