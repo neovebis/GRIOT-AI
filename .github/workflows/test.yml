@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Compile
-        run: python -m compileall -q griot_engine.py griot_context.py griot_gir.py griot_semantic_ir.py griot_reasoning_v040.py quid_core.py
+        run: python -m compileall -q griot_engine.py griot_context.py griot_gir.py griot_semantic_ir.py griot_reasoning_v040.py griot_cognition_v100.py griot_provenance.py quid_core.py
       - name: A1 integration tests
         run: python -m unittest tests.test_a1_core_integration -v
       - name: A2 GIR contract tests
@@ -32,5 +32,7 @@ jobs:
         run: python -m unittest tests.test_a3_context_engine -v
       - name: A4 unified reasoning tests
         run: python -m unittest tests.test_a4_reasoning_engine -v
+      - name: A5 provenance and epistemic tests
+        run: python -m unittest tests.test_a5_provenance_epistemic -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
