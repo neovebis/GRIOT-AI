@@ -8,6 +8,7 @@ from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference, TransitionRule
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
+from griot_hypothesis_v050 import HypothesisController, HypothesisReport
 from griot_planning_v080 import ActionPlan, ActionSchema, GoalPlanner
 from griot_simulation import MonteCarloResult, SimulationEngine, SimulationResult
 from griot_gir import GIR
@@ -70,6 +71,9 @@ class Quid:
         steps: int,
     ) -> SimulationResult:
         return self.simulation.run(initial, rules, steps=steps)
+
+    def generate_hypotheses(self, query: str, *, limit: int = 8) -> HypothesisReport:
+        return self.hypotheses.generate(query, limit=limit)
 
     def register_action(
         self,
