@@ -183,6 +183,15 @@ class Quid:
         else:
             answer = None
 
+        verification = self.verifier.verify(
+            gir,
+            result,
+            assessment,
+            reasoning_engine=self.reasoning,
+        )
+        if not verification.ok:
+            answer = None
+
         semantic_facts = gir.facts()
 
         graph_evidence: tuple[Fact | Inference, ...] = ()
