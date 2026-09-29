@@ -111,6 +111,15 @@ The Query Planner is the explicit retrieval boundary between GIR/context and Wor
 It canonicalizes query targets, records a bounded retrieval budget, selects relevant discourse records, and declares its retrieval strategies before execution. Execution retrieves exact durable evidence, rule-derived inferences and all direct source facts supporting those inferences, then materializes the selected context records into the transient Working Graph.
 
 Plans are tied to the GIR fingerprint and have their own deterministic fingerprint. This allows retrieval decisions to be audited, cached or compared without changing QUID identity or durable memory.
+## Ambiguity resolution
+
+B1 adds an explicit lexical ambiguity layer before semantic reasoning.
+
+`AmbiguityResolver` maintains documented alternative senses for selected lexical forms, scores those senses using local text and prior discourse context, and returns the full candidate set, chosen sense, confidence and resolution status.
+
+Ambiguity is never silently collapsed: ties and insufficient context remain `ambiguous`, with candidate QUIDs preserved in GIR constraints. A resolved sense changes the semantic node's QUID while retaining the original surface form for traceability.
+
+B1 is deliberately narrower than full polysemy. Systematic sense relationships and sense-specific knowledge networks are deferred to B2.
 ## Structured knowledge induction
 
 Phase-2 induction extracts reusable structures from hygienized text:
