@@ -6,7 +6,7 @@ from enum import Enum
 from griot_cognition_v100 import Assessment, EpistemicStatus
 from griot_engine import Fact, Inference
 from griot_gir import GIR
-from griot_reasoning_v040 import ReasoningResult, TruthStatus
+from griot_reasoning_v040 import ReasoningEngine, ReasoningResult, TruthStatus
 
 
 class VerificationStatus(str, Enum):
@@ -42,9 +42,10 @@ class VerificationEngine:
         gir: GIR,
         result: ReasoningResult,
         assessment: Assessment,
+        *,
+        reasoning_engine: ReasoningEngine | None = None,
     ) -> VerificationReport:
         issues: list[VerificationIssue] = []
-        deterministic = True
 
         try:
             gir.validate()
@@ -53,11 +54,13 @@ class VerificationEngine:
 
         if not 0.0 <= float(result.confidence) <= 1.0:
             issues.append(
-                VerificationIssue("confidence-invalid", "reasoning confidence is outside 0..1")
+                VerificationIssue(
+                    "confidence-invalid",
+                    "reasoning confidence is outside 0..1",
+                )
             )
 
-        expected_status = TruthStatus(result.status.value)
-        if assessment.status.value != expected_status.value:
+        if assessment.status.value != result.status.value:
             issues.append(
                 VerificationIssue(
                     "epistemic-mismatch",
@@ -65,21 +68,21 @@ class VerificationEngine:
                 )
             )
 
-        if expected_status is TruthStatus.SUPPORTED and assessment.answer is not True:
+        if result.status is TruthStatus.SUPPORTED and assessment.answer is not True:
             issues.append(
                 VerificationIssue(
                     "supported-without-true-answer",
                     "supported reasoning must expose answer=True",
                 )
             )
-        if expected_status is TruthStatus.REFUTED and assessment.answer is not False:
+        elif result.status is TruthStatus.REFUTED and assessment.answer is not False:
             issues.append(
                 VerificationIssue(
                     "refuted-without-false-answer",
                     "refuted reasoning must expose answer=False",
                 )
             )
-        if expected_status in {TruthStatus.UNKNOWN, TruthStatus.CONFLICT} and assessment.answer is not None:
+        elif result.status in {TruthStatus.UNKNOWN, TruthStatus.CONFLICT} and assessment.answer is not None:
             issues.append(
                 VerificationIssue(
                     "non-answer-leak",
@@ -87,30 +90,21 @@ class VerificationEngine:
                 )
             )
 
-        graph = _graph_from_result(result)
-        direct_facts = {
-            (
-                fact.subject,
-                fact.relation,
-                fact.object,
-                fact.negated,
-                fact.provenance,
-                fact.evidence,
-                fact.confidence,
-            )
-            for fact in graph
-        }
+        direct_facts: tuple[Fact, ...] = ()
+        if reasoning_engine is not None:
+            direct_facts = tuple(reasoning_engine.semantic.engine.graph.facts())
 
         for proof in result.proofs:
             if proof.rule == "direct":
-                if not any(
-                    f.subject == proof.subject
-                    and f.relation == proof.relation
-                    and f.object == proof.object
-                    and f.provenance == proof.provenance
-                    and abs(float(f.confidence) - float(proof.confidence)) < 1e-9
-                    for f in graph
-                ):
+                grounded = any(
+                    fact.subject == proof.subject
+                    and fact.relation == proof.relation
+                    and fact.object == proof.object
+                    and fact.provenance == proof.provenance
+                    and abs(float(fact.confidence) - float(proof.confidence)) < 1e-9
+                    for fact in direct_facts
+                )
+                if not grounded:
                     issues.append(
                         VerificationIssue(
                             "proof-not-grounded",
@@ -125,30 +119,49 @@ class VerificationEngine:
                     )
                 )
 
-        if result.status is TruthStatus.CONFLICT and not any(
-            getattr(item, "negated", False) is False for item in graph
-        ):
-            issues.append(
-                VerificationIssue(
-                    "conflict-without-positive-evidence",
-                    "conflict result has no positive evidence in durable graph",
-                )
-            )
+        if result.status is TruthStatus.CONFLICT and result.claims:
+            for claim in result.claims:
+                if claim.status is TruthStatus.CONFLICT:
+                    positive = False
+                    negative = False
+                    for fact in direct_facts:
+                        if (
+                            fact.subject == claim.subject
+                            and fact.relation == claim.relation
+                            and fact.object == claim.object
+                        ):
+                            if fact.negated:
+                                negative = True
+                            else:
+                                positive = True
+                    if not (positive and negative):
+                        issues.append(
+                            VerificationIssue(
+                                "conflict-not-grounded",
+                                f"conflict for {claim.subject} {claim.relation} {claim.object} lacks both polarities in durable evidence",
+                            )
+                        )
 
-        # Verify that the same GIR yields the same logical status/confidence.
-        # Exact proof ordering is intentionally not required here.
-        try:
-            replay_semantic = getattr(result, "_replay_semantic", None)
-            replay = None
-            if replay_semantic is not None:
-                replay = replay_semantic.reason_meaning("", gir)
-            if replay is not None:
+        deterministic = True
+        if reasoning_engine is not None:
+            try:
+                replay = reasoning_engine.reason_meaning(
+                    "",
+                    gir,
+                    result.context,
+                )
                 deterministic = (
                     replay.status is result.status
-                    and abs(replay.confidence - result.confidence) < 1e-9
+                    and abs(float(replay.confidence) - float(result.confidence)) < 1e-9
                 )
-        except Exception:
-            deterministic = False
+            except Exception as exc:
+                deterministic = False
+                issues.append(
+                    VerificationIssue(
+                        "replay-error",
+                        f"reasoning replay failed: {exc}",
+                    )
+                )
 
         if not deterministic:
             issues.append(
@@ -169,25 +182,14 @@ class VerificationEngine:
                 )
             )
 
-        status = (
-            VerificationStatus.REJECTED
-            if issues
-            else VerificationStatus.VERIFIED
-        )
+        status = VerificationStatus.REJECTED if issues else VerificationStatus.VERIFIED
         return VerificationReport(
             status,
             tuple(issues),
             len(result.proofs),
-            len(result.proofs),
+            len(direct_facts),
             deterministic,
         )
-
-
-def _graph_from_result(result: ReasoningResult) -> tuple[Fact, ...]:
-    semantic = getattr(result, "_semantic_engine", None)
-    if semantic is None:
-        return ()
-    return tuple(semantic.graph.facts())
 
 
 __all__ = [
