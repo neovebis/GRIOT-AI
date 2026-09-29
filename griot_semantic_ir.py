@@ -15,6 +15,7 @@ except ImportError:
 from griot_ambiguity import AmbiguityAnalysis, AmbiguityResolver
 from griot_coreference import CoreferenceLink, CoreferenceResolver, Mention
 from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
+from griot_metaphor import MetaphorResolver
 from griot_polysemy import PolysemyAnalysis, PolysemyResolver
 
 
@@ -63,6 +64,7 @@ class MeaningCompiler:
         self.ambiguity = AmbiguityResolver(griot)
         self.polysemy = PolysemyResolver(griot)
         self.coreference = CoreferenceResolver(griot)
+        self.metaphor = MetaphorResolver()
         self._ambiguity_analysis: AmbiguityAnalysis | None = None
         self._polysemy_analysis: PolysemyAnalysis | None = None
 
@@ -181,6 +183,33 @@ class MeaningCompiler:
         ) if self._ambiguity_analysis else ()
 
         constraints["ambiguity"] = ambiguity_constraints
+        metaphor_resolution = self.metaphor.analyze(normalized)
+        constraints["metaphor"] = {
+            "status": metaphor_resolution.status,
+            "chosen": (
+                {
+                    "pattern": metaphor_resolution.chosen.surface_pattern,
+                    "source_domain": metaphor_resolution.chosen.source_domain,
+                    "target_domain": metaphor_resolution.chosen.target_domain,
+                    "interpretation": metaphor_resolution.chosen.interpretation,
+                    "confidence": metaphor_resolution.chosen.confidence,
+                    "cues": metaphor_resolution.chosen.cues,
+                }
+                if metaphor_resolution.chosen
+                else None
+            ),
+            "candidates": tuple(
+                {
+                    "pattern": candidate.surface_pattern,
+                    "source_domain": candidate.source_domain,
+                    "target_domain": candidate.target_domain,
+                    "interpretation": candidate.interpretation,
+                    "confidence": candidate.confidence,
+                    "cues": candidate.cues,
+                }
+                for candidate in metaphor_resolution.candidates
+            ),
+        }
         constraints["coreference"] = tuple(
             {
                 "anaphor": link.anaphor,
