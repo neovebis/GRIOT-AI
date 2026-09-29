@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
+from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
 from griot_context import ContextView
 from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference, TransitionRule
@@ -74,6 +75,21 @@ class Quid:
 
     def generate_hypotheses(self, query: str, *, limit: int = 8) -> HypothesisReport:
         return self.hypotheses.generate(query, limit=limit)
+
+    def run_counterfactual(
+        self,
+        assumption: str,
+        query: str,
+        *,
+        initial_world: tuple[str, ...] = (),
+        steps: int = 8,
+    ) -> CounterfactualScenario:
+        return self.counterfactual.run(
+            assumption,
+            query,
+            initial_world=initial_world,
+            steps=steps,
+        )
 
     def register_action(
         self,
