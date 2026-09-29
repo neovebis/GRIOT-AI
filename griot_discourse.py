@@ -212,7 +212,7 @@ class DiscourseContextEngine:
                     return relation, 0.90
         if overlap >= 0.50:
             return DiscourseRelation.CONTINUATION, 0.82
-        if overlap <= 0.25:
+        if overlap <= 0.40:
             return DiscourseRelation.TOPIC_SHIFT, 0.88
         return DiscourseRelation.CONTINUATION, 0.66
 
