@@ -737,26 +737,41 @@ class GRIOT:
     def understand(self, text: str) -> SemanticFrame:
         return self.interpreter.intent(text)
 
+    def analisar(self, text: str):
+        """Run the unified A1 semantic + proof pipeline."""
+        from quid_core import Quid
+
+        return Quid(self).analisar(text)
+
     def learn(self, text: str, source: str = "text") -> LearningEvent:
         return self.learner.ingest(text, source)
 
     def ask(self, text: str) -> QueryResult:
-        props = self.interpreter.propositions(text)
-        if not props:
-            frame = self.understand(text)
-            return QueryResult(None, frame.confidence, explanation=f"intent={frame.intent}")
-        p = props[0]
-        s, o = self.quids.get(p.subject), self.quids.get(p.object)
-        if not s or not o:
-            return QueryResult(None, 0.0, explanation="unknown QUID")
-        evidence = tuple(self.graph.query(s.symbol, p.relation, o.symbol))
-        if evidence:
-            best = max(evidence, key=lambda x: x.confidence if isinstance(x, Fact) else x.confidence)
-            c = best.confidence if isinstance(best, Fact) else best.confidence
-            return QueryResult(True, c, evidence, f"{s.label} {p.relation} {o.label}")
-        if self.graph.contradictory(s.symbol, p.relation, o.symbol):
-            return QueryResult(None, 0.0, explanation="contradictory evidence exists")
-        return QueryResult(False, 0.15, explanation=f"no supported path for {p.subject} {p.relation} {p.object}")
+        """Compatibility API backed entirely by the unified A1 pipeline."""
+        analysis = self.analisar(text)
+        evidence = tuple(
+            self.graph.query(
+                next(
+                    (n.quid for n in analysis.gir.nodes if n.node_id == edge.source),
+                    "",
+                ),
+                edge.relation,
+                next(
+                    (n.quid for n in analysis.gir.nodes if n.node_id == edge.target),
+                    "",
+                ),
+            )
+            for edge in analysis.gir.edges
+            if edge.relation in analysis.reasoning.__class__.__annotations__.get("status", ())
+        )
+        # The proof-oriented result is authoritative; avoid a second semantic
+        # parser or a second truth decision in this compatibility adapter.
+        return QueryResult(
+            analysis.answer,
+            analysis.confidence,
+            analysis.reasoning.proofs,
+            analysis.explanation,
+        )
 
     def calculate(self, expression: str) -> float | int:
         return self.kernel.safe_eval(expression)
