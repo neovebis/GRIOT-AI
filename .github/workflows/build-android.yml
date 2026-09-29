@@ -76,10 +76,15 @@ jobs:
 
       - name: Verify and Sign Release APK
         run: |
+          # Gradle now produces an UNSIGNED APK (no signingConfig in buildType)
           RELEASE_APK=$(find android/app/build/outputs/apk/release -type f -name '*.apk' 2>/dev/null | head -n 1)
-          ZIPALIGN_BIN=$(find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -n 1)
-          APKSIGNER_BIN=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          ZIPALIGN_BIN=$(find "$ANDROID_HOME/build-tools/34.0.0" -name zipalign -type f 2>/dev/null || find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -n 1)
+          # CRITICAL: Use build-tools 34.0.0's apksigner — 35.0.0 silently ignores --v1-signing-enabled true
+          APKSIGNER_BIN=$(find "$ANDROID_HOME/build-tools/34.0.0" -name apksigner -type f 2>/dev/null || find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | head -n 1)
           KEYSTORE="android/app/griot-release.keystore"
+          
+          echo "Using apksigner: $APKSIGNER_BIN"
+          echo "Using zipalign: $ZIPALIGN_BIN"
           
           if [ -n "$RELEASE_APK" ] && [ -f "$KEYSTORE" ]; then
             echo "Aligning and signing Release APK with v1 + v2 + v3 schemes..."
@@ -105,7 +110,7 @@ jobs:
           sha256sum GRIOT-Mobile.apk
 
           GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-          TAG_TO_USE="v${GRADLE_VER:-1.0.84}"
+          TAG_TO_USE="v${GRADLE_VER:-1.0.88}"
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_TO_USE="${{ github.ref_name }}"
           fi
