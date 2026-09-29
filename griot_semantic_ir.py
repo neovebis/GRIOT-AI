@@ -128,8 +128,8 @@ class MeaningCompiler:
             s = self._node(nodes, subject, "entity", 1, ambiguity_map)
             o = self._node(nodes, object_, "entity", 1, ambiguity_map)
             last_subject = subject
-            subject_gender, subject_number = self.coreference._guess_agreement(subject)
-            object_gender, object_number = self.coreference._guess_agreement(object_)
+            subject_gender, subject_number = self.coreference.guess_agreement(subject)
+            object_gender, object_number = self.coreference.guess_agreement(object_)
             mentions.append(
                 Mention(subject, "subject", len(mentions) + 1, subject_gender, subject_number, s.quid)
             )
