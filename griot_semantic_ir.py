@@ -40,7 +40,7 @@ class MeaningCompiler:
         (r"^(.*?)\s+provoca\s+(.*?)$", "causes"),
         (r"^(.*?)\s+antes de\s+(.*?)$", "before"),
         (r"^(.*?)\s+depois de\s+(.*?)$", "after"),
-        (r"^(.*?)\s+(?:está|esta|fica|vive) em\s+(.*?)$", "located_in"),
+        (r"^(.*?)\s+(?:está|esta|fica|vive)\s+(?:em|no|na|nos|nas)\s+(.*?)$", "located_in"),
     )
     VERBS = (
         (r"^(.*?)\s+(?:ataca|atacou|atacar)\s+(.*?)$", "attacks"),
