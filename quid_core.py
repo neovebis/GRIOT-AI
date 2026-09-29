@@ -6,7 +6,8 @@ from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTra
 from griot_context import ContextView
 from griot_engine import Fact, GRIOT, Inference
 from griot_gir import GIR
-from griot_working_graph import WorkingGraph, WorkingGraphState
+from griot_query_planner import QueryPlan, QueryPlanner
+from griot_working_graph import WorkingGraphState
 from griot_reasoning_v040 import ReasoningEngine, ReasoningResult, TruthStatus
 from griot_semantic_ir import SemanticGRIOT
 
@@ -25,6 +26,7 @@ class QuidAnalysis:
     context: ContextView
     epistemic: Assessment
     provenance_trace: ProvenanceTrace
+    query_plan: QueryPlan
     working_graph: WorkingGraphState
     answer: bool | None
     epistemic_status: TruthStatus
@@ -48,6 +50,7 @@ class Quid:
         self.semantic = SemanticGRIOT(self.engine)
         self.reasoning = ReasoningEngine(self.semantic)
         self.epistemic = EpistemicStateEngine()
+        self.query_planner = QueryPlanner(self.engine)
 
     def analisar(self, text: str) -> QuidAnalysis:
         if not isinstance(text, str):
@@ -59,13 +62,9 @@ class Quid:
         context_view = self.engine.context.view(gir)
         result = self.reasoning.reason_meaning(text, gir, context_view)
         assessment = self.epistemic.assess(result, text)
-        working = WorkingGraph()
-        working_state = working.build(
-            gir,
-            context=context_view,
-            context_engine=self.engine.context,
-            durable_graph=self.engine.graph,
-        )
+        query_plan = self.query_planner.plan(gir, context_view)
+        execution = self.query_planner.execute(query_plan, gir, context_view)
+        working_state = execution.working_graph
         self.engine.context.ingest(gir, source="query")
 
         answer: bool | None
@@ -107,6 +106,7 @@ class Quid:
             context=result.context or context_view,
             epistemic=assessment,
             provenance_trace=assessment.provenance,
+            query_plan=query_plan,
             working_graph=working_state,
             answer=answer,
             epistemic_status=result.status,
