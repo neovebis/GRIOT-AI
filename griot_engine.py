@@ -749,27 +749,10 @@ class GRIOT:
     def ask(self, text: str) -> QueryResult:
         """Compatibility API backed entirely by the unified A1 pipeline."""
         analysis = self.analisar(text)
-        evidence = tuple(
-            self.graph.query(
-                next(
-                    (n.quid for n in analysis.gir.nodes if n.node_id == edge.source),
-                    "",
-                ),
-                edge.relation,
-                next(
-                    (n.quid for n in analysis.gir.nodes if n.node_id == edge.target),
-                    "",
-                ),
-            )
-            for edge in analysis.gir.edges
-            if edge.relation in analysis.reasoning.__class__.__annotations__.get("status", ())
-        )
-        # The proof-oriented result is authoritative; avoid a second semantic
-        # parser or a second truth decision in this compatibility adapter.
         return QueryResult(
             analysis.answer,
             analysis.confidence,
-            analysis.reasoning.proofs,
+            analysis.graph_evidence,
             analysis.explanation,
         )
 
