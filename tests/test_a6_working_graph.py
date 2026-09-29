@@ -1,13 +1,15 @@
 import unittest
 
 from griot_engine import Fact, GRIOT
+from griot_semantic_ir import SemanticGRIOT
+from quid_core import Quid
 from griot_working_graph import WorkingGraph
 
 
 class WorkingGraphTests(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = GRIOT.create()
-        self.semantic = __import__("griot_semantic_ir").griot_semantic_ir.SemanticGRIOT(self.engine)
+        self.semantic = SemanticGRIOT(self.engine)
 
     def test_build_is_transient_and_does_not_mutate_durable_graph(self) -> None:
         self.engine.learn("O leão é um animal.", source="memory")
@@ -39,7 +41,9 @@ class WorkingGraphTests(unittest.TestCase):
         working = WorkingGraph()
         working.build(gir, durable_graph=self.engine.graph)
 
-        durable = working.query(subject="🦁", relation="is_a", object_="animal")
+        target = self.engine.quids.get("animal")
+        self.assertIsNotNone(target)
+        durable = working.query(subject="🦁", relation="is_a", object_=target.symbol)
         self.assertGreaterEqual(len(durable), 2)
 
     def test_context_evidence_is_selected_by_context_view(self) -> None:
@@ -62,7 +66,7 @@ class WorkingGraphTests(unittest.TestCase):
 
     def test_analysis_exposes_working_graph_state(self) -> None:
         self.engine.learn("O leão é um animal.", source="memory")
-        analysis = __import__("quid_core").quid_core.Quid(self.engine).analisar("leão é um animal")
+        analysis = Quid(self.engine).analisar("leão é um animal")
         self.assertGreaterEqual(analysis.working_graph.evidence_count, 1)
         self.assertIn("🦁", analysis.working_graph.quids)
         self.assertIn("memory", analysis.working_graph.sources)
