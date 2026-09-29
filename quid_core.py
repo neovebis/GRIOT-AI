@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from griot_causality import CausalAnalysis, CausalityEngine
 from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
 from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
+from griot_verification import VerificationEngine, VerificationReport
 from griot_context import ContextView
 from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference, TransitionRule
@@ -36,6 +37,7 @@ class QuidAnalysis:
     intent: SemanticIntent
     math_result: MathResult | None
     answer_value: object | None
+    verification: VerificationReport
     epistemic: Assessment
     provenance_trace: ProvenanceTrace
     query_plan: QueryPlan
@@ -214,6 +216,7 @@ class Quid:
             intent=semantic_intent,
             math_result=math_result,
             answer_value=(math_result.value if math_result and math_result.value is not None else answer),
+            verification=verification,
             epistemic=assessment,
             provenance_trace=assessment.provenance,
             query_plan=query_plan,
