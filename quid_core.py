@@ -9,6 +9,7 @@ from griot_extraction import ExtractionBatch, KnowledgeExtractor
 from griot_validation import KnowledgeValidator, ValidationReport
 from griot_deduplication import DeduplicationReport, SemanticDeduplicator
 from griot_consolidation import ConsolidationReport, KnowledgeConsolidator
+from griot_demotion import DemotionAssessment, KnowledgeDemotionEngine
 from griot_verification import VerificationEngine, VerificationReport
 from griot_context import ContextView
 from griot_discourse import DiscourseState
@@ -97,6 +98,9 @@ class Quid:
 
     def knowledge_level(self, fact: Fact) -> KnowledgeLevel:
         return self.promotion.level(fact)
+
+    def reconcile_knowledge(self) -> tuple[DemotionAssessment, ...]:
+        return self.demotion.reconcile()
 
     def consolidate_knowledge(self, batch: ExtractionBatch) -> ConsolidationReport:
         validation = self.validator.validate(batch)
