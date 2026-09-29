@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import re
-from typing import TYPE_CHECKING
 
 
 class IntentType(str, Enum):
@@ -52,18 +51,18 @@ class SemanticIntentDetector:
     """Deterministic semantic-intent classifier with explicit evidence."""
 
     DIRECT_RULES = (
-        (r"calcula(?:r)?", IntentType.CALCULATION, 4.0),
-        (r"quantos+(?:é|e)", IntentType.CALCULATION, 3.8),
-        (r"calcule", IntentType.CALCULATION, 4.0),
-        (r"explica(?:r)?", IntentType.EXPLANATION, 4.0),
-        (r"pors+que", IntentType.EXPLANATION, 3.4),
-        (r"porque", IntentType.EXPLANATION, 2.0),
-        (r"aprende(?:r)?|memoriza(?:r)?|guarda", IntentType.LEARNING, 4.0),
-        (r"simula(?:r)?|simulação|es+se", IntentType.SIMULATION, 4.0),
-        (r"compara(?:r)?|diferença", IntentType.COMPARISON, 3.8),
-        (r"cria(?:r)?|gera(?:r)?|desenha(?:r)?", IntentType.CREATION, 3.8),
-        (r"define(?:r)?|significa", IntentType.DEFINITION, 3.8),
-        (r"mostra(?:r)?|mostre|diz(?:e)?|encontra(?:r)?", IntentType.REQUEST, 3.0),
+        (r"\bcalcula(?:r)?\b", IntentType.CALCULATION, 4.0),
+        (r"\bquanto\s+(?:é|e)\b", IntentType.CALCULATION, 3.8),
+        (r"\bcalcule\b", IntentType.CALCULATION, 4.0),
+        (r"\bexplica(?:r)?\b", IntentType.EXPLANATION, 4.0),
+        (r"\bpor\s+que\b", IntentType.EXPLANATION, 3.4),
+        (r"\bporque\b", IntentType.EXPLANATION, 2.0),
+        (r"\baprende(?:r)?\b|\bmemoriza(?:r)?\b|\bguarda\b", IntentType.LEARNING, 4.0),
+        (r"\bsimula(?:r)?\b|\bsimulação\b|\be\s+se\b", IntentType.SIMULATION, 4.0),
+        (r"\bcompara(?:r)?\b|\bdiferença\b", IntentType.COMPARISON, 3.8),
+        (r"\bcria(?:r)?\b|\bgera(?:r)?\b|\bdesenha(?:r)?\b", IntentType.CREATION, 3.8),
+        (r"\bdefine(?:r)?\b|\bsignifica\b", IntentType.DEFINITION, 3.8),
+        (r"\bmostra(?:r)?\b|\bmostre\b|\bdiz(?:e)?\b|\bencontra(?:r)?\b", IntentType.REQUEST, 3.0),
     )
 
     QUESTION_PREFIXES = (
@@ -74,7 +73,7 @@ class SemanticIntentDetector:
     def detect(self, text: str, frame: object | None = None) -> SemanticIntent:
         if not isinstance(text, str):
             raise TypeError("text must be a string")
-        normalized = re.sub(r"s+", " ", text.casefold().strip())
+        normalized = re.sub(r"\s+", " ", text.casefold().strip())
         if not normalized:
             raise ValueError("text must not be empty")
 
@@ -83,8 +82,7 @@ class SemanticIntentDetector:
 
         for pattern, intent, weight in self.DIRECT_RULES:
             if re.search(pattern, normalized, re.I):
-                signal = IntentSignal(pattern, intent, weight)
-                signals.append(signal)
+                signals.append(IntentSignal(pattern, intent, weight))
                 scores[intent] = scores.get(intent, 0.0) + weight
 
         if normalized.endswith("?") or normalized.startswith(self.QUESTION_PREFIXES):
@@ -92,8 +90,6 @@ class SemanticIntentDetector:
             signals.append(signal)
             scores[IntentType.QUERY] = scores.get(IntentType.QUERY, 0.0) + 3.5
 
-        # The legacy frame remains a compatibility signal, never the only
-        # semantic-intent source.
         frame_intent = getattr(frame, "intent", None)
         frame_map = {
             "calculate": IntentType.CALCULATION,
@@ -111,17 +107,17 @@ class SemanticIntentDetector:
             scores[mapped] = scores.get(mapped, 0.0) + 1.2
 
         if not scores:
-            speech_act = "assertion"
             primary = IntentType.ASSERTION
             confidence = 0.55
             secondary: tuple[IntentType, ...] = ()
+            speech_act = "assertion"
         else:
             ranked = sorted(scores.items(), key=lambda item: (-item[1], item[0].value))
             primary = ranked[0][0]
             total = sum(score for _, score in ranked)
             confidence = min(0.99, ranked[0][1] / total if total else 0.0)
             secondary = tuple(intent for intent, _ in ranked[1:4])
-            speech_act = self._speech_act(primary, normalized)
+            speech_act = self._speech_act(primary)
 
         target = self._extract_target(normalized)
         return SemanticIntent(
@@ -134,7 +130,7 @@ class SemanticIntentDetector:
         )
 
     @staticmethod
-    def _speech_act(primary: IntentType, text: str) -> str:
+    def _speech_act(primary: IntentType) -> str:
         if primary in {IntentType.REQUEST, IntentType.COMMAND}:
             return "directive"
         if primary in {
@@ -156,13 +152,13 @@ class SemanticIntentDetector:
     @staticmethod
     def _extract_target(text: str) -> str:
         cleaned = re.sub(
-            r"^(?:o que|quem|qual|quais|onde|quando|como|por que|porque)s+",
+            r"^(?:o que|quem|qual|quais|onde|quando|como|por que|porque)\s+",
             "",
             text,
             count=1,
         )
         cleaned = re.sub(
-            r"^(?:calcula(?:r)?|calcule|explica(?:r)?|aprende(?:r)?|memoriza(?:r)?|simula(?:r)?|compara(?:r)?|cria(?:r)?|define(?:r)?|mostra(?:r)?|mostre)s+",
+            r"^(?:calcula(?:r)?|calcule|explica(?:r)?|aprende(?:r)?|memoriza(?:r)?|simula(?:r)?|compara(?:r)?|cria(?:r)?|define(?:r)?|mostra(?:r)?|mostre)\s+",
             "",
             cleaned,
             count=1,
