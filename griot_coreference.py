@@ -76,8 +76,8 @@ class CoreferenceResolver:
             )
 
         candidates: list[CoreferenceCandidate] = []
-        for mention in reversed(tuple(mentions)):
-            score = self._score_local(mention, agreement)
+        for rank, mention in enumerate(reversed(tuple(mentions))):
+            score = self._score_local(mention, agreement, rank)
             if score > 0:
                 candidates.append(
                     CoreferenceCandidate(
@@ -146,11 +146,17 @@ class CoreferenceResolver:
         )
 
     @staticmethod
-    def _score_local(mention: Mention, agreement: tuple[str, str]) -> float:
-        if not CoreferenceResolver._agreement_matches(mention.gender, mention.number, agreement):
+    def _score_local(
+        mention: Mention,
+        agreement: tuple[str, str],
+        rank: int,
+    ) -> float:
+        if not CoreferenceResolver._agreement_matches(
+            mention.gender, mention.number, agreement
+        ):
             return 0.0
         role_bonus = 0.45 if mention.role == "subject" else 0.0
-        recency_bonus = 1.60 / max(1, mention.sentence)
+        recency_bonus = 1.60 / (rank + 1)
         return 2.0 + role_bonus + recency_bonus
 
     @staticmethod
