@@ -120,6 +120,13 @@ B1 adds an explicit lexical ambiguity layer before semantic reasoning.
 Ambiguity is never silently collapsed: ties and insufficient context remain `ambiguous`, with candidate QUIDs preserved in GIR constraints. A resolved sense changes the semantic node's QUID while retaining the original surface form for traceability.
 
 B1 is deliberately narrower than full polysemy. Systematic sense relationships and sense-specific knowledge networks are deferred to B2.
+## Mathematics and simulation
+
+C1 adds a deterministic mathematics layer with exact rational evaluation where possible and explicit approximate/invalid states otherwise.
+
+C2 formalizes the existing world simulator as `SimulationEngine`. Deterministic rule execution returns immutable state trajectories, terminal state, rule counts and executed-step count. Monte Carlo execution exposes run count, step count, seed and aggregate statistics.
+
+Simulation is isolated from durable semantic memory: executing a scenario does not write facts into the knowledge graph. The public `Quid` facade exposes programmatic simulation APIs while natural-language simulation intent remains a separate semantic layer until scenario extraction is implemented in later reasoning phases.
 ## Structured knowledge induction
 
 Phase-2 induction extracts reusable structures from hygienized text:
