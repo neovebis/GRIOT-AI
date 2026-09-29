@@ -58,7 +58,8 @@ class ProvenanceTrace:
 
     @property
     def sources(self) -> tuple[str, ...]:
-        return tuple(sorted({record.source for record in self.records}))
+        evidence_records = [record for record in self.records if record.kind == "direct"]
+        return tuple(sorted({record.source for record in evidence_records}))
 
     @property
     def source_diversity(self) -> int:
@@ -116,14 +117,14 @@ class EpistemicStateEngine:
         records = [
             ProvenanceRecord(
                 source=step.provenance or "unknown",
-                kind="direct" if step.rule == "direct" else "inference",
+                kind="inference" if step.rule not in {"direct", "support"} else "direct",
                 relation=step.relation,
                 subject=step.subject,
                 object=step.object,
                 confidence=float(step.confidence),
                 rule=step.rule,
             )
-            for step in (*result.proofs, *result.causes)
+            for step in result.proofs
         ]
         provenance = ProvenanceTrace(tuple(records))
 
