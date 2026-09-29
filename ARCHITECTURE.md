@@ -97,6 +97,13 @@ The reasoning layer evaluates every query relation represented in the GIR, prese
 Provenance is structured separately from QUID identity and graph facts. An epistemic state records supported, refuted, conflict or unknown status together with confidence, evidence counts, proof depth, source diversity, caveats and an abstention flag.
 
 Independent-source diversity counts direct evidence sources only; inference-rule labels and derived proof steps do not become independent sources. The epistemic gate consumes this structured assessment and can refuse to emit an answer for unknown, conflict, low-confidence, insufficient-source or excessive-depth cases.
+## Working Graph
+
+The Working Graph is the bounded transient evidence graph for one reasoning cycle.
+
+It assembles the current GIR, exact durable evidence for queried relations, rule-derived inferences and selected records from discourse context. Duplicate semantic keys are collapsed only when their full provenance identity is the same; distinct direct sources remain distinct.
+
+Working Graph state is disposable and separate from durable memory. It is used to constrain retrieval and give later planning/reasoning stages a bounded evidence surface without mutating the knowledge graph or QUID registry.
 ## Structured knowledge induction
 
 Phase-2 induction extracts reusable structures from hygienized text:
