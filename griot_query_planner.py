@@ -146,11 +146,20 @@ class QueryPlanner:
             ]
             working.extend(inferred, origin="durable-inference", score=0.90)
             for inference in inferred:
-                working.extend(
-                    inference.support,
-                    origin="durable-support",
-                    score=0.86,
-                )
+                for support in inference.support:
+                    all_support = [
+                        fact
+                        for fact in self.engine.graph.facts()
+                        if fact.subject == support.subject
+                        and fact.relation == support.relation
+                        and fact.object == support.object
+                        and fact.negated == support.negated
+                    ]
+                    working.extend(
+                        all_support or (support,),
+                        origin="durable-support",
+                        score=0.86,
+                    )
 
         if context is not None:
             selected = set(plan.context_record_ids)
