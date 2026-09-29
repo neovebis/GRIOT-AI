@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Compile
-        run: python -m compileall -q griot_engine.py griot_context.py griot_gir.py griot_semantic_ir.py griot_reasoning_v040.py griot_cognition_v100.py griot_provenance.py griot_working_graph.py griot_query_planner.py griot_ambiguity.py griot_polysemy.py griot_coreference.py griot_discourse.py griot_metaphor.py griot_intent.py griot_math.py griot_simulation.py griot_worldmodel_v070.py griot_planning_v080.py griot_hypothesis_v050.py griot_counterfactual.py griot_causality.py griot_verification.py griot_extraction.py griot_validation.py quid_core.py
+        run: python -m compileall -q griot_engine.py griot_context.py griot_gir.py griot_semantic_ir.py griot_reasoning_v040.py griot_cognition_v100.py griot_provenance.py griot_working_graph.py griot_query_planner.py griot_ambiguity.py griot_polysemy.py griot_coreference.py griot_discourse.py griot_metaphor.py griot_intent.py griot_math.py griot_simulation.py griot_worldmodel_v070.py griot_planning_v080.py griot_hypothesis_v050.py griot_counterfactual.py griot_causality.py griot_verification.py griot_extraction.py griot_validation.py griot_deduplication.py quid_core.py
       - name: A1 integration tests
         run: python -m unittest tests.test_a1_core_integration -v
       - name: A2 GIR contract tests
@@ -68,5 +68,7 @@ jobs:
         run: python -m unittest tests.test_d1_extraction -v
       - name: D2 validation tests
         run: python -m unittest tests.test_d2_validation -v
+      - name: D3 deduplication tests
+        run: python -m unittest tests.test_d3_deduplication -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
