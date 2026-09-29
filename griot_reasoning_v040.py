@@ -113,7 +113,7 @@ class ReasoningEngine:
 
             subject = source_node.quid
             object_ = target_node.quid
-            evidence = self.semantic.engine.graph.query(subject, edge.relation, object_)
+            evidence = self._evidence_for_claim(subject, edge.relation, object_)
             support = [
                 item for item in evidence
                 if bool(getattr(item, "negated", False)) == edge.negated
@@ -192,6 +192,30 @@ class ReasoningEngine:
             tuple(claims),
             context,
         )
+
+    def _evidence_for_claim(
+        self,
+        subject: str,
+        relation: str,
+        object_: str,
+    ) -> tuple[Fact | Inference, ...]:
+        graph = self.semantic.engine.graph
+
+        # Read all direct facts from durable storage so distinct provenance
+        # entries are not collapsed by graph.query's semantic deduplication.
+        direct = [
+            fact
+            for fact in graph.facts()
+            if fact.subject == subject
+            and fact.relation == relation
+            and fact.object == object_
+        ]
+        inferred = [
+            item
+            for item in graph.query(subject, relation, object_)
+            if isinstance(item, Inference)
+        ]
+        return tuple(direct) + tuple(inferred)
 
     def why(self, target: str) -> tuple[ProofStep, ...]:
         q = self.semantic.engine.quids.get(target)
