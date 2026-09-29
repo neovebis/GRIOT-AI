@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from griot_context import ContextView
 from griot_engine import Fact, GRIOT, Inference
 from griot_gir import GIR
-from griot_reasoning_v040 import ReasoningController, ReasoningResult, TruthStatus
+from griot_reasoning_v040 import ReasoningEngine, ReasoningResult, TruthStatus
 from griot_semantic_ir import SemanticGRIOT
 
 
@@ -41,7 +41,7 @@ class Quid:
     def __init__(self, engine: GRIOT | None = None) -> None:
         self.engine = engine or GRIOT.create()
         self.semantic = SemanticGRIOT(self.engine)
-        self.reasoning = ReasoningController(self.semantic)
+        self.reasoning = ReasoningEngine(self.semantic)
 
     def analisar(self, text: str) -> QuidAnalysis:
         if not isinstance(text, str):
@@ -51,7 +51,7 @@ class Quid:
 
         gir = self.semantic.understand(text)
         context_view = self.engine.context.view(gir)
-        result = self.reasoning.reason_meaning(text, gir)
+        result = self.reasoning.reason_meaning(text, gir, context_view)
         self.engine.context.ingest(gir, source="query")
 
         answer: bool | None
@@ -97,7 +97,7 @@ class Quid:
             text=text,
             gir=gir,
             reasoning=result,
-            context=context_view,
+            context=result.context or context_view,
             answer=answer,
             epistemic_status=result.status,
             confidence=result.confidence,
