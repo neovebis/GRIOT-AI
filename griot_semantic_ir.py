@@ -3,6 +3,7 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
+from dataclasses import dataclass
 from typing import Iterable, Mapping
 
 try:
@@ -14,6 +15,7 @@ except ImportError:
 from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
 
 
+@dataclass(frozen=True, slots=True)
 class MeaningRepresentation(GIR):
     """Compatibility name for the formal GIR semantic representation.
 
