@@ -84,7 +84,10 @@ class Quid:
             break
 
         resolved = tuple(dict.fromkeys(node.quid for node in gir.nodes))
-        provenance = assessment.provenance.sources
+        provenance_items = set(assessment.provenance.sources)
+        if any(record.kind == "inference" for record in assessment.provenance.records):
+            provenance_items.add("inference")
+        provenance = tuple(sorted(provenance_items))
 
         explanation = self._explanation(result)
 
