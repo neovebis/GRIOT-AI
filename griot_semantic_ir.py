@@ -14,6 +14,7 @@ except ImportError:
 
 from griot_ambiguity import AmbiguityAnalysis, AmbiguityResolver
 from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
+from griot_polysemy import PolysemyAnalysis, PolysemyResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +60,9 @@ class MeaningCompiler:
     def __init__(self, griot: GRIOT) -> None:
         self.griot = griot
         self.ambiguity = AmbiguityResolver(griot)
+        self.polysemy = PolysemyResolver(griot)
         self._ambiguity_analysis: AmbiguityAnalysis | None = None
+        self._polysemy_analysis: PolysemyAnalysis | None = None
 
     @staticmethod
     def normalize(text: str) -> str:
@@ -87,6 +90,10 @@ class MeaningCompiler:
             item.surface: item
             for item in self._ambiguity_analysis.resolutions
         }
+        self._polysemy_analysis = self.polysemy.analyze(
+            normalized,
+            self._ambiguity_analysis,
+        )
         nodes: dict[str, MeaningNode] = {}
         edges: list[MeaningEdge] = []
         last_subject: str | None = None
@@ -152,6 +159,22 @@ class MeaningCompiler:
         ) if self._ambiguity_analysis else ()
 
         constraints["ambiguity"] = ambiguity_constraints
+        constraints["polysemy"] = tuple(
+            {
+                "surface": family.surface,
+                "senses": family.senses,
+                "links": tuple(
+                    {
+                        "source": link.source_sense,
+                        "target": link.target_sense,
+                        "relation": link.relation,
+                        "confidence": link.confidence,
+                    }
+                    for link in family.links
+                ),
+            }
+            for family in (self._polysemy_analysis.families if self._polysemy_analysis else ())
+        )
 
         return MeaningRepresentation(
             text,
@@ -306,4 +329,6 @@ __all__ = [
     "SemanticGRIOT",
     "AmbiguityAnalysis",
     "AmbiguityResolver",
+    "PolysemyAnalysis",
+    "PolysemyResolver",
 ]
