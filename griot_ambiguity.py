@@ -71,6 +71,26 @@ class AmbiguityResolver:
             ("cable", ("fio", "energia", "usb", "ligação", "ligacao", "carregador")),
             ("cape", ("mar", "costa", "praia", "promontório", "promontorio", "península", "peninsula")),
         ),
+        "cabeça": (
+            ("head_body", ("corpo", "pescoço", "pescoco", "cérebro", "cerebro", "cabelo", "rosto")),
+            ("head_leader", ("empresa", "equipa", "equipe", "chefe", "grupo", "organização", "organizacao", "líder", "lider")),
+            ("head_front", ("fila", "dianteira", "início", "inicio", "ponta", "frente")),
+        ),
+        "braço": (
+            ("arm_body", ("corpo", "mão", "mao", "ombro", "cotovelo", "músculo", "musculo")),
+            ("arm_branch", ("empresa", "organização", "organizacao", "departamento", "filial", "grupo")),
+            ("arm_support", ("apoio", "sustentação", "sustentacao", "suporte", "estrutura")),
+        ),
+        "raiz": (
+            ("root_plant", ("planta", "árvore", "arvore", "solo", "terra", "folha")),
+            ("root_math", ("equação", "equacao", "número", "numero", "matemática", "matematica", "álgebra", "algebra")),
+            ("root_word", ("palavra", "linguagem", "língua", "lingua", "morfema", "prefixo")),
+        ),
+        "linha": (
+            ("line_geometry", ("geometria", "ponto", "reta", "segmento", "ângulo", "angulo")),
+            ("line_telephone", ("telefone", "chamada", "número", "numero", "operadora", "rede")),
+            ("line_lineage", ("família", "familia", "descendência", "descendencia", "linhagem", "ancestral")),
+        ),
     }
 
     MIN_RESOLUTION_MARGIN = 0.75
