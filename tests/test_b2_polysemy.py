@@ -31,7 +31,7 @@ class PolysemyTests(unittest.TestCase):
         self.assertNotEqual(quids["head_body"], quids["head_leader"])
 
     def test_semantic_ir_preserves_polysemy_without_equating_senses(self) -> None:
-        meaning = self.semantic.understand("A cabeça da empresa tem um papel.")
+        meaning = self.semantic.understand("A cabeça tem um papel na empresa.")
         poly = meaning.constraints["polysemy"][0]
 
         self.assertEqual(poly["surface"], "cabeça")
