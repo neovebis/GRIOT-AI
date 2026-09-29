@@ -23,6 +23,7 @@ from griot_planning_v080 import ActionPlan, ActionSchema, GoalPlanner
 from griot_promotion import KnowledgeAssessment, KnowledgeLevel, KnowledgePromotionEngine, PromotionPolicy
 from griot_simulation import MonteCarloResult, SimulationEngine, SimulationResult
 from griot_storage import SQLiteKnowledgeStore
+from griot_sharding import ShardedKnowledgeStore
 from griot_gir import GIR
 from griot_query_planner import QueryPlan, QueryPlanner
 from griot_working_graph import WorkingGraphState
@@ -107,6 +108,10 @@ class Quid:
 
     def persist_storage(self, path: str) -> None:
         with SQLiteKnowledgeStore(path) as store:
+            store.put_engine(self.engine)
+
+    def persist_sharded(self, directory: str, *, shards: int = 8) -> None:
+        with ShardedKnowledgeStore(directory, shards=shards) as store:
             store.put_engine(self.engine)
 
     @classmethod
