@@ -8,6 +8,7 @@ from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference, TransitionRule
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
+from griot_planning_v080 import ActionPlan, ActionSchema, GoalPlanner
 from griot_simulation import MonteCarloResult, SimulationEngine, SimulationResult
 from griot_gir import GIR
 from griot_query_planner import QueryPlan, QueryPlanner
@@ -69,6 +70,36 @@ class Quid:
         steps: int,
     ) -> SimulationResult:
         return self.simulation.run(initial, rules, steps=steps)
+
+    def register_action(
+        self,
+        label: str,
+        *,
+        preconditions: tuple[str, ...] = (),
+        add_effects: tuple[str, ...] = (),
+        remove_effects: tuple[str, ...] = (),
+        cost: float = 1.0,
+        confidence: float = 1.0,
+        provenance: str = "planner",
+    ) -> ActionSchema:
+        return self.planner.register_action(
+            label,
+            preconditions=preconditions,
+            add_effects=add_effects,
+            remove_effects=remove_effects,
+            cost=cost,
+            confidence=confidence,
+            provenance=provenance,
+        )
+
+    def plan_goal(
+        self,
+        initial: tuple[str, ...],
+        goal: str | tuple[str, ...],
+        *,
+        max_depth: int = 8,
+    ) -> ActionPlan | None:
+        return self.planner.plan(initial, goal, max_depth=max_depth)
 
     def simulate_monte_carlo(
         self,
