@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from griot_engine import Fact, GRIOT
+from griot_engine import Fact, GRIOT, Inference
 from griot_reasoning_v040 import ReasoningController, ReasoningResult, TruthStatus
 from griot_semantic_ir import MeaningRepresentation, SemanticGRIOT
 
@@ -24,6 +24,7 @@ class QuidAnalysis:
     epistemic_status: TruthStatus
     confidence: float
     semantic_facts: tuple[Fact, ...]
+    graph_evidence: tuple[Fact | Inference, ...]
     resolved_quids: tuple[str, ...]
     provenance: tuple[str, ...]
     explanation: str
@@ -62,6 +63,21 @@ class Quid:
             answer = None
 
         semantic_facts = gir.facts()
+
+        graph_evidence: tuple[Fact | Inference, ...] = ()
+        nodes = {node.node_id: node for node in gir.nodes}
+        for edge in gir.edges:
+            if edge.relation not in self.reasoning.QUERY_RELATIONS:
+                continue
+            source = nodes.get(edge.source)
+            target = nodes.get(edge.target)
+            if source is None or target is None:
+                continue
+            graph_evidence = tuple(
+                self.engine.graph.query(source.quid, edge.relation, target.quid)
+            )
+            break
+
         resolved = tuple(dict.fromkeys(node.quid for node in gir.nodes))
         provenance = tuple(
             sorted({step.provenance for step in result.proofs if step.provenance})
@@ -77,6 +93,7 @@ class Quid:
             epistemic_status=result.status,
             confidence=result.confidence,
             semantic_facts=semantic_facts,
+            graph_evidence=graph_evidence,
             resolved_quids=resolved,
             provenance=provenance,
             explanation=explanation,
