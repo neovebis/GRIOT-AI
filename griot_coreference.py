@@ -34,6 +34,10 @@ class CoreferenceLink:
     strategy: str
     candidates: tuple[CoreferenceCandidate, ...]
 
+    @property
+    def resolved(self) -> bool:
+        return self.status == "resolved" and self.antecedent is not None
+
 
 class CoreferenceResolver:
     """Deterministic discourse coreference with explicit abstention.
@@ -69,6 +73,7 @@ class CoreferenceResolver:
         context_records: Iterable[object] = (),
     ) -> CoreferenceLink:
         key = pronoun.casefold().strip()
+        context_records = tuple(context_records)
         agreement = self.PRONOUNS.get(key)
         if agreement is None:
             return CoreferenceLink(
@@ -103,7 +108,7 @@ class CoreferenceResolver:
                 surface = getattr(node, "surface", "")
                 if not isinstance(surface, str):
                     continue
-                gender, number = self._guess_agreement(surface)
+                gender, number = self.guess_agreement(surface)
                 if self._agreement_matches(gender, number, agreement):
                     recency = 1.0 / distance
                     candidates.append(
@@ -167,7 +172,7 @@ class CoreferenceResolver:
         return number == expected_number
 
     @staticmethod
-    def _guess_agreement(surface: str) -> tuple[str, str]:
+    def guess_agreement(surface: str) -> tuple[str, str]:
         value = surface.casefold().strip()
         plural = value.endswith("s") and len(value) > 2
         number = "plur" if plural else "sing"
