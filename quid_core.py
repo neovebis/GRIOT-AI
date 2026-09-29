@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
 from griot_context import ContextView
+from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference
 from griot_gir import GIR
 from griot_query_planner import QueryPlan, QueryPlanner
@@ -24,6 +25,7 @@ class QuidAnalysis:
     gir: GIR
     reasoning: ReasoningResult
     context: ContextView
+    discourse: DiscourseState
     epistemic: Assessment
     provenance_trace: ProvenanceTrace
     query_plan: QueryPlan
@@ -60,6 +62,11 @@ class Quid:
 
         gir = self.semantic.understand(text)
         context_view = self.engine.context.view(gir)
+        discourse_state = self.engine.discourse.observe(
+            text,
+            gir,
+            previous_records=self.engine.context.records(),
+        )
         result = self.reasoning.reason_meaning(text, gir, context_view)
         assessment = self.epistemic.assess(result, text)
         query_plan = self.query_planner.plan(gir, context_view)
@@ -104,6 +111,7 @@ class Quid:
             gir=gir,
             reasoning=result,
             context=result.context or context_view,
+            discourse=discourse_state,
             epistemic=assessment,
             provenance_trace=assessment.provenance,
             query_plan=query_plan,
