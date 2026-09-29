@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from griot_causality import CausalAnalysis, CausalityEngine
 from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
 from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
+from griot_extraction import ExtractionBatch, KnowledgeExtractor
 from griot_verification import VerificationEngine, VerificationReport
 from griot_context import ContextView
 from griot_discourse import DiscourseState
@@ -75,6 +76,9 @@ class Quid:
         steps: int,
     ) -> SimulationResult:
         return self.simulation.run(initial, rules, steps=steps)
+
+    def extract_knowledge(self, text: str) -> ExtractionBatch:
+        return self.extractor.extract(text)
 
     def generate_hypotheses(self, query: str, *, limit: int = 8) -> HypothesisReport:
         return self.hypotheses.generate(query, limit=limit)
