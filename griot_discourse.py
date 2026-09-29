@@ -94,9 +94,29 @@ class DiscourseContextEngine:
             raise TypeError("gir must be a GIR-compatible object")
         gir.validate()
 
+        previous = tuple(previous_records)
+        if self._turn == 0 and previous:
+            prior_turn = max(
+                int(getattr(record, "turn", 0))
+                for record in previous
+            )
+            prior_record = previous[-1]
+            prior_topic = self._topic_from_record(prior_record)
+            if prior_topic:
+                self._turn = prior_turn
+                self._segments.append(
+                    DiscourseSegment(
+                        1,
+                        prior_turn,
+                        prior_turn,
+                        prior_topic,
+                        DiscourseRelation.NONE,
+                    )
+                )
+                self._active_segment_id = 1
+
         self._turn += 1
         current_topic = self._topic_from_gir(gir)
-        previous = tuple(previous_records)
         previous_record = previous[-1] if previous else None
         previous_turn = getattr(previous_record, "turn", None)
 
