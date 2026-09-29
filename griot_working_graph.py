@@ -108,6 +108,7 @@ class WorkingGraph:
         gir: object,
         *,
         context: object | None = None,
+        context_engine: object | None = None,
         durable_graph: object | None = None,
     ) -> WorkingGraphState:
         if not hasattr(gir, "validate") or not hasattr(gir, "facts") or not hasattr(gir, "edges"):
@@ -147,10 +148,21 @@ class WorkingGraph:
                 ]
                 self.extend(inferred, origin="durable-inference", score=0.90)
 
-        if context is not None and hasattr(context, "matches") and hasattr(context, "_records"):
-            # ContextView deliberately exposes record IDs rather than mutable
-            # records. Resolve them only through a supplied record lookup.
-            pass
+        if (
+            context is not None
+            and hasattr(context, "matches")
+            and context_engine is not None
+            and hasattr(context_engine, "get")
+        ):
+            for match in context.matches:
+                record = context_engine.get(match.record_id)
+                if record is None:
+                    continue
+                self.extend(
+                    record.gir.facts(),
+                    origin=f"context:{record.record_id}",
+                    score=max(0.0, min(1.0, float(match.score) / 10.0)),
+                )
 
         return self.state()
 
