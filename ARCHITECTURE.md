@@ -104,6 +104,13 @@ The Working Graph is the bounded transient evidence graph for one reasoning cycl
 It assembles the current GIR, exact durable evidence for queried relations, rule-derived inferences and selected records from discourse context. Duplicate semantic keys are collapsed only when their full provenance identity is the same; distinct direct sources remain distinct.
 
 Working Graph state is disposable and separate from durable memory. It is used to constrain retrieval and give later planning/reasoning stages a bounded evidence surface without mutating the knowledge graph or QUID registry.
+## Query Planner
+
+The Query Planner is the explicit retrieval boundary between GIR/context and Working Graph.
+
+It canonicalizes query targets, records a bounded retrieval budget, selects relevant discourse records, and declares its retrieval strategies before execution. Execution retrieves exact durable evidence, rule-derived inferences and all direct source facts supporting those inferences, then materializes the selected context records into the transient Working Graph.
+
+Plans are tied to the GIR fingerprint and have their own deterministic fingerprint. This allows retrieval decisions to be audited, cached or compared without changing QUID identity or durable memory.
 ## Structured knowledge induction
 
 Phase-2 induction extracts reusable structures from hygienized text:
