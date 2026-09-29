@@ -2,13 +2,14 @@ import unittest
 
 from griot_engine import GRIOT
 from griot_reasoning_v040 import ReasoningController, ReasoningEngine, TruthStatus
+from griot_semantic_ir import SemanticGRIOT
 from quid_core import Quid
 
 
 class UnifiedReasoningEngineTests(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = GRIOT.create()
-        self.reasoning = ReasoningEngine(__import__("griot_semantic_ir").griot_semantic_ir.SemanticGRIOT(self.engine))
+        self.reasoning = ReasoningEngine(SemanticGRIOT(self.engine))
         self.quid = Quid(self.engine)
 
     def test_quid_uses_unified_reasoning_engine(self) -> None:
@@ -56,8 +57,17 @@ class UnifiedReasoningEngineTests(unittest.TestCase):
         self.engine.learn("O leão é um animal.", source="memory")
         first = self.quid.analisar("leão é um animal")
         self.assertEqual(first.epistemic_status, TruthStatus.SUPPORTED)
-        self.assertTrue(first.context.matches)
-        self.assertTrue(all(step.rule in {"direct", "support"} or step.rule.startswith("transitive:") for step in first.reasoning.proofs))
+        self.assertFalse(first.context.matches)
+
+        second = self.quid.analisar("leão é um animal")
+        self.assertEqual(second.epistemic_status, TruthStatus.SUPPORTED)
+        self.assertTrue(second.context.matches)
+        self.assertTrue(
+            all(
+                step.rule in {"direct", "support"} or step.rule.startswith("transitive:")
+                for step in second.reasoning.proofs
+            )
+        )
 
 
 if __name__ == "__main__":
