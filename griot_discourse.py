@@ -106,7 +106,7 @@ class DiscourseContextEngine:
         anchor_shared = self._shared_subject(gir, previous_record)
         markers = self._markers(text)
         relation, confidence = self._classify(
-            overlap, markers, bool(previous_topic), anchor_shared
+            overlap, markers, bool(previous_topic), anchor_shared, bool(shared)
         )
 
         if not self._segments or relation is DiscourseRelation.TOPIC_SHIFT:
@@ -229,6 +229,7 @@ class DiscourseContextEngine:
         markers: tuple[str, ...],
         has_previous: bool,
         anchor_shared: bool = False,
+        shared_any: bool = False,
     ) -> tuple[DiscourseRelation, float]:
         if not has_previous:
             return DiscourseRelation.NONE, 1.0
@@ -237,7 +238,7 @@ class DiscourseContextEngine:
             for relation, phrases in cls.MARKERS.items():
                 if lowered_markers & set(phrases):
                     return relation, 0.90
-        if anchor_shared:
+        if anchor_shared or shared_any:
             return DiscourseRelation.CONTINUATION, 0.86
         if overlap >= 0.50:
             return DiscourseRelation.CONTINUATION, 0.82
