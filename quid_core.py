@@ -22,6 +22,7 @@ from griot_hypothesis_v050 import HypothesisController, HypothesisReport
 from griot_planning_v080 import ActionPlan, ActionSchema, GoalPlanner
 from griot_promotion import KnowledgeAssessment, KnowledgeLevel, KnowledgePromotionEngine, PromotionPolicy
 from griot_simulation import MonteCarloResult, SimulationEngine, SimulationResult
+from griot_storage import SQLiteKnowledgeStore
 from griot_gir import GIR
 from griot_query_planner import QueryPlan, QueryPlanner
 from griot_working_graph import WorkingGraphState
@@ -103,6 +104,17 @@ class Quid:
 
     def knowledge_level(self, fact: Fact) -> KnowledgeLevel:
         return self.promotion.level(fact)
+
+    def persist_storage(self, path: str) -> None:
+        with SQLiteKnowledgeStore(path) as store:
+            store.put_engine(self.engine)
+
+    @classmethod
+    def from_storage(cls, path: str) -> "Quid":
+        engine = GRIOT.create()
+        with SQLiteKnowledgeStore(path) as store:
+            store.load_engine(engine)
+        return cls(engine)
 
     def version_knowledge(self) -> KnowledgeVersion:
         return self.versions.commit(self.engine.graph.facts())
