@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
-from griot_semantic_ir import MeaningRepresentation, SemanticGRIOT
+from griot_gir import GIR
+from griot_semantic_ir import SemanticGRIOT
 try:
     from griot_engine import Fact, Inference
 except ImportError:
@@ -32,13 +33,13 @@ class ProofStep:
 class ReasoningResult:
     status: TruthStatus
     confidence: float
-    meaning: MeaningRepresentation
+    meaning: GIR
     proofs: tuple[ProofStep, ...]
     causes: tuple[ProofStep, ...] = ()
 
 
 class ReasoningController:
-    """Proof-oriented controller over GRIOT semantic IR and graph memory."""
+    """Proof-oriented controller over the formal GIR contract and graph memory."""
 
     QUERY_RELATIONS = {
         "is_a", "part_of", "member_of", "has", "causes", "before", "after", "located_in",
@@ -53,13 +54,15 @@ class ReasoningController:
         meaning = self.semantic.understand(text)
         return self.reason_meaning(text, meaning)
 
-    def reason_meaning(self, text: str, meaning: MeaningRepresentation) -> ReasoningResult:
-        """Reason over an already compiled semantic representation.
+    def reason_meaning(self, text: str, meaning: GIR) -> ReasoningResult:
+        """Reason over an already compiled, validated GIR representation.
 
-        Keeping compilation outside this method lets the public Quid.analisar
-        pipeline parse once and share exactly the same IR with the proof layer.
+        Keeping compilation outside this method makes the public Quid.analisar
+        pipeline parse exactly once and share the same formal contract with the
+        proof layer.
         """
         del text  # retained in the API for tracing compatibility
+        meaning.validate()
         candidates = [edge for edge in meaning.edges if edge.relation in self.QUERY_RELATIONS]
         if not candidates:
             return ReasoningResult(TruthStatus.UNKNOWN, meaning.frame.confidence, meaning, ())
@@ -138,7 +141,16 @@ class ReasoningController:
                 f = item.fact
                 out.append(ProofStep(f.relation, f.subject, f.object, item.confidence, item.rule, f.provenance))
                 for support in item.support:
-                    out.append(ProofStep(support.relation, support.subject, support.object, support.confidence, "support", support.provenance))
+                    out.append(
+                        ProofStep(
+                            support.relation,
+                            support.subject,
+                            support.object,
+                            support.confidence,
+                            "support",
+                            support.provenance,
+                        )
+                    )
             else:
                 out.append(ProofStep(item.relation, item.subject, item.object, item.confidence, "direct", item.provenance))
         return out
