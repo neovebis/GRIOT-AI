@@ -88,6 +88,15 @@ The context layer:
 - remains independent from truth decisions, so context can be observed before it is allowed to influence proof conclusions.
 
 Context is intentionally transient. Durable knowledge remains in the knowledge graph, while context acts as working discourse memory between reasoning turns.
+## Unified reasoning, provenance and epistemic state
+
+Reasoning is centralized in a single `ReasoningEngine` over the validated GIR.
+
+The reasoning layer evaluates every query relation represented in the GIR, preserves requested polarity, aggregates claim statuses, and emits explicit proof steps. Transient context is attached to the result but cannot establish truth by itself.
+
+Provenance is structured separately from QUID identity and graph facts. An epistemic state records supported, refuted, conflict or unknown status together with confidence, evidence counts, proof depth, source diversity, caveats and an abstention flag.
+
+Independent-source diversity counts direct evidence sources only; inference-rule labels and derived proof steps do not become independent sources. The epistemic gate consumes this structured assessment and can refuse to emit an answer for unknown, conflict, low-confidence, insufficient-source or excessive-depth cases.
 ## Structured knowledge induction
 
 Phase-2 induction extracts reusable structures from hygienized text:
