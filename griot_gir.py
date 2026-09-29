@@ -192,6 +192,10 @@ class GIR:
     def facts(self) -> tuple[Fact, ...]:
         nodes = {node.node_id: node for node in self.nodes}
         default_provenance = self.provenance[0] if self.provenance else "semantic-ir"
+        ordered_edges = sorted(
+            self.edges,
+            key=lambda e: (e.source, e.relation, e.target, e.negated, e.family_id),
+        )
         return tuple(
             Fact(
                 nodes[edge.source].quid,
@@ -202,7 +206,7 @@ class GIR:
                 edge.provenance or default_provenance,
                 edge.evidence,
             )
-            for edge in self.edges
+            for edge in ordered_edges
         )
 
     def to_dict(self) -> dict[str, Any]:
