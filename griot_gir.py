@@ -127,6 +127,11 @@ class GIR:
             raise TypeError("GIR.frame must be a SemanticFrame")
         if self.schema_version != GIR_SCHEMA_VERSION:
             raise ValueError(f"unsupported GIR schema_version: {self.schema_version!r}")
+        self._validate_confidence(self.frame.confidence, "frame.confidence")
+        if not isinstance(self.frame.intent, str) or not self.frame.intent.strip():
+            raise ValueError("GIR.frame.intent must be non-empty")
+        if self.frame.polarity not in {"positive", "negative"}:
+            raise ValueError("GIR.frame.polarity must be positive or negative")
 
         node_ids: set[str] = set()
         for node in self.nodes:
