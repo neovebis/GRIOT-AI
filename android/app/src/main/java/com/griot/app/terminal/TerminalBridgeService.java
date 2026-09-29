@@ -73,7 +73,11 @@ public class TerminalBridgeService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, buildForegroundNotification("Terminal Nativo ARM64 Ativo", "Ambiente PRoot inicializado"));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, buildForegroundNotification("Terminal Nativo ARM64 Ativo", "Ambiente PRoot inicializado"), android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+        } else {
+            startForeground(NOTIFICATION_ID, buildForegroundNotification("Terminal Nativo ARM64 Ativo", "Ambiente PRoot inicializado"));
+        }
         bootstrapEnvironment();
     }
 

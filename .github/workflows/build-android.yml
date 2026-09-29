@@ -31,7 +31,7 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: "platform-tools platforms;android-36 platforms;android-34 build-tools;34.0.0"
+          packages: "platform-tools platforms;android-35 platforms;android-34 build-tools;35.0.0 build-tools;34.0.0"
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
@@ -56,40 +56,68 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Build debug APK
+      - name: Generate Release Keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore android/app/griot-release.keystore \
+            -alias griot-release \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "GriotMobileApp2026!" \
+            -keypass "GriotMobileApp2026!" \
+            -dname "CN=GRIOT AI, OU=Mobile, O=GRIOT AI, L=Luanda, ST=Luanda, C=AO"
+
+      - name: Build APKs (Release and Debug)
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease assembleDebug --no-daemon --stacktrace
 
-      - name: Verify APK
+      - name: Verify APKs
         run: |
-          APK=$(find android -type f -path '*/outputs/apk/debug/*-debug.apk' | head -n 1)
-          test -n "$APK"
-          cp "$APK" GRIOT-Mobile-debug.apk
-          echo "APK=GRIOT-Mobile-debug.apk" >> "$GITHUB_ENV"
-          sha256sum GRIOT-Mobile-debug.apk
-          GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-          if [ -n "$GRADLE_VER" ]; then
-            TAG_TO_USE="v$GRADLE_VER"
-          else
-            TAG_TO_USE="v1.0.30"
+          RELEASE_APK=$(find android/app/build/outputs/apk/release -type f -name '*.apk' 2>/dev/null | head -n 1)
+          DEBUG_APK=$(find android/app/build/outputs/apk/debug -type f -name '*.apk' 2>/dev/null | head -n 1)
+          
+          if [ -n "$RELEASE_APK" ]; then
+            cp "$RELEASE_APK" GRIOT-Mobile.apk
+            cp "$RELEASE_APK" GRIOT-Mobile-release.apk
+            echo "Release APK: $RELEASE_APK"
           fi
+          
+          if [ -n "$DEBUG_APK" ]; then
+            cp "$DEBUG_APK" GRIOT-Mobile-debug.apk
+            echo "Debug APK: $DEBUG_APK"
+          fi
+
+          ls -lh GRIOT-Mobile*.apk
+          sha256sum GRIOT-Mobile*.apk
+
+          GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
+          TAG_TO_USE="v${GRADLE_VER:-1.0.82}"
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_TO_USE="${{ github.ref_name }}"
           fi
           echo "RELEASE_TAG=$TAG_TO_USE" >> "$GITHUB_ENV"
           echo "RELEASE_NAME=GRIOT Mobile $TAG_TO_USE" >> "$GITHUB_ENV"
+
           AAPT2_BIN=$(find "$ANDROID_HOME/build-tools" -name aapt2 -type f | sort -V | tail -n 1)
           if [ -n "$AAPT2_BIN" ] && [ -x "$AAPT2_BIN" ]; then
-            "$AAPT2_BIN" dump badging GRIOT-Mobile-debug.apk || true
+            echo "=== AAPT2 DUMP BADGING (RELEASE) ==="
+            "$AAPT2_BIN" dump badging GRIOT-Mobile.apk || true
           fi
 
-      - name: Upload APK Artifact
+          APKSIGNER_BIN=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
+          if [ -n "$APKSIGNER_BIN" ] && [ -x "$APKSIGNER_BIN" ]; then
+            echo "=== APKSIGNER VERIFY (RELEASE) ==="
+            "$APKSIGNER_BIN" verify --verbose GRIOT-Mobile.apk || true
+          fi
+
+      - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: griot-mobile-debug-apk
-          path: GRIOT-Mobile-debug.apk
+          name: griot-mobile-apks
+          path: GRIOT-Mobile*.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -99,6 +127,9 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_NAME }}
-          files: GRIOT-Mobile-debug.apk
+          files: |
+            GRIOT-Mobile.apk
+            GRIOT-Mobile-release.apk
+            GRIOT-Mobile-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
