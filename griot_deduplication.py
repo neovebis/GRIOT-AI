@@ -9,7 +9,7 @@ from griot_extraction import ExtractionCandidate
 
 @dataclass(frozen=True, slots=True)
 class DeduplicationGroup:
-    key: tuple[str, str, str, bool]
+    key: tuple[str, str, str]
     candidates: tuple[ExtractionCandidate, ...]
 
     @property
@@ -46,7 +46,14 @@ class DeduplicationReport:
 
     @property
     def duplicates_removed(self) -> int:
-        return sum(max(0, len(group.candidates) - 1) for group in self.groups)
+        removed = 0
+        for group in self.groups:
+            by_polarity = {
+                polarity: sum(candidate.fact.negated == polarity for candidate in group.candidates)
+                for polarity in (False, True)
+            }
+            removed += sum(max(0, count - 1) for count in by_polarity.values())
+        return removed
 
     @property
     def conflict_groups(self) -> tuple[DeduplicationGroup, ...]:
@@ -57,19 +64,14 @@ class SemanticDeduplicator:
     """Group semantically identical facts while preserving provenance and polarity."""
 
     @staticmethod
-    def key(fact: Fact) -> tuple[str, str, str, bool]:
-        return (
-            fact.subject,
-            fact.relation,
-            fact.object,
-            bool(fact.negated),
-        )
+    def key(fact: Fact) -> tuple[str, str, str]:
+        return (fact.subject, fact.relation, fact.object)
 
     def deduplicate(
         self,
         candidates: Iterable[ExtractionCandidate],
     ) -> DeduplicationReport:
-        grouped: dict[tuple[str, str, str, bool], list[ExtractionCandidate]] = {}
+        grouped: dict[tuple[str, str, str], list[ExtractionCandidate]] = {}
         for candidate in candidates:
             grouped.setdefault(self.key(candidate.fact), []).append(candidate)
 
