@@ -24,6 +24,7 @@ class FactIndices:
         self._object_relation: dict[tuple[str, str], set[Fact]] = defaultdict(set)
         self._relation: dict[str, set[Fact]] = defaultdict(set)
         self._semantic: dict[tuple[str, str, str], set[Fact]] = defaultdict(set)
+        self._subject_object: dict[tuple[str, str], set[Fact]] = defaultdict(set)
         self._facts: set[Fact] = set()
         self.rebuild(facts)
 
@@ -32,6 +33,7 @@ class FactIndices:
         self._object_relation.clear()
         self._relation.clear()
         self._semantic.clear()
+        self._subject_object.clear()
         self._facts.clear()
         for fact in facts:
             self.add(fact)
@@ -44,6 +46,7 @@ class FactIndices:
         self._object_relation[(fact.object, fact.relation)].add(fact)
         self._relation[fact.relation].add(fact)
         self._semantic[(fact.subject, fact.relation, fact.object)].add(fact)
+        self._subject_object[(fact.subject, fact.object)].add(fact)
 
     def remove(self, fact: Fact) -> None:
         if fact not in self._facts:
@@ -54,6 +57,7 @@ class FactIndices:
             (self._object_relation, (fact.object, fact.relation)),
             (self._relation, fact.relation),
             (self._semantic, (fact.subject, fact.relation, fact.object)),
+            (self._subject_object, (fact.subject, fact.object)),
         )
         for mapping, key in buckets:
             values = mapping.get(key)
@@ -76,12 +80,7 @@ class FactIndices:
         elif object_ is not None and relation is not None:
             candidates = self._object_relation.get((object_, relation), ())
         elif subject is not None and relation is None and object_ is not None:
-            candidates = self._semantic.get((subject, "", object_), ())
-            if not candidates:
-                candidates = {
-                    fact for fact in self._facts
-                    if fact.subject == subject and fact.object == object_
-                }
+            candidates = self._subject_object.get((subject, object_), ())
         elif relation is not None:
             candidates = self._relation.get(relation, ())
         else:
