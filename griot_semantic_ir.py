@@ -15,6 +15,7 @@ except ImportError:
 from griot_ambiguity import AmbiguityAnalysis, AmbiguityResolver
 from griot_coreference import CoreferenceLink, CoreferenceResolver, Mention
 from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
+from griot_intent import SemanticIntentDetector, SemanticIntent
 from griot_metaphor import MetaphorResolver
 from griot_polysemy import PolysemyAnalysis, PolysemyResolver
 
@@ -65,6 +66,7 @@ class MeaningCompiler:
         self.polysemy = PolysemyResolver(griot)
         self.coreference = CoreferenceResolver(griot)
         self.metaphor = MetaphorResolver()
+        self.intent = SemanticIntentDetector()
         self._ambiguity_analysis: AmbiguityAnalysis | None = None
         self._polysemy_analysis: PolysemyAnalysis | None = None
 
@@ -86,6 +88,7 @@ class MeaningCompiler:
             raise ValueError("text must not be empty")
 
         frame = self.griot.understand(normalized)
+        semantic_intent = self.intent.detect(normalized, frame)
         self._ambiguity_analysis = self.ambiguity.analyze(
             normalized,
             context_records=self.griot.context.records(),
@@ -184,6 +187,21 @@ class MeaningCompiler:
 
         constraints["ambiguity"] = ambiguity_constraints
         metaphor_resolution = self.metaphor.analyze(normalized)
+        constraints["intent"] = {
+            "primary": semantic_intent.primary.value,
+            "confidence": semantic_intent.confidence,
+            "secondary": tuple(intent.value for intent in semantic_intent.secondary),
+            "speech_act": semantic_intent.speech_act,
+            "target": semantic_intent.target,
+            "signals": tuple(
+                {
+                    "pattern": signal.pattern,
+                    "intent": signal.intent.value,
+                    "weight": signal.weight,
+                }
+                for signal in semantic_intent.signals
+            ),
+        }
         constraints["metaphor"] = {
             "status": metaphor_resolution.status,
             "chosen": (
@@ -404,4 +422,6 @@ __all__ = [
     "CoreferenceLink",
     "CoreferenceResolver",
     "Mention",
+    "SemanticIntent",
+    "SemanticIntentDetector",
 ]
