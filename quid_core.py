@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
 from griot_context import ContextView
 from griot_discourse import DiscourseState
-from griot_engine import Fact, GRIOT, Inference
+from griot_engine import Fact, GRIOT, Inference, TransitionRule
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
 from griot_simulation import MonteCarloResult, SimulationEngine, SimulationResult
@@ -64,7 +64,7 @@ class Quid:
     def simulate(
         self,
         initial: dict[str, float],
-        rules: tuple[object, ...],
+        rules: tuple[TransitionRule, ...],
         *,
         steps: int,
     ) -> SimulationResult:
