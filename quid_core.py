@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from griot_context import ContextView
 from griot_engine import Fact, GRIOT, Inference
 from griot_gir import GIR
 from griot_reasoning_v040 import ReasoningController, ReasoningResult, TruthStatus
@@ -19,6 +20,7 @@ class QuidAnalysis:
     text: str
     gir: GIR
     reasoning: ReasoningResult
+    context: ContextView
     answer: bool | None
     epistemic_status: TruthStatus
     confidence: float
@@ -48,7 +50,9 @@ class Quid:
             raise ValueError("text must not be empty")
 
         gir = self.semantic.understand(text)
+        context_view = self.engine.context.view(gir)
         result = self.reasoning.reason_meaning(text, gir)
+        self.engine.context.ingest(gir, source="query")
 
         answer: bool | None
         if result.status is TruthStatus.SUPPORTED:
@@ -93,6 +97,7 @@ class Quid:
             text=text,
             gir=gir,
             reasoning=result,
+            context=context_view,
             answer=answer,
             epistemic_status=result.status,
             confidence=result.confidence,
