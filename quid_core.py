@@ -6,6 +6,7 @@ from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTra
 from griot_context import ContextView
 from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference
+from griot_intent import SemanticIntent, SemanticIntentDetector
 from griot_gir import GIR
 from griot_query_planner import QueryPlan, QueryPlanner
 from griot_working_graph import WorkingGraphState
@@ -26,6 +27,7 @@ class QuidAnalysis:
     reasoning: ReasoningResult
     context: ContextView
     discourse: DiscourseState
+    intent: SemanticIntent
     epistemic: Assessment
     provenance_trace: ProvenanceTrace
     query_plan: QueryPlan
@@ -69,6 +71,7 @@ class Quid:
         )
         result = self.reasoning.reason_meaning(text, gir, context_view)
         assessment = self.epistemic.assess(result, text)
+        semantic_intent = SemanticIntentDetector().detect(text, gir.frame)
         query_plan = self.query_planner.plan(gir, context_view)
         execution = self.query_planner.execute(query_plan, gir, context_view)
         working_state = execution.working_graph
@@ -112,6 +115,7 @@ class Quid:
             reasoning=result,
             context=result.context or context_view,
             discourse=discourse_state,
+            intent=semantic_intent,
             epistemic=assessment,
             provenance_trace=assessment.provenance,
             query_plan=query_plan,
