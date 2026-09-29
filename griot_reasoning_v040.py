@@ -215,6 +215,8 @@ class ReasoningEngine:
             for item in graph.query(subject, relation, object_)
             if isinstance(item, Inference)
         ]
+        # Direct facts stay source-complete; inferred results are already
+        # generated from the graph's transitive/rule machinery.
         return tuple(direct) + tuple(inferred)
 
     def why(self, target: str) -> tuple[ProofStep, ...]:
