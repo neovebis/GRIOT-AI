@@ -145,6 +145,12 @@ class QueryPlanner:
                 if isinstance(item, Inference)
             ]
             working.extend(inferred, origin="durable-inference", score=0.90)
+            for inference in inferred:
+                working.extend(
+                    inference.support,
+                    origin="durable-support",
+                    score=0.86,
+                )
 
         if context is not None:
             selected = set(plan.context_record_ids)
