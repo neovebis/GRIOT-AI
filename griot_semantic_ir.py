@@ -3,58 +3,27 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
-from dataclasses import dataclass
 from typing import Iterable, Mapping
 
 try:
-    from griot_engine import BaseLayer, Fact, GRIOT, SemanticFrame
+    from griot_engine import BaseLayer, Fact, GRIOT
 except ImportError:
-    from griot.types import BaseLayer, Fact, SemanticFrame
+    from griot.types import BaseLayer, Fact
     from griot.engine import GRIOT
 
-@dataclass(frozen=True, slots=True)
-class MeaningNode:
-    node_id: str
-    quid: str
-    surface: str
-    kind: str
-    family_id: int
-    confidence: float = 1.0
+from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
 
-@dataclass(frozen=True, slots=True)
-class MeaningEdge:
-    source: str
-    relation: str
-    target: str
-    family_id: int
-    confidence: float = 1.0
-    negated: bool = False
-    evidence: str | None = None
 
-@dataclass(frozen=True, slots=True)
-class MeaningRepresentation:
-    text: str
-    frame: SemanticFrame
-    nodes: tuple[MeaningNode, ...]
-    edges: tuple[MeaningEdge, ...]
-    vector: tuple[float, ...]
-    constraints: Mapping[str, object]
+class MeaningRepresentation(GIR):
+    """Compatibility name for the formal GIR semantic representation.
 
-    def facts(self) -> tuple[Fact, ...]:
-        index = {n.node_id: n for n in self.nodes}
-        return tuple(
-            Fact(index[e.source].quid, e.relation, index[e.target].quid, e.confidence, e.negated, "semantic-ir", e.evidence)
-            for e in self.edges
-        )
+    Existing semantic callers keep the MeaningRepresentation API while the
+    underlying object now satisfies the versioned GIR contract.
+    """
+
 
 class MeaningCompiler:
-    RELATION_FAMILY = {
-        "is_a": 1, "part_of": 2, "member_of": 2, "has": 2,
-        "causes": 6, "before": 8, "after": 8, "located_in": 8,
-        "attacks": 4, "eats": 4, "sees": 4, "uses": 4,
-        "builds": 4, "creates": 4, "helps": 4, "hurts": 4,
-        "wants": 9, "needs": 9, "knows": 10, "believes": 10,
-    }
+    RELATION_FAMILY = GIR_RELATION_FAMILIES
     STATEMENTS = (
         (r"^(.*?)\s+faz parte (?:de|do|da|dos|das)\s+(.*?)$", "part_of"),
         (r"^(.*?)\s+pertence a\s+(.*?)$", "member_of"),
@@ -98,7 +67,12 @@ class MeaningCompiler:
         return value.strip(" ,.")
 
     def compile(self, text: str) -> MeaningRepresentation:
+        if not isinstance(text, str):
+            raise TypeError("text must be a string")
         normalized = self.normalize(text)
+        if not normalized:
+            raise ValueError("text must not be empty")
+
         frame = self.griot.understand(normalized)
         nodes: dict[str, MeaningNode] = {}
         edges: list[MeaningEdge] = []
@@ -120,13 +94,23 @@ class MeaningCompiler:
             s = self._node(nodes, subject, "entity", 1)
             o = self._node(nodes, object_, "entity", 1)
             last_subject = subject
-            if relation in {"attacks","eats","sees","uses","builds","creates","helps","hurts","wants","needs","knows"}:
+            if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "helps", "hurts", "wants", "needs", "knows"}:
                 scene = self._event(nodes, relation, subject, object_)
                 edges += [
                     MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, negated, sentence),
                     MeaningEdge(scene.node_id, "has_patient", o.node_id, 4, 0.94, negated, sentence),
                 ]
-            edges.append(MeaningEdge(s.node_id, relation, o.node_id, self.RELATION_FAMILY.get(relation, 2), 0.92, negated, sentence))
+            edges.append(
+                MeaningEdge(
+                    s.node_id,
+                    relation,
+                    o.node_id,
+                    self.RELATION_FAMILY.get(relation, 2),
+                    0.92,
+                    negated,
+                    sentence,
+                )
+            )
             self._constraints(nodes, edges, s, sentence)
 
         vector = self._compose_vector(nodes, edges)
@@ -135,7 +119,15 @@ class MeaningCompiler:
             "negated": bool(re.search(r"\b(?:não|nunca|jamais)\b", normalized)),
             "temporal": tuple(v for k, v in self.TEMPORAL.items() if k in normalized),
         }
-        return MeaningRepresentation(text, frame, tuple(nodes.values()), tuple(self._dedupe(edges)), vector, constraints)
+        return MeaningRepresentation(
+            text,
+            frame,
+            tuple(nodes.values()),
+            tuple(self._dedupe(edges)),
+            vector,
+            constraints,
+            provenance=("semantic-compiler",),
+        )
 
     def _parse(self, sentence: str) -> tuple[str, str, str] | None:
         modal = re.match(r"^(.*?)\s+(?:pode|deve|precisa)\s+(.+)$", sentence, re.I)
@@ -207,6 +199,7 @@ class MeaningCompiler:
                 out.append(edge)
         return out
 
+
 class SemanticGRIOT:
     def __init__(self, griot: GRIOT | None = None) -> None:
         self.engine = griot or (GRIOT.create() if hasattr(GRIOT, "create") else GRIOT())
@@ -219,7 +212,17 @@ class SemanticGRIOT:
         meaning = self.understand(text)
         added = 0
         for fact in meaning.facts():
-            self.engine.graph.add_fact(Fact(fact.subject, fact.relation, fact.object, fact.confidence, fact.negated, source, fact.evidence))
+            self.engine.graph.add_fact(
+                Fact(
+                    fact.subject,
+                    fact.relation,
+                    fact.object,
+                    fact.confidence,
+                    fact.negated,
+                    source,
+                    fact.evidence,
+                )
+            )
             added += 1
         return added
 
@@ -227,3 +230,13 @@ class SemanticGRIOT:
         va, vb = self.understand(a).vector, self.understand(b).vector
         kernel = self.engine.kernel if hasattr(self.engine, "kernel") else self.engine.numeric
         return kernel.cosine(va, vb) if va and vb else 0.0
+
+
+__all__ = [
+    "GIR",
+    "MeaningEdge",
+    "MeaningNode",
+    "MeaningRepresentation",
+    "MeaningCompiler",
+    "SemanticGRIOT",
+]
