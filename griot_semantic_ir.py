@@ -13,6 +13,7 @@ except ImportError:
     from griot.engine import GRIOT
 
 from griot_ambiguity import AmbiguityAnalysis, AmbiguityResolver
+from griot_coreference import CoreferenceLink, CoreferenceResolver, Mention
 from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
 from griot_polysemy import PolysemyAnalysis, PolysemyResolver
 
@@ -61,6 +62,7 @@ class MeaningCompiler:
         self.griot = griot
         self.ambiguity = AmbiguityResolver(griot)
         self.polysemy = PolysemyResolver(griot)
+        self.coreference = CoreferenceResolver(griot)
         self._ambiguity_analysis: AmbiguityAnalysis | None = None
         self._polysemy_analysis: PolysemyAnalysis | None = None
 
@@ -97,13 +99,25 @@ class MeaningCompiler:
         nodes: dict[str, MeaningNode] = {}
         edges: list[MeaningEdge] = []
         last_subject: str | None = None
+        mentions: list[Mention] = []
+        coreference_links: list[CoreferenceLink] = []
 
         for sentence in (x.strip() for x in re.split(r"[.!?]+", normalized) if x.strip()):
             negated = bool(re.search(r"\b(?:não|nunca|jamais)\b", sentence))
             sentence_clean = re.sub(r"\b(?:não|nunca|jamais)\b\s*", "", sentence, count=1).strip()
-            pronoun = re.match(r"^(ele|ela|eles|elas|isso|isto|este|esta|esse|essa)\s+(.*)$", sentence_clean)
-            if pronoun and last_subject:
-                sentence_clean = f"{last_subject} {pronoun.group(2)}"
+            pronoun = re.match(
+                r"^(ele|ela|eles|elas|isso|isto|este|esta|esse|essa|aquilo)\s+(.*)$",
+                sentence_clean,
+            )
+            if pronoun:
+                link = self.coreference.resolve(
+                    pronoun.group(1),
+                    mentions,
+                    context_records=self.griot.context.records(),
+                )
+                coreference_links.append(link)
+                if link.resolved and link.antecedent:
+                    sentence_clean = f"{link.antecedent} {pronoun.group(2)}"
             parsed = self._parse(sentence_clean)
             if not parsed:
                 continue
@@ -114,6 +128,14 @@ class MeaningCompiler:
             s = self._node(nodes, subject, "entity", 1, ambiguity_map)
             o = self._node(nodes, object_, "entity", 1, ambiguity_map)
             last_subject = subject
+            subject_gender, subject_number = self.coreference._guess_agreement(subject)
+            object_gender, object_number = self.coreference._guess_agreement(object_)
+            mentions.append(
+                Mention(subject, "subject", len(mentions) + 1, subject_gender, subject_number, s.quid)
+            )
+            mentions.append(
+                Mention(object_, "object", len(mentions) + 1, object_gender, object_number, o.quid)
+            )
             if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "helps", "hurts", "wants", "needs", "knows"}:
                 scene = self._event(nodes, relation, subject, object_)
                 edges += [
@@ -159,6 +181,25 @@ class MeaningCompiler:
         ) if self._ambiguity_analysis else ()
 
         constraints["ambiguity"] = ambiguity_constraints
+        constraints["coreference"] = tuple(
+            {
+                "anaphor": link.anaphor,
+                "antecedent": link.antecedent,
+                "confidence": link.confidence,
+                "status": link.status,
+                "strategy": link.strategy,
+                "candidates": tuple(
+                    {
+                        "surface": candidate.surface,
+                        "quid": candidate.quid,
+                        "score": candidate.score,
+                        "reason": candidate.reason,
+                    }
+                    for candidate in link.candidates
+                ),
+            }
+            for link in coreference_links
+        )
         constraints["polysemy"] = tuple(
             {
                 "surface": family.surface,
@@ -331,4 +372,7 @@ __all__ = [
     "AmbiguityResolver",
     "PolysemyAnalysis",
     "PolysemyResolver",
+    "CoreferenceLink",
+    "CoreferenceResolver",
+    "Mention",
 ]
