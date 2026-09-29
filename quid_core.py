@@ -8,6 +8,7 @@ from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
 from griot_extraction import ExtractionBatch, KnowledgeExtractor
 from griot_validation import KnowledgeValidator, ValidationReport
 from griot_deduplication import DeduplicationReport, SemanticDeduplicator
+from griot_consolidation import ConsolidationReport, KnowledgeConsolidator
 from griot_verification import VerificationEngine, VerificationReport
 from griot_context import ContextView
 from griot_discourse import DiscourseState
@@ -86,7 +87,16 @@ class Quid:
         return self.validator.validate(batch)
 
     def deduplicate_knowledge(self, batch: ExtractionBatch) -> DeduplicationReport:
-        return self.deduplicator.deduplicate(candidate.candidate for candidate in self.validator.validate(batch).valid)
+        return self.deduplicator.deduplicate(
+            item.candidate for item in self.validator.validate(batch).valid
+        )
+
+    def consolidate_knowledge(self, batch: ExtractionBatch) -> ConsolidationReport:
+        validation = self.validator.validate(batch)
+        deduplication = self.deduplicator.deduplicate(
+            item.candidate for item in validation.valid
+        )
+        return self.consolidator.consolidate(validation, deduplication)
 
     def generate_hypotheses(self, query: str, *, limit: int = 8) -> HypothesisReport:
         return self.hypotheses.generate(query, limit=limit)
