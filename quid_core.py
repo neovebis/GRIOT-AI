@@ -6,6 +6,7 @@ from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTra
 from griot_context import ContextView
 from griot_engine import Fact, GRIOT, Inference
 from griot_gir import GIR
+from griot_working_graph import WorkingGraph, WorkingGraphState
 from griot_reasoning_v040 import ReasoningEngine, ReasoningResult, TruthStatus
 from griot_semantic_ir import SemanticGRIOT
 
@@ -24,6 +25,7 @@ class QuidAnalysis:
     context: ContextView
     epistemic: Assessment
     provenance_trace: ProvenanceTrace
+    working_graph: WorkingGraphState
     answer: bool | None
     epistemic_status: TruthStatus
     confidence: float
@@ -57,6 +59,13 @@ class Quid:
         context_view = self.engine.context.view(gir)
         result = self.reasoning.reason_meaning(text, gir, context_view)
         assessment = self.epistemic.assess(result, text)
+        working = WorkingGraph()
+        working_state = working.build(
+            gir,
+            context=context_view,
+            context_engine=self.engine.context,
+            durable_graph=self.engine.graph,
+        )
         self.engine.context.ingest(gir, source="query")
 
         answer: bool | None
@@ -98,6 +107,7 @@ class Quid:
             context=result.context or context_view,
             epistemic=assessment,
             provenance_trace=assessment.provenance,
+            working_graph=working_state,
             answer=answer,
             epistemic_status=result.status,
             confidence=result.confidence,
