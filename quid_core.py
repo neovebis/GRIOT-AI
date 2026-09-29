@@ -8,6 +8,7 @@ from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
+from griot_simulation import MonteCarloResult, SimulationEngine, SimulationResult
 from griot_gir import GIR
 from griot_query_planner import QueryPlan, QueryPlanner
 from griot_working_graph import WorkingGraphState
@@ -59,6 +60,34 @@ class Quid:
         self.epistemic = EpistemicStateEngine()
         self.query_planner = QueryPlanner(self.engine)
         self.math = MathEngine(self.engine)
+
+    def simulate(
+        self,
+        initial: dict[str, float],
+        rules: tuple[object, ...],
+        *,
+        steps: int,
+    ) -> SimulationResult:
+        return self.simulation.run(initial, rules, steps=steps)
+
+    def simulate_monte_carlo(
+        self,
+        initial: dict[str, float],
+        transition: object,
+        *,
+        steps: int,
+        runs: int,
+        seed: int = 0,
+        metric: object | None = None,
+    ) -> MonteCarloResult:
+        return self.simulation.monte_carlo(
+            initial,
+            transition,
+            steps=steps,
+            runs=runs,
+            seed=seed,
+            metric=metric,
+        )
 
     def analisar(self, text: str) -> QuidAnalysis:
         if not isinstance(text, str):
