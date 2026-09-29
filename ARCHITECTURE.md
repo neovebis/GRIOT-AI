@@ -56,6 +56,24 @@ Text can be compiled into a typed semantic graph containing:
 - numeric constraints;
 - deterministic composed meaning vectors.
 
+## Formal GIR contract
+
+The semantic intermediate representation is exposed through a versioned GIR contract.
+
+GIR invariants:
+- every node references exactly one QUID symbol, and that symbol is exactly one Unicode code point;
+- node identifiers are unique and every edge endpoint must resolve to a declared node;
+- node and edge confidence values are finite and constrained to 0..1;
+- family identifiers remain constrained to the fixed 1..10 family space;
+- known relations have canonical semantic families;
+- edge polarity is explicit through negation;
+- evidence and provenance are first-class hooks;
+- temporal, modal and numeric constraints remain explicit instead of being encoded inside QUID identity;
+- the composed numeric vector is part of the representation but is not treated as trained embedding output;
+- the schema is versioned and serialized through deterministic canonical JSON;
+- GIR fingerprints are derived from that canonical representation, allowing integrity checks and cache/index keys without changing QUID identity.
+
+`MeaningRepresentation` remains the compatibility-facing semantic type, but it is now an immutable GIR instance. Reasoning consumes the same GIR object produced by semantic compilation, so semantic parsing is not repeated between representation and proof layers.
 ## Structured knowledge induction
 
 Phase-2 induction extracts reusable structures from hygienized text:
