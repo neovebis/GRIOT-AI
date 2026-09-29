@@ -51,14 +51,28 @@ class ReasoningController:
 
     def reason(self, text: str) -> ReasoningResult:
         meaning = self.semantic.understand(text)
+        return self.reason_meaning(text, meaning)
+
+    def reason_meaning(self, text: str, meaning: MeaningRepresentation) -> ReasoningResult:
+        """Reason over an already compiled semantic representation.
+
+        Keeping compilation outside this method lets the public Quid.analisar
+        pipeline parse once and share exactly the same IR with the proof layer.
+        """
+        del text  # retained in the API for tracing compatibility
         candidates = [edge for edge in meaning.edges if edge.relation in self.QUERY_RELATIONS]
         if not candidates:
             return ReasoningResult(TruthStatus.UNKNOWN, meaning.frame.confidence, meaning, ())
 
         edge = candidates[0]
         nodes = {node.node_id: node for node in meaning.nodes}
-        subject = nodes[edge.source].quid
-        object_ = nodes[edge.target].quid
+        source_node = nodes.get(edge.source)
+        target_node = nodes.get(edge.target)
+        if source_node is None or target_node is None:
+            return ReasoningResult(TruthStatus.UNKNOWN, 0.0, meaning, ())
+
+        subject = source_node.quid
+        object_ = target_node.quid
         graph = self.semantic.engine.graph
 
         evidence = graph.query(subject, edge.relation, object_)
