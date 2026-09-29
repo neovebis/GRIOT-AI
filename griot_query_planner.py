@@ -144,6 +144,19 @@ class QueryPlanner:
                 )
                 if isinstance(item, Inference)
             ]
+            neighborhood = self.retriever.retrieve(
+                subject=target.subject,
+                object_=target.object,
+            )
+            for item in neighborhood.items:
+                if item.fact in direct:
+                    continue
+                if item.fact.relation != target.relation:
+                    working.add(
+                        item.fact,
+                        origin=f"durable-neighborhood:{item.reason}",
+                        score=min(0.70, item.score),
+                    )
             working.extend(inferred, origin="durable-inference", score=0.90)
             for inference in inferred:
                 for support in inference.support:
