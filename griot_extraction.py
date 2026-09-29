@@ -38,13 +38,24 @@ class KnowledgeExtractor:
         self.engine = engine or GRIOT.create()
         self.semantic = SemanticGRIOT(self.engine)
 
-    def extract(self, text: str) -> ExtractionBatch:
+    def extract(self, text: str, *, source: str = "semantic-compiler") -> ExtractionBatch:
         if not isinstance(text, str):
             raise TypeError("text must be a string")
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError("source must be a non-empty string")
         gir = self.semantic.understand(text)
         candidates = tuple(
             ExtractionCandidate(
-                fact=fact,
+                fact=Fact(
+                    fact.subject,
+                    fact.relation,
+                    fact.object,
+                    fact.confidence,
+                    fact.negated,
+                    source.strip(),
+                    fact.evidence,
+                    fact.timestamp,
+                ),
                 source_text=text,
                 gir_fingerprint=gir.fingerprint(),
                 extraction_confidence=max(0.0, min(1.0, float(fact.confidence))),
@@ -53,8 +64,13 @@ class KnowledgeExtractor:
         )
         return ExtractionBatch(text, gir, candidates)
 
-    def extract_many(self, texts: Iterable[str]) -> tuple[ExtractionBatch, ...]:
-        return tuple(self.extract(text) for text in texts)
+    def extract_many(
+        self,
+        texts: Iterable[str],
+        *,
+        source: str = "semantic-compiler",
+    ) -> tuple[ExtractionBatch, ...]:
+        return tuple(self.extract(text, source=source) for text in texts)
 
 
 __all__ = ["ExtractionBatch", "ExtractionCandidate", "KnowledgeExtractor"]
