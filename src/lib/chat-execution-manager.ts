@@ -508,6 +508,30 @@ class ChatExecutionManager {
               active.state.currentActionDetail = "A ponderar alternativas...";
               this.notify(conversationId, { ...active.state });
             },
+            onCommentary: (comment) => {
+              if (controller.signal.aborted || !comment.trim()) return;
+              const clean = comment.replace(/^\[.*?\]\s*/, "").trim();
+              const firstSentence = clean.split(/\r?\n|[.!?]\s/)[0]?.trim() || clean.slice(0, 95);
+              if (firstSentence && firstSentence.length > 3) {
+                const display = firstSentence.length > 90 ? `${firstSentence.slice(0, 87)}…` : firstSentence;
+                active.state.currentActionDetail = display;
+                active.state.currentPhase = "thinking";
+                const last = stepsList[stepsList.length - 1];
+                if (!last || last.label !== display) {
+                  stepsList.push({
+                    id: `step-comment-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    type: "thinking",
+                    label: display,
+                    detail: "Raciocínio intermédio da IA",
+                    status: "running",
+                    timestamp: Date.now(),
+                  });
+                  active.state.stepsList = [...stepsList];
+                  active.state.steps = stepsList.length;
+                }
+                this.notify(conversationId, { ...active.state });
+              }
+            },
             onStepChange: (st) => {
               if (controller.signal.aborted) return;
               active.state.steps = Math.max(st, stepsList.length);
@@ -536,27 +560,34 @@ class ChatExecutionManager {
                 active.state.currentPhase = "plugin";
                 active.state.currentPluginId = connId;
                 active.state.currentActionDetail = `A consultar ${pName}...`;
-              } else if (action.type.startsWith("fs.read")) {
+              } else if (action.type.startsWith("fs.read") || action.type.startsWith("fs_read")) {
                 const path = (action.params as any)?.path || "ficheiro";
                 stepType = "reading";
                 label = `A ler ficheiro ${path}`;
-                detail = "Leitura no projeto";
+                detail = "Leitura cirúrgica no projeto";
                 active.state.currentPhase = "reading";
                 active.state.currentActionDetail = `A ler ${path}...`;
-              } else if (action.type.startsWith("search")) {
-                const q = (action.params as any)?.query || "código";
+              } else if (action.type.startsWith("search") || action.type.startsWith("code_search") || action.type.startsWith("find_files")) {
+                const q = (action.params as any)?.query || (action.params as any)?.pattern || "código";
                 stepType = "searching";
                 label = `A pesquisar "${q}"`;
-                detail = "Busca no repositório";
+                detail = "Busca profunda no repositório";
                 active.state.currentPhase = "searching";
                 active.state.currentActionDetail = `A pesquisar "${q}"...`;
-              } else if (action.type.startsWith("fs.write") || action.type.startsWith("fs.patch")) {
+              } else if (action.type.startsWith("fs.patch") || action.type.startsWith("fs_patch")) {
                 const path = (action.params as any)?.path || "código";
                 stepType = "editing";
-                label = `A editar ${path}`;
-                detail = "Modificação de ficheiro";
+                label = `A aplicar patch em ${path}`;
+                detail = "Substituição cirúrgica";
                 active.state.currentPhase = "editing";
                 active.state.currentActionDetail = `A editar ${path}...`;
+              } else if (action.type.startsWith("fs.write") || action.type.startsWith("fs_write")) {
+                const path = (action.params as any)?.path || "ficheiro";
+                stepType = "editing";
+                label = `A criar/gravar ${path}`;
+                detail = "Criação de ficheiro no workspace";
+                active.state.currentPhase = "editing";
+                active.state.currentActionDetail = `A gravar ${path}...`;
               } else if (action.type.startsWith("terminal") || action.type.startsWith("shell")) {
                 const cmd = (action.params as any)?.command || (action.params as any)?.cmd || "";
                 stepType = "editing";
@@ -707,75 +738,85 @@ class ChatExecutionManager {
         respostaVazia: !answer.trim(),
       });
 
-      // 2. Finalizar e salvar a mensagem do assistente localmente e no Supabase
-      if (answer.trim()) {
-        if (!controller.signal.aborted) {
-          void consumeGcu({
+      const requiredGcu = 1;
+
+      try {
+        // 2. Finalizar e salvar a mensagem do assistente localmente e no Supabase
+        if (answer.trim()) {
+          if (!controller.signal.aborted) {
+            try {
+              void consumeGcu({
+                userId,
+                amount: requiredGcu,
+                label: isSheolModel(effectiveModelId)
+                  ? `Execução SHEOL (${modelLabel(effectiveModelId)})`
+                  : `Execução BASE (${modelLabel(effectiveModelId)})`,
+                modelId: effectiveModelId,
+              });
+            } catch (gcuErr) {
+              console.warn("[ChatExecutionManager] Falha ao debitar GCU:", gcuErr);
+            }
+          }
+
+          const cleaned = stripActionBlocks(parseProposals(answer).clean || answer);
+
+          let appKey = "custom";
+          if (isModelOS(modelId)) {
+            appKey = "modelos";
+          } else {
+            const m = modelId.toLowerCase();
+            appKey = m.includes("claude")
+              ? "claude"
+              : m.includes("gemini")
+                ? "gemini"
+                : m.includes("gpt")
+                  ? "chatgpt"
+                  : m.includes("deepseek")
+                    ? "deepseek"
+                    : m.includes("groq")
+                      ? "groq"
+                      : "custom";
+          }
+
+          try {
+            void observerEngine.processIncomingAIMessage(
+              {
+                provider: appKey as any,
+                model: modelId,
+                sessionTitle: isModelOS(modelId) ? "ModelOS Cluster" : "Sessão Ativa",
+                appId: appKey,
+              },
+              cleaned,
+              conversationId || "main",
+            );
+          } catch (obsErr) {
+            console.warn("[ChatExecutionManager] Observer non-critical:", obsErr);
+          }
+
+          for (const s of stepsList) {
+            if (s.status === "running") s.status = "done";
+          }
+
+          await this.finalizeAssistantMessage(
+            conversationId,
+            cleaned,
             userId,
-            amount: requiredGcu,
-            label: isSheolModel(effectiveModelId)
-              ? `Execução SHEOL (${modelLabel(effectiveModelId)})`
-              : `Execução BASE (${modelLabel(effectiveModelId)})`,
-            modelId: effectiveModelId,
+            isModelOS(modelId) ? "modelos" : modelId,
+            stepsList,
+            fullReasoning,
+          );
+
+          // Notificação real só quando o utilizador não está dentro do app.
+          void notifyIfBackgrounded({
+            type: "message",
+            title: "GRIOT",
+            message: cleaned.replace(/\s+/g, " ").trim().slice(0, 140) || "Resposta concluída.",
+            url: `/chat?c=${encodeURIComponent(conversationId)}`,
+            sender: "GRIOT",
           });
         }
-
-        const cleaned = stripActionBlocks(parseProposals(answer).clean || answer);
-
-        let appKey = "custom";
-        if (isModelOS(modelId)) {
-          appKey = "modelos";
-        } else {
-          const m = modelId.toLowerCase();
-          appKey = m.includes("claude")
-            ? "claude"
-            : m.includes("gemini")
-              ? "gemini"
-              : m.includes("gpt")
-                ? "chatgpt"
-                : m.includes("deepseek")
-                  ? "deepseek"
-                  : m.includes("groq")
-                    ? "groq"
-                    : "custom";
-        }
-
-        try {
-          void observerEngine.processIncomingAIMessage(
-            {
-              provider: appKey as any,
-              model: modelId,
-              sessionTitle: isModelOS(modelId) ? "ModelOS Cluster" : "Sessão Ativa",
-              appId: appKey,
-            },
-            cleaned,
-            conversationId || "main",
-          );
-        } catch (obsErr) {
-          console.warn("[ChatExecutionManager] Observer non-critical:", obsErr);
-        }
-
-        for (const s of stepsList) {
-          if (s.status === "running") s.status = "done";
-        }
-
-        await this.finalizeAssistantMessage(
-          conversationId,
-          cleaned,
-          userId,
-          isModelOS(modelId) ? "modelos" : modelId,
-          stepsList,
-          fullReasoning,
-        );
-
-        // Notificação real só quando o utilizador não está dentro do app.
-        void notifyIfBackgrounded({
-          type: "message",
-          title: "GRIOT",
-          message: cleaned.replace(/\s+/g, " ").trim().slice(0, 140) || "Resposta concluída.",
-          url: `/chat?c=${encodeURIComponent(conversationId)}`,
-          sender: "GRIOT",
-        });
+      } catch (finalizeErr) {
+        console.error("[ChatExecutionManager] Erro na finalização da mensagem:", finalizeErr);
       }
 
       // Desregistar execução ativa

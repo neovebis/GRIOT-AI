@@ -33,7 +33,14 @@ export function NativeAdSlot({ slotId }: { slotId: string }) {
         const slotHeight = 94;
         const visible = rect.width > 0 && rect.bottom > 0 && rect.top < window.innerHeight;
 
-        if (!visible) {
+        // Verifica se existe alguma gaveta (sidebar), modal, folha ou menu aberto na interface
+        const isOverlayOpen = Boolean(
+          document.querySelector(
+            '[role="dialog"], [data-state="open"], [aria-modal="true"], .fixed.inset-0.z-50, .drawer-open, [data-vaul-drawer="true"]',
+          ),
+        );
+
+        if (isOverlayOpen || !visible) {
           void hideNativeAd(slotId);
           return;
         }
@@ -56,14 +63,27 @@ export function NativeAdSlot({ slotId }: { slotId: string }) {
       .catch(() => undefined);
     const resizeObserver = new ResizeObserver(syncPlacement);
     resizeObserver.observe(element);
+
+    // Ouve alterações no DOM (abertura e fecho de gavetas e modais) para esconder/mostrar o anúncio de imediato
+    const mutationObserver = new MutationObserver(() => {
+      syncPlacement();
+    });
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-state", "class", "style", "aria-hidden"],
+    });
+
     window.addEventListener("scroll", syncPlacement, true);
     window.addEventListener("resize", syncPlacement);
-    const loadCheck = window.setInterval(syncPlacement, 750);
+    const loadCheck = window.setInterval(syncPlacement, 800);
 
     return () => {
       disposed = true;
       window.cancelAnimationFrame(frame);
       resizeObserver.disconnect();
+      mutationObserver.disconnect();
       window.clearInterval(loadCheck);
       window.removeEventListener("scroll", syncPlacement, true);
       window.removeEventListener("resize", syncPlacement);

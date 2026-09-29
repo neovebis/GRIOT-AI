@@ -136,12 +136,16 @@ export function useCurrentUser(): UserProfileState {
             localStorage.setItem("griot_user_name", name);
           }
         }
-        const avatar =
+        const existingAvatar =
+          typeof window !== "undefined" ? localStorage.getItem("griot_user_avatar") : null;
+        const metaAvatar =
           currentUser.user_metadata?.avatar_url || currentUser.user_metadata?.picture || null;
-        if (avatar) {
-          setAvatarUrl(avatar);
+
+        // Só assume a foto do metadata/e-mail se não houver foto de perfil personalizada definida
+        if (!existingAvatar && metaAvatar) {
+          setAvatarUrl(metaAvatar);
           if (typeof window !== "undefined") {
-            localStorage.setItem("griot_user_avatar", avatar);
+            localStorage.setItem("griot_user_avatar", metaAvatar);
           }
         }
         // Persist provider_token for plugin OAuth reuse
@@ -155,9 +159,17 @@ export function useCurrentUser(): UserProfileState {
       }
     });
 
+    const handleAvatarUpdate = (e: CustomEvent<{ url: string }>) => {
+      if (e.detail?.url) {
+        setAvatarUrl(e.detail.url);
+      }
+    };
+    window.addEventListener("griot_avatar_changed" as any, handleAvatarUpdate);
+
     return () => {
       mounted = false;
       authListener?.subscription.unsubscribe();
+      window.removeEventListener("griot_avatar_changed" as any, handleAvatarUpdate);
     };
   }, [grantFreeAllowance]);
 

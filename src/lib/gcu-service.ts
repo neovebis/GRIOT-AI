@@ -61,7 +61,7 @@ export async function fetchUserGcuWallet(userId?: string): Promise<GcuWalletStat
     const [walletRes, profileRes] = await Promise.all([
       supabase
         .from("griot_gcu_wallets")
-        .select("balance_gcu, lifetime_used_gcu, plan")
+        .select("balance_gcu, lifetime_used_gcu")
         .eq("workspace_id", workspaceId)
         .maybeSingle(),
       supabase.from("griot_user_profiles").select("display_name").eq("id", userId).maybeSingle(),
@@ -79,12 +79,13 @@ export async function fetchUserGcuWallet(userId?: string): Promise<GcuWalletStat
           .from("griot_gcu_wallets")
           .insert({
             workspace_id: workspaceId,
-            user_id: userId,
             balance_gcu: 5,
             lifetime_used_gcu: 0,
-            plan: "free",
+            reserved_gcu: 0,
+            debt_gcu: 0,
+            version: 1,
           })
-          .select("balance_gcu, lifetime_used_gcu, plan")
+          .select("balance_gcu, lifetime_used_gcu")
           .maybeSingle();
 
         if (newWallet) {
@@ -92,14 +93,15 @@ export async function fetchUserGcuWallet(userId?: string): Promise<GcuWalletStat
           // Regista o bónus inicial no livro-razão (griot_gcu_ledger)
           void (supabase as any).from("griot_gcu_ledger").insert({
             workspace_id: workspaceId,
-            user_id: userId,
             event_type: "welcome_credit",
             amount_gcu: 5,
             balance_delta_gcu: 5,
+            debt_delta_gcu: 0,
+            reserved_delta_gcu: 0,
             reason: "Bónus Inicial Plano Free (5 GCU)",
             source: "griot-system",
             idempotency_key: `welcome-${userId}`,
-            metadata: { plan: "free" },
+            metadata: { plan: localTier },
           });
         }
       } catch (err) {
@@ -108,12 +110,13 @@ export async function fetchUserGcuWallet(userId?: string): Promise<GcuWalletStat
     }
 
     if (!wallet) {
-      const fallbackBalance = getLocalGcuBalance();
+      const fallbackBalance = Math.max(5, getLocalGcuBalance());
+      cacheBalance(fallbackBalance, localTier);
       return { balance: fallbackBalance, tier: localTier, handle, totalSpent: 0 };
     }
 
-    const remoteBalance = Number(wallet.balance_gcu ?? 0);
-    const remoteTier = wallet.plan || localTier;
+    const remoteBalance = Number(wallet.balance_gcu ?? 5);
+    const remoteTier = localTier;
     cacheBalance(remoteBalance, remoteTier);
 
     return {
@@ -235,10 +238,11 @@ export async function consumeGcu(params: {
           // Registar entrada no griot_gcu_ledger
           void (supabase as any).from("griot_gcu_ledger").insert({
             workspace_id: workspaceId,
-            user_id: userId,
             event_type: "usage_debit",
             amount_gcu: amount,
             balance_delta_gcu: -amount,
+            debt_delta_gcu: 0,
+            reserved_delta_gcu: 0,
             reason: label,
             source: "griot-app",
             idempotency_key: `${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,

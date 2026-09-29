@@ -100,6 +100,7 @@ export async function uploadUserAvatar(
 
   if (typeof window !== "undefined") {
     localStorage.setItem("griot_user_avatar", url);
+    window.dispatchEvent(new CustomEvent("griot_avatar_changed", { detail: { url } }));
   }
 
   return { avatarUrl: url, error: null };

@@ -72,13 +72,11 @@ jobs:
         working-directory: android
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleRelease assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Verify and Sign APKs with v1 and v2
+      - name: Verify and Sign Release APK
         run: |
           RELEASE_APK=$(find android/app/build/outputs/apk/release -type f -name '*.apk' 2>/dev/null | head -n 1)
-          DEBUG_APK=$(find android/app/build/outputs/apk/debug -type f -name '*.apk' 2>/dev/null | head -n 1)
-          
           ZIPALIGN_BIN=$(find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -n 1)
           APKSIGNER_BIN=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
           KEYSTORE="android/app/griot-release.keystore"
@@ -98,35 +96,13 @@ jobs:
               --v4-signing-enabled false \
               --out GRIOT-Mobile.apk \
               aligned-release.apk
-            
-            cp GRIOT-Mobile.apk GRIOT-Mobile-release.apk
             echo "Release APK signed successfully: GRIOT-Mobile.apk"
           elif [ -n "$RELEASE_APK" ]; then
             cp "$RELEASE_APK" GRIOT-Mobile.apk
-            cp "$RELEASE_APK" GRIOT-Mobile-release.apk
-          fi
-          
-          if [ -n "$DEBUG_APK" ] && [ -f "$KEYSTORE" ]; then
-            echo "Aligning and signing Debug APK with v1 + v2 schemes..."
-            "$ZIPALIGN_BIN" -p -f -v 4 "$DEBUG_APK" aligned-debug.apk
-            "$APKSIGNER_BIN" sign \
-              --ks "$KEYSTORE" \
-              --ks-pass pass:GriotMobileApp2026! \
-              --ks-key-alias griot-release \
-              --key-pass pass:GriotMobileApp2026! \
-              --min-sdk-version 21 \
-              --v1-signing-enabled true \
-              --v2-signing-enabled true \
-              --v3-signing-enabled true \
-              --v4-signing-enabled false \
-              --out GRIOT-Mobile-debug.apk \
-              aligned-debug.apk
-          elif [ -n "$DEBUG_APK" ]; then
-            cp "$DEBUG_APK" GRIOT-Mobile-debug.apk
           fi
 
-          ls -lh GRIOT-Mobile*.apk
-          sha256sum GRIOT-Mobile*.apk
+          ls -lh GRIOT-Mobile.apk
+          sha256sum GRIOT-Mobile.apk
 
           GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
           TAG_TO_USE="v${GRADLE_VER:-1.0.84}"
@@ -147,11 +123,11 @@ jobs:
             "$APKSIGNER_BIN" verify --verbose GRIOT-Mobile.apk || true
           fi
 
-      - name: Upload APK Artifacts
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: griot-mobile-apks
-          path: GRIOT-Mobile*.apk
+          name: griot-mobile-apk
+          path: GRIOT-Mobile.apk
           if-no-files-found: error
           retention-days: 30
 
@@ -163,7 +139,5 @@ jobs:
           name: ${{ env.RELEASE_NAME }}
           files: |
             GRIOT-Mobile.apk
-            GRIOT-Mobile-release.apk
-            GRIOT-Mobile-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

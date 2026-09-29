@@ -222,38 +222,51 @@ public class GriotAdsPlugin extends Plugin {
 
     private void renderAd(AdSlot slot, NativeAd ad) {
         NativeAdView adView = new NativeAdView(getContext());
-        adView.setPadding(cssToPx(8), cssToPx(7), cssToPx(8), cssToPx(7));
+        adView.setPadding(cssToPx(10), cssToPx(8), cssToPx(10), cssToPx(8));
         adView.setBackground(roundedBackground(slot.darkMode));
 
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
-        MediaView media = new MediaView(getContext());
-        media.setImageScaleType(ImageView.ScaleType.CENTER_CROP);
-        row.addView(media, new LinearLayout.LayoutParams(cssToPx(80), MATCH));
-        adView.setMediaView(media);
+        if (ad.getIcon() != null) {
+            ImageView icon = new ImageView(getContext());
+            icon.setImageDrawable(ad.getIcon().getDrawable());
+            icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setCornerRadius(cssToPx(10));
+            icon.setBackground(iconBg);
+            icon.setClipToOutline(true);
+            row.addView(icon, new LinearLayout.LayoutParams(cssToPx(40), cssToPx(40)));
+            adView.setIconView(icon);
+        } else {
+            MediaView media = new MediaView(getContext());
+            media.setImageScaleType(ImageView.ScaleType.CENTER_CROP);
+            row.addView(media, new LinearLayout.LayoutParams(cssToPx(50), MATCH));
+            adView.setMediaView(media);
+        }
 
         LinearLayout textColumn = new LinearLayout(getContext());
         textColumn.setOrientation(LinearLayout.VERTICAL);
-        textColumn.setPadding(cssToPx(9), 0, cssToPx(7), 0);
-        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0, MATCH, 1f);
+        textColumn.setPadding(cssToPx(10), 0, cssToPx(8), 0);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         row.addView(textColumn, textParams);
 
-        TextView advertiser = textView(10, slot.darkMode, true, 1);
+        TextView advertiser = textView(9, slot.darkMode, false, 1);
         String sponsor = ad.getAdvertiser() == null ? "Patrocinado" : ad.getAdvertiser();
         advertiser.setText(sponsor + "  ·  Anúncio");
+        advertiser.setAlpha(0.6f);
         textColumn.addView(advertiser);
         adView.setAdvertiserView(advertiser);
 
-        TextView headline = textView(13, slot.darkMode, true, 1);
-        headline.setText(ad.getHeadline());
+        TextView headline = textView(12, slot.darkMode, true, 1);
+        headline.setText(ad.getHeadline() == null ? "" : ad.getHeadline());
         textColumn.addView(headline);
         adView.setHeadlineView(headline);
 
-        TextView body = textView(11, slot.darkMode, false, 2);
-        body.setAlpha(0.72f);
-        body.setText(ad.getBody());
+        TextView body = textView(10, slot.darkMode, false, 1);
+        body.setAlpha(0.7f);
+        body.setText(ad.getBody() == null ? "" : ad.getBody());
         body.setVisibility(ad.getBody() == null ? View.GONE : View.VISIBLE);
         textColumn.addView(body);
         adView.setBodyView(body);
@@ -261,21 +274,20 @@ public class GriotAdsPlugin extends Plugin {
         Button cta = new Button(getContext());
         cta.setAllCaps(false);
         cta.setTextSize(10);
+        cta.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         cta.setMinWidth(0);
         cta.setMinimumWidth(0);
-        cta.setPadding(cssToPx(10), 0, cssToPx(10), 0);
-        cta.setText(ad.getCallToAction());
-        cta.setVisibility(ad.getCallToAction() == null ? View.GONE : View.VISIBLE);
-        row.addView(cta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, cssToPx(36)));
+        cta.setPadding(cssToPx(12), 0, cssToPx(12), 0);
+        cta.setText(ad.getCallToAction() == null ? "Abrir" : ad.getCallToAction());
+        GradientDrawable ctaBg = new GradientDrawable();
+        ctaBg.setColor(slot.darkMode ? Color.rgb(240, 240, 240) : Color.rgb(24, 24, 27));
+        ctaBg.setCornerRadius(cssToPx(10));
+        cta.setBackground(ctaBg);
+        cta.setTextColor(slot.darkMode ? Color.rgb(20, 20, 20) : Color.WHITE);
+        cta.setElevation(0);
+        cta.setStateListAnimator(null);
+        row.addView(cta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, cssToPx(32)));
         adView.setCallToActionView(cta);
-
-        if (ad.getIcon() != null) {
-            ImageView icon = new ImageView(getContext());
-            icon.setImageDrawable(ad.getIcon().getDrawable());
-            icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            row.addView(icon, 0, new LinearLayout.LayoutParams(cssToPx(34), cssToPx(34)));
-            adView.setIconView(icon);
-        }
 
         adView.addView(row, new FrameLayout.LayoutParams(MATCH, MATCH));
         adView.setNativeAd(ad);
@@ -295,9 +307,9 @@ public class GriotAdsPlugin extends Plugin {
 
     private GradientDrawable roundedBackground(boolean darkMode) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(darkMode ? Color.rgb(31, 31, 33) : Color.rgb(247, 247, 247));
+        background.setColor(darkMode ? Color.rgb(24, 24, 27) : Color.rgb(250, 250, 250));
         background.setCornerRadius(cssToPx(16));
-        background.setStroke(cssToPx(1), darkMode ? Color.rgb(54, 54, 57) : Color.rgb(225, 225, 225));
+        background.setStroke(cssToPx(1), darkMode ? Color.rgb(45, 45, 48) : Color.rgb(228, 228, 231));
         return background;
     }
 

@@ -38,6 +38,7 @@ export interface ReActLoopOptions {
     onActionCompleted?: (action: GriotAction, result: GriotExecutionResult) => void;
     onActionApprovalRequired?: (action: GriotAction) => Promise<boolean>;
     onStepChange?: (step: number) => void;
+    onCommentary?: (comment: string) => void;
   };
   signal?: AbortSignal;
 }
@@ -182,6 +183,7 @@ export async function executeReActLoop(options: ReActLoopOptions): Promise<ReAct
     // Armazena texto explicativo válido desta iteração
     if (response.text && response.text.trim()) {
       accumulatedText = response.text.trim();
+      callbacks?.onCommentary?.(response.text.trim());
     }
 
     // Se não há ferramentas a executar, chegámos à resposta final

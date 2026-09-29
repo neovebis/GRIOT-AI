@@ -10,8 +10,8 @@ android {
         applicationId "com.griot.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 84
-        versionName "1.0.84"
+        versionCode 85
+        versionName "1.0.85"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [ADMOB_APP_ID: admobAppId]
         resValue "string", "admob_native_ad_unit_id", admobNativeAdUnitId
