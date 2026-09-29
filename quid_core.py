@@ -17,6 +17,7 @@ from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
 from griot_hypothesis_v050 import HypothesisController, HypothesisReport
 from griot_planning_v080 import ActionPlan, ActionSchema, GoalPlanner
+from griot_promotion import KnowledgeAssessment, KnowledgeLevel, KnowledgePromotionEngine, PromotionPolicy
 from griot_simulation import MonteCarloResult, SimulationEngine, SimulationResult
 from griot_gir import GIR
 from griot_query_planner import QueryPlan, QueryPlanner
@@ -90,6 +91,12 @@ class Quid:
         return self.deduplicator.deduplicate(
             item.candidate for item in self.validator.validate(batch).valid
         )
+
+    def assess_knowledge(self) -> tuple[KnowledgeAssessment, ...]:
+        return self.promotion.assess(self.engine.graph.facts())
+
+    def knowledge_level(self, fact: Fact) -> KnowledgeLevel:
+        return self.promotion.level(fact)
 
     def consolidate_knowledge(self, batch: ExtractionBatch) -> ConsolidationReport:
         validation = self.validator.validate(batch)
