@@ -8,6 +8,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { callGriotStudioApi } from "@/lib/griot-api";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 export interface GriotProject {
   id: string;
@@ -17,6 +18,21 @@ export interface GriotProject {
   status: string;
   created_at: string;
   updated_at?: string;
+}
+
+export function isValidUuid(val: unknown): val is string {
+  return typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+}
+
+export function generateCanonicalUuid(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 const STORAGE_PROJECTS_KEY = "griot_local_projects";
@@ -55,6 +71,17 @@ export async function getUnifiedProjects(): Promise<GriotProject[]> {
       if (stored) {
         const parsed: GriotProject[] = JSON.parse(stored);
         localList = parsed.filter((p) => !deletedIds.has(p.id));
+        // Migra IDs legados não-UUID em localList para UUIDs canónicos
+        let migratedLocal = false;
+        for (const p of localList) {
+          if (!isValidUuid(p.id)) {
+            p.id = generateCanonicalUuid();
+            migratedLocal = true;
+          }
+        }
+        if (migratedLocal) {
+          localStorage.setItem(STORAGE_PROJECTS_KEY, JSON.stringify(localList));
+        }
       }
     } catch (err) {
       console.warn("Erro ao ler projetos locais:", err);
@@ -145,8 +172,9 @@ export function setActiveProject(projectId: string): void {
 export async function saveProject(
   project: Partial<GriotProject> & { name: string },
 ): Promise<GriotProject> {
+  const projectId = project.id && isValidUuid(project.id) ? project.id : generateCanonicalUuid();
   const newProj: GriotProject = {
-    id: project.id || `proj_${Date.now()}`,
+    id: projectId,
     name: project.name.trim(),
     description: project.description?.trim() || "Projeto de automação GRIOT",
     progress: typeof project.progress === "number" ? project.progress : 0,
@@ -172,23 +200,65 @@ export async function saveProject(
   try {
     const { data: userAuth } = await supabase.auth.getUser();
     if (userAuth?.user) {
-      await (supabase as any).from("griot_studio_projects").upsert({
-        id: newProj.id,
-        name: newProj.name,
-        description: newProj.description,
-        owner_id: userAuth.user.id,
-        brief: {
-          goal: newProj.name,
-          stack: "REACT",
-          progress: newProj.progress,
-          build_status: newProj.status,
-        },
-        archived: false,
-      });
+      const workspaceId = await getCurrentWorkspaceId(userAuth.user.id);
+      if (workspaceId) {
+        await (supabase as any).from("griot_studio_projects").upsert({
+          id: newProj.id,
+          workspace_id: workspaceId,
+          owner_id: userAuth.user.id,
+          name: newProj.name,
+          description: newProj.description,
+          brief: {
+            goal: newProj.name,
+            stack: "REACT",
+            progress: newProj.progress,
+            build_status: newProj.status,
+          },
+          archived: false,
+          updated_at: new Date().toISOString(),
+        });
+      }
     }
-  } catch {}
+  } catch (err) {
+    console.warn("[project-service] Falha ao sincronizar projeto com Supabase:", err);
+  }
 
   return newProj;
+}
+
+/**
+ * Garante que existe sempre um projeto ativo com ID UUID válido,
+ * pronto para execução no GRIOT Sandbox ou localmente.
+ */
+export async function ensureActiveProject(): Promise<GriotProject> {
+  const currentActive = getActiveProjectSync();
+  if (currentActive && isValidUuid(currentActive.id)) {
+    return currentActive;
+  }
+
+  // Se o ativo actual tem ID inválido (ex: proj_...), migra para UUID canónico
+  if (currentActive && !isValidUuid(currentActive.id)) {
+    const migrated = await saveProject({
+      ...currentActive,
+      id: generateCanonicalUuid(),
+    });
+    return migrated;
+  }
+
+  // Tenta obter dos unificados
+  const list = await getUnifiedProjects();
+  const valid = list.find((p) => isValidUuid(p.id));
+  if (valid) {
+    setActiveProject(valid.id);
+    return valid;
+  }
+
+  // Se nenhum existir, cria o projeto workspace padrão
+  const created = await saveProject({
+    name: "GRIOT Workspace",
+    description: "Espaço de trabalho e execução isolada GRIOT Sandbox",
+  });
+  return created;
 }
 
 /**

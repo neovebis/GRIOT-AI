@@ -17,7 +17,8 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import { getActiveProjectSync } from "@/lib/project-service";
+import { getActiveProjectSync, ensureActiveProject, isValidUuid } from "@/lib/project-service";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 import type { GriotAction, GriotExecutionResult } from "./protocol";
 
 export interface SandboxRunInfo {
@@ -39,10 +40,17 @@ export async function getOrStartSandboxRun(
   objective = "GRIOT Studio Execution",
 ): Promise<{ run: SandboxRunInfo | null; error: string | null }> {
   try {
+    const { data: userAuth } = await supabase.auth.getUser();
+    const workspaceId = userAuth?.user?.id ? await getCurrentWorkspaceId(userAuth.user.id) : null;
+    const reqHeaders: Record<string, string> = { "content-type": "application/json" };
+    if (workspaceId) {
+      reqHeaders["x-griot-workspace-id"] = workspaceId;
+    }
+
     // 1. Tenta obter o run ativo mais recente
     const { data: latestData, error: latestErr } = await supabase.functions.invoke(
       `griot-studio-compute/projects/${projectId}/runs/latest`,
-      { method: "GET" },
+      { method: "GET", headers: reqHeaders },
     );
 
     if (!latestErr && latestData?.run?.id && latestData.run.status === "ready") {
@@ -55,7 +63,7 @@ export async function getOrStartSandboxRun(
       {
         method: "POST",
         body: { objective, runtimeProvider: "griot_sandbox" },
-        headers: { "content-type": "application/json" },
+        headers: reqHeaders,
       },
     );
 
@@ -97,19 +105,30 @@ export async function executeInGriotSandbox(
       action.params?.script ||
       action.params?.program ||
       (action.type.startsWith("git.") ? `git ${action.type.replace("git.", "")}` : "") ||
+      (action.type === "test.run" ? `npm test -- ${action.params?.filter || ""}` : "") ||
+      (action.type === "build.run" ? `npm run build` : "") ||
       "",
   ).trim();
 
-  const projectId = targetProjectId || getActiveProjectSync()?.id || "";
+  let projectId = targetProjectId || getActiveProjectSync()?.id || "";
 
-  if (!projectId) {
+  if (!projectId || !isValidUuid(projectId)) {
+    try {
+      const activeProj = await ensureActiveProject();
+      projectId = activeProj.id;
+    } catch {
+      // Ignora erro e valida abaixo
+    }
+  }
+
+  if (!projectId || !isValidUuid(projectId)) {
     return {
       actionId: action.id,
       actionType: action.type,
       status: "failed",
       exitCode: 1,
       stdout: "",
-      stderr: `[GRIOT Sandbox]: Nenhum projeto ativo configurado para execução isolada.`,
+      stderr: `[GRIOT Sandbox]: Nenhum projeto ativo com UUID válido foi encontrado para execução isolada.`,
       durationMs: Date.now() - start,
       timestamp: new Date().toISOString(),
     };
@@ -118,7 +137,7 @@ export async function executeInGriotSandbox(
   // 1. Inicia / Reconcilia o GRIOT Sandbox
   const { run, error: runError } = await getOrStartSandboxRun(
     projectId,
-    `Comando: ${cmd}`,
+    `Comando: ${cmd || action.type}`,
   );
 
   if (runError || !run) {
@@ -137,12 +156,23 @@ export async function executeInGriotSandbox(
 
   // 2. Executa o comando no container isolado
   try {
+    const { data: userAuth } = await supabase.auth.getUser();
+    const workspaceId = userAuth?.user?.id ? await getCurrentWorkspaceId(userAuth.user.id) : null;
+    const reqHeaders: Record<string, string> = { "content-type": "application/json" };
+    if (workspaceId) {
+      reqHeaders["x-griot-workspace-id"] = workspaceId;
+    }
+
     const { data: execData, error: execErr } = await supabase.functions.invoke(
       `griot-studio-compute/runs/${run.id}/execute?projectId=${encodeURIComponent(projectId)}`,
       {
         method: "POST",
-        body: { command: cmd },
-        headers: { "content-type": "application/json" },
+        body: {
+          command: cmd,
+          program: "sh",
+          args: ["-c", cmd],
+        },
+        headers: reqHeaders,
       },
     );
 

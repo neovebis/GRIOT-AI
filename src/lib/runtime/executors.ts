@@ -9,7 +9,7 @@
 import { executeRemoteAction } from "./remote-executor";
 import { executeLocalAction } from "./local-harness";
 import { executeInGriotSandbox } from "./sandbox-executor";
-import { getRuntimeMode, executeNativeCommand } from "./native-terminal-bridge";
+import { getRuntimeMode, executeNativeCommand, isNativeAndroidPlatform } from "./native-terminal-bridge";
 import type { GriotAction, GriotExecutionResult } from "./protocol";
 import { getPrimaryWorkspaceId } from "@/lib/griot-api";
 import { supabase } from "@/integrations/supabase/client";
@@ -133,7 +133,16 @@ export class GriotActionExecutor {
       return executeLocalAction(action, effectiveWsId);
     }
 
-    // 2. Comandos de Terminal / Shell / Git / Testes:
+    // 2. Ações explicitamente marcadas para Sandbox ou de execução em container isolado
+    if (
+      action.category === "sandbox" ||
+      action.type.startsWith("sandbox.") ||
+      action.params?.runtime === "sandbox"
+    ) {
+      return executeInGriotSandbox(action);
+    }
+
+    // 3. Comandos de Terminal / Shell / Git / Testes:
     // MODO SANDBOX: Conecta EXCLUSIVAMENTE ao GRIOT Sandbox real (runtimeProvider = "griot_sandbox")
     // Se o Sandbox falhar, a falha é reportada explicitamente sem fallback mascarado.
     if (getRuntimeMode() === "sandbox") {
@@ -151,6 +160,16 @@ export class GriotActionExecutor {
       );
       if (cmd) {
         const nativeRes = await executeNativeCommand(cmd, { cwd: String(action.params.cwd || "") });
+
+        // Se o binário não existir no rootfs local (exit code 127) ou em ambiente web/preview,
+        // tenta resolver através do GRIOT Sandbox isolado no Execution Gateway
+        if (nativeRes.exitCode === 127 || !isNativeAndroidPlatform()) {
+          const sandboxRes = await executeInGriotSandbox(action);
+          if (sandboxRes.status === "success" || sandboxRes.exitCode === 0) {
+            return sandboxRes;
+          }
+        }
+
         return {
           actionId: action.id,
           actionType: action.type,
