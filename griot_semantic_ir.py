@@ -12,6 +12,7 @@ except ImportError:
     from griot.types import BaseLayer, Fact
     from griot.engine import GRIOT
 
+from griot_ambiguity import AmbiguityAnalysis, AmbiguityResolver
 from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
 
 
@@ -57,6 +58,8 @@ class MeaningCompiler:
 
     def __init__(self, griot: GRIOT) -> None:
         self.griot = griot
+        self.ambiguity = AmbiguityResolver(griot)
+        self._ambiguity_analysis: AmbiguityAnalysis | None = None
 
     @staticmethod
     def normalize(text: str) -> str:
@@ -76,6 +79,14 @@ class MeaningCompiler:
             raise ValueError("text must not be empty")
 
         frame = self.griot.understand(normalized)
+        self._ambiguity_analysis = self.ambiguity.analyze(
+            normalized,
+            context_records=self.griot.context.records(),
+        )
+        ambiguity_map = {
+            item.surface: item
+            for item in self._ambiguity_analysis.resolutions
+        }
         nodes: dict[str, MeaningNode] = {}
         edges: list[MeaningEdge] = []
         last_subject: str | None = None
@@ -93,8 +104,8 @@ class MeaningCompiler:
             subject, object_ = self.clean(subject), self.clean(self._clean_object(object_))
             if not subject or not object_:
                 continue
-            s = self._node(nodes, subject, "entity", 1)
-            o = self._node(nodes, object_, "entity", 1)
+            s = self._node(nodes, subject, "entity", 1, ambiguity_map)
+            o = self._node(nodes, object_, "entity", 1, ambiguity_map)
             last_subject = subject
             if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "helps", "hurts", "wants", "needs", "knows"}:
                 scene = self._event(nodes, relation, subject, object_)
@@ -121,6 +132,27 @@ class MeaningCompiler:
             "negated": bool(re.search(r"\b(?:não|nunca|jamais)\b", normalized)),
             "temporal": tuple(v for k, v in self.TEMPORAL.items() if k in normalized),
         }
+        ambiguity_constraints = tuple(
+            {
+                "surface": item.surface,
+                "status": item.status,
+                "chosen": item.chosen,
+                "confidence": item.confidence,
+                "candidates": tuple(
+                    {
+                        "sense": candidate.sense,
+                        "quid": candidate.quid,
+                        "score": candidate.score,
+                        "cues": candidate.cues,
+                    }
+                    for candidate in item.candidates
+                ),
+            }
+            for item in self._ambiguity_analysis.resolutions
+        ) if self._ambiguity_analysis else ()
+
+        constraints["ambiguity"] = ambiguity_constraints
+
         return MeaningRepresentation(
             text,
             frame,
@@ -144,8 +176,39 @@ class MeaningCompiler:
     def _clean_object(value: str) -> str:
         return re.sub(r"\s+(?:ontem|hoje|agora|amanhã)$", "", value.strip(), flags=re.I)
 
-    def _node(self, nodes: dict[str, MeaningNode], surface: str, kind: str, family: int) -> MeaningNode:
-        q = self.griot.quids.get(surface) or self.griot.quids.ensure(surface, base=BaseLayer.RICH, family_id=family)
+    def _node(
+        self,
+        nodes: dict[str, MeaningNode],
+        surface: str,
+        kind: str,
+        family: int,
+        ambiguity_map: Mapping[str, AmbiguityAnalysis | object] | Mapping[str, object] | None = None,
+    ) -> MeaningNode:
+        resolution = ambiguity_map.get(surface.casefold()) if ambiguity_map else None
+        chosen_symbol = None
+        if resolution is not None and getattr(resolution, "resolved", False):
+            chosen_sense = getattr(resolution, "chosen", None)
+            for candidate in getattr(resolution, "candidates", ()):
+                if candidate.sense == chosen_sense:
+                    chosen_symbol = candidate.quid
+                    break
+        elif resolution is not None:
+            chosen_symbol = None
+
+        if chosen_symbol is not None:
+            q = self.griot.quids.get(chosen_symbol)
+        elif resolution is not None:
+            q = self.griot.quids.ensure(
+                f"ambiguity:{surface.casefold()}:unresolved",
+                base=BaseLayer.RICH,
+                family_id=family,
+            )
+        else:
+            q = self.griot.quids.get(surface) or self.griot.quids.ensure(
+                surface,
+                base=BaseLayer.RICH,
+                family_id=family,
+            )
         node_id = f"q:{q.symbol}"
         if node_id not in nodes:
             nodes[node_id] = MeaningNode(node_id, q.symbol, surface, kind, q.family_id, 1.0)
@@ -241,4 +304,6 @@ __all__ = [
     "MeaningRepresentation",
     "MeaningCompiler",
     "SemanticGRIOT",
+    "AmbiguityAnalysis",
+    "AmbiguityResolver",
 ]
