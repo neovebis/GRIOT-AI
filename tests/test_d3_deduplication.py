@@ -56,8 +56,9 @@ class DeduplicationTests(unittest.TestCase):
             self._candidate("positive"),
             self._candidate("negative", negated=True),
         ))
-        self.assertEqual(len(report.groups), 2)
-        self.assertFalse(report.conflict_groups)
+        self.assertEqual(len(report.groups), 1)
+        self.assertEqual(len(report.conflict_groups), 1)
+        self.assertEqual(report.duplicates_removed, 0)
 
     def test_duplicate_group_does_not_destroy_source_identity(self) -> None:
         report = self.dedup.deduplicate((
