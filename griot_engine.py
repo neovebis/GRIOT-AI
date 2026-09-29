@@ -16,6 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+from griot_context import ContextEngine
+
 
 # ============================================================
 # GRIOT — numeric/semantic engine
@@ -721,6 +723,7 @@ class GRIOT:
     scenes: SceneBuilder
     simulator: Simulator
     version: str = "0.1.0"
+    context: ContextEngine = field(default_factory=ContextEngine)
 
     @classmethod
     def create(cls, dimension: int = 64) -> "GRIOT":
@@ -803,6 +806,12 @@ class GRIOT:
             "vector_dimension": self.kernel.dimension,
             "families": {i: sum(q.family_id == i for q in self.quids.all()) for i in FAMILIES},
             "bases": {b.value: sum(q.base == b for q in self.quids.all()) for b in BaseLayer},
+            "context": {
+                "turn": self.context.turn,
+                "records": len(self.context),
+                "active_quids": self.context.active_quids(),
+                "topic_quids": self.context.topic_quids(),
+            },
         }
 
 
