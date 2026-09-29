@@ -100,5 +100,7 @@ jobs:
         run: python -m unittest tests.test_f3_semantic -v
       - name: F4 reasoning tests
         run: python -m unittest tests.test_f4_reasoning -v
+      - name: F5 memory tests
+        run: python -m unittest tests.test_f5_memory -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
