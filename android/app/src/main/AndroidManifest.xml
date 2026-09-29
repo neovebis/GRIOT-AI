@@ -27,7 +27,6 @@
 
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Optional Hardware Features -->
@@ -75,6 +74,8 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
             android:exported="true">
@@ -131,11 +132,7 @@
             android:name=".terminal.TerminalBridgeService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Terminal and code execution bridge for autonomous developer runtime" />
-        </service>
+            android:foregroundServiceType="dataSync" />
 
         <!-- GRIOT Notification Action Receiver (Aprovar / Rejeitar) -->
         <receiver
