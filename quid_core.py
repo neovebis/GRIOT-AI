@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from griot_causality import CausalAnalysis, CausalityEngine
 from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTrace
 from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
 from griot_context import ContextView
@@ -75,6 +76,12 @@ class Quid:
 
     def generate_hypotheses(self, query: str, *, limit: int = 8) -> HypothesisReport:
         return self.hypotheses.generate(query, limit=limit)
+
+    def causes_of(self, target: str, *, max_depth: int = 8) -> CausalAnalysis:
+        return self.causality.causes_of(target, max_depth=max_depth)
+
+    def effects_of(self, source: str, *, max_depth: int = 8) -> CausalAnalysis:
+        return self.causality.effects_of(source, max_depth=max_depth)
 
     def run_counterfactual(
         self,
