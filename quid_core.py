@@ -15,6 +15,7 @@ from griot_verification import VerificationEngine, VerificationReport
 from griot_context import ContextView
 from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference, TransitionRule
+from griot_incremental import IncrementalLearner, IncrementalUpdate
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
 from griot_hypothesis_v050 import HypothesisController, HypothesisReport
@@ -83,8 +84,11 @@ class Quid:
     ) -> SimulationResult:
         return self.simulation.run(initial, rules, steps=steps)
 
-    def extract_knowledge(self, text: str) -> ExtractionBatch:
-        return self.extractor.extract(text)
+    def incremental_learn(self, text: str, *, source: str) -> IncrementalUpdate:
+        return self.incremental.learn(text, source=source)
+
+    def extract_knowledge(self, text: str, *, source: str = "semantic-compiler") -> ExtractionBatch:
+        return self.extractor.extract(text, source=source)
 
     def validate_knowledge(self, batch: ExtractionBatch) -> ValidationReport:
         return self.validator.validate(batch)
