@@ -41,11 +41,9 @@ class TotalIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "griot.sqlite")
             self.runtime.persist(path)
-            restored = GRIOTRuntime.from_storage(path) if hasattr(GRIOTRuntime, "from_storage") else None
-            # Current contract exposes persistence; restore remains Quid's explicit
-            # constructor API until the next runtime refinement.
+            restored = GRIOTRuntime.from_storage(path)
             self.assertTrue(os.path.exists(path))
-            self.assertIsNone(restored)
+            self.assertTrue(restored.analyze("leão é um animal").result.answer)
 
 
 if __name__ == "__main__":
