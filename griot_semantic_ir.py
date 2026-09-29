@@ -182,7 +182,7 @@ class MeaningCompiler:
         surface: str,
         kind: str,
         family: int,
-        ambiguity_map: Mapping[str, AmbiguityAnalysis | object] | Mapping[str, object] | None = None,
+        ambiguity_map: Mapping[str, object] | None = None,
     ) -> MeaningNode:
         resolution = ambiguity_map.get(surface.casefold()) if ambiguity_map else None
         chosen_symbol = None
