@@ -103,8 +103,11 @@ class DiscourseContextEngine:
         previous_topic = self._topic_from_record(previous_record)
         shared = tuple(sorted(set(current_topic) & set(previous_topic)))
         overlap = self._overlap(current_topic, previous_topic)
+        anchor_shared = self._shared_subject(gir, previous_record)
         markers = self._markers(text)
-        relation, confidence = self._classify(overlap, markers, bool(previous_topic))
+        relation, confidence = self._classify(
+            overlap, markers, bool(previous_topic), anchor_shared
+        )
 
         if not self._segments or relation is DiscourseRelation.TOPIC_SHIFT:
             segment_id = (self._segments[-1].segment_id + 1) if self._segments else 1
@@ -196,12 +199,36 @@ class DiscourseContextEngine:
                     found.append(phrase)
         return tuple(sorted(set(found), key=lambda value: (len(value), value)))
 
+    @staticmethod
+    def _shared_subject(gir: object, previous_record: object | None) -> bool:
+        if previous_record is None:
+            return False
+        current_subjects: set[str] = set()
+        current_nodes = {node.node_id: node for node in getattr(gir, "nodes", ())}
+        for edge in getattr(gir, "edges", ()):
+            if getattr(edge, "relation", None) in {"is_a", "part_of", "member_of", "has", "causes", "located_in"}:
+                node = current_nodes.get(getattr(edge, "source", ""))
+                if node is not None:
+                    current_subjects.add(getattr(node, "quid", ""))
+        previous_gir = getattr(previous_record, "gir", None)
+        if previous_gir is None:
+            return False
+        previous_nodes = {node.node_id: node for node in getattr(previous_gir, "nodes", ())}
+        previous_subjects = {
+            getattr(previous_nodes.get(getattr(edge, "source", "")), "quid", "")
+            for edge in getattr(previous_gir, "edges", ())
+            if getattr(edge, "relation", None) in {"is_a", "part_of", "member_of", "has", "causes", "located_in"}
+            and previous_nodes.get(getattr(edge, "source", "")) is not None
+        }
+        return bool(current_subjects & previous_subjects)
+
     @classmethod
     def _classify(
         cls,
         overlap: float,
         markers: tuple[str, ...],
         has_previous: bool,
+        anchor_shared: bool = False,
     ) -> tuple[DiscourseRelation, float]:
         if not has_previous:
             return DiscourseRelation.NONE, 1.0
@@ -210,6 +237,8 @@ class DiscourseContextEngine:
             for relation, phrases in cls.MARKERS.items():
                 if lowered_markers & set(phrases):
                     return relation, 0.90
+        if anchor_shared:
+            return DiscourseRelation.CONTINUATION, 0.86
         if overlap >= 0.50:
             return DiscourseRelation.CONTINUATION, 0.82
         if overlap <= 0.40:
