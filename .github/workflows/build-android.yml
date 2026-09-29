@@ -76,31 +76,51 @@ jobs:
 
       - name: Verify and Sign Release APK
         run: |
-          # Gradle now produces an UNSIGNED APK (no signingConfig in buildType)
+          # Gradle produces an UNSIGNED APK (no signingConfig in buildType)
           RELEASE_APK=$(find android/app/build/outputs/apk/release -type f -name '*.apk' 2>/dev/null | head -n 1)
           ZIPALIGN_BIN=$(find "$ANDROID_HOME/build-tools/34.0.0" -name zipalign -type f 2>/dev/null || find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -n 1)
-          # CRITICAL: Use build-tools 34.0.0's apksigner — 35.0.0 silently ignores --v1-signing-enabled true
           APKSIGNER_BIN=$(find "$ANDROID_HOME/build-tools/34.0.0" -name apksigner -type f 2>/dev/null || find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | head -n 1)
           KEYSTORE="android/app/griot-release.keystore"
           
           echo "Using apksigner: $APKSIGNER_BIN"
           echo "Using zipalign: $ZIPALIGN_BIN"
+          echo "Using jarsigner: $(which jarsigner)"
           
           if [ -n "$RELEASE_APK" ] && [ -f "$KEYSTORE" ]; then
-            echo "Aligning and signing Release APK with v1 + v2 + v3 schemes..."
-            "$ZIPALIGN_BIN" -p -f -v 4 "$RELEASE_APK" aligned-release.apk
+            echo "=== STEP 1: zipalign (on unsigned APK) ==="
+            "$ZIPALIGN_BIN" -p -f -v 4 "$RELEASE_APK" aligned-unsigned.apk
+            
+            echo "=== STEP 2: v1 JAR signing with jarsigner (JDK) ==="
+            # jarsigner ALWAYS creates v1 JAR signatures — no minSdk override issues
+            # Must run AFTER zipalign because jarsigner signs in-place
+            cp aligned-unsigned.apk aligned-v1signed.apk
+            jarsigner -verbose \
+              -keystore "$KEYSTORE" \
+              -storepass "GriotMobileApp2026!" \
+              -keypass "GriotMobileApp2026!" \
+              -sigalg SHA256withRSA \
+              -digestalg SHA-256 \
+              aligned-v1signed.apk \
+              griot-release
+            echo "v1 JAR signing done."
+            
+            # Verify jarsigner applied correctly
+            jarsigner -verify -verbose aligned-v1signed.apk | head -20 || true
+            
+            echo "=== STEP 3: v2+v3 signing with apksigner (preserving existing v1) ==="
+            # apksigner adds v2+v3 blocks; --v1-signing-enabled false prevents it from
+            # touching the existing v1 JAR signatures that jarsigner already created
             "$APKSIGNER_BIN" sign \
               --ks "$KEYSTORE" \
               --ks-pass pass:GriotMobileApp2026! \
               --ks-key-alias griot-release \
               --key-pass pass:GriotMobileApp2026! \
-              --min-sdk-version 21 \
-              --v1-signing-enabled true \
+              --v1-signing-enabled false \
               --v2-signing-enabled true \
               --v3-signing-enabled true \
               --v4-signing-enabled false \
               --out GRIOT-Mobile.apk \
-              aligned-release.apk
+              aligned-v1signed.apk
             echo "Release APK signed successfully: GRIOT-Mobile.apk"
           elif [ -n "$RELEASE_APK" ]; then
             cp "$RELEASE_APK" GRIOT-Mobile.apk
@@ -125,7 +145,7 @@ jobs:
 
           if [ -n "$APKSIGNER_BIN" ] && [ -x "$APKSIGNER_BIN" ]; then
             echo "=== APKSIGNER VERIFY (RELEASE) ==="
-            "$APKSIGNER_BIN" verify --verbose GRIOT-Mobile.apk || true
+            "$APKSIGNER_BIN" verify --verbose --print-certs GRIOT-Mobile.apk || true
           fi
 
       - name: Upload APK Artifact
