@@ -3,22 +3,21 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from griot_engine import Fact, GRIOT, Inference
+from griot_gir import GIR
 from griot_reasoning_v040 import ReasoningController, ReasoningResult, TruthStatus
-from griot_semantic_ir import MeaningRepresentation, SemanticGRIOT
+from griot_semantic_ir import SemanticGRIOT
 
 
 @dataclass(frozen=True, slots=True)
 class QuidAnalysis:
     """Single integrated result produced by the GRIOT A1 pipeline.
 
-    The semantic representation is compiled once and then passed directly to
-    the proof-oriented reasoning controller. The 'gir' field is the current
-    executable semantic IR contract; its final wire/storage serialization
-    remains a later architectural decision.
+    GIR is now a formal, validated and versioned internal contract shared by
+    semantic compilation, QUID resolution and proof-oriented reasoning.
     """
 
     text: str
-    gir: MeaningRepresentation
+    gir: GIR
     reasoning: ReasoningResult
     answer: bool | None
     epistemic_status: TruthStatus
@@ -48,8 +47,6 @@ class Quid:
         if not text.strip():
             raise ValueError("text must not be empty")
 
-        # Compile exactly once. The resulting IR is the common contract between
-        # semantic parsing, QUID resolution and proof-oriented reasoning.
         gir = self.semantic.understand(text)
         result = self.reasoning.reason_meaning(text, gir)
 
@@ -59,7 +56,6 @@ class Quid:
         elif result.status is TruthStatus.REFUTED:
             answer = False
         else:
-            # UNKNOWN and CONFLICT are deliberately non-answers.
             answer = None
 
         semantic_facts = gir.facts()
@@ -80,7 +76,15 @@ class Quid:
 
         resolved = tuple(dict.fromkeys(node.quid for node in gir.nodes))
         provenance = tuple(
-            sorted({step.provenance for step in result.proofs if step.provenance})
+            sorted(
+                {
+                    p
+                    for p in (
+                        (*gir.provenance, *(step.provenance for step in result.proofs))
+                    )
+                    if p
+                }
+            )
         )
 
         explanation = self._explanation(result)
