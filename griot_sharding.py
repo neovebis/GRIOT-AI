@@ -85,14 +85,6 @@ class ShardedKnowledgeStore:
             for index, store in enumerate(self._stores)
         )
 
-    def rebalance_plan(self) -> dict[int, tuple[int, ...]]:
-        # E3 exposes deterministic placement; moving data is a later operational
-        # concern. The map is useful to compare layouts before migration.
-        return {
-            self.shard_for(chr(symbol)): tuple()
-            for symbol in range(0, self.shards)
-        }
-
     def __enter__(self) -> "ShardedKnowledgeStore":
         return self
 
