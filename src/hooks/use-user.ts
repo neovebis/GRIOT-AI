@@ -9,6 +9,7 @@ import { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureGriotWorkspace } from "@/lib/griot-api";
 import { ensureFreeAllowance } from "@/lib/payments.functions";
+import { syncUserApisWithRemote } from "@/lib/user-apis";
 
 export type UserProfileState = {
   user: User | null;
@@ -67,6 +68,7 @@ export function useCurrentUser(): UserProfileState {
           void ensureGriotWorkspace()
             .then(() => grantFreeAllowance())
             .catch(() => undefined);
+          void syncUserApisWithRemote().catch(() => undefined);
 
           // Query the real profile table
           // NOTE: not yet in the generated `Database` types (types.ts targets
@@ -122,6 +124,7 @@ export function useCurrentUser(): UserProfileState {
         void ensureGriotWorkspace()
           .then(() => grantFreeAllowance())
           .catch(() => undefined);
+        void syncUserApisWithRemote().catch(() => undefined);
         if (currentUser.email && typeof window !== "undefined") {
           localStorage.setItem("griot_user_email", currentUser.email);
         }

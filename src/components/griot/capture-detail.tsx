@@ -1,22 +1,19 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Eye, MapPin, MessageSquare, Plus, SlidersHorizontal } from "lucide-react";
+import { Eye, EyeOff, FileText } from "lucide-react";
 import { useT } from "@/lib/i18n";
 import { CAPTURE_KINDS } from "@/lib/griot";
 import {
   captureTitle,
   captureUrl,
   exactDateTime,
-  pushQuickCapture,
-  sendCaptureToControl,
-  sendCaptureToConversation,
   type CaptureRow,
 } from "@/lib/capture-share";
 
-/** Barra de detalhe de uma captura: data e hora exatas, ver conteúdo e enviar. */
+/** Barra de detalhe de uma captura: data e hora exatas e visualização de conteúdo. */
 export function CaptureDetail({
   capture,
-  userId,
+  userId: _userId,
   onClose,
 }: {
   capture: CaptureRow;
@@ -26,7 +23,8 @@ export function CaptureDetail({
   const t = useT();
   const [url, setUrl] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [loadingText, setLoadingText] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -38,62 +36,63 @@ export function CaptureDetail({
     };
   }, [capture]);
 
+  const isLocation = capture.kind === "location";
+  const isImage = Boolean(
+    url &&
+      (capture.mime_type?.startsWith("image/") ||
+        capture.kind === "photo" ||
+        capture.kind === "gallery" ||
+        capture.kind === "screen"),
+  );
+  const isVideo = Boolean(
+    url && (capture.mime_type?.startsWith("video/") || capture.kind === "video"),
+  );
+  const isAudio = Boolean(
+    url && (capture.mime_type?.startsWith("audio/") || capture.kind === "audio"),
+  );
+  const isPdf = Boolean(
+    url &&
+      (capture.mime_type === "application/pdf" ||
+        capture.file_name?.toLowerCase().endsWith(".pdf")),
+  );
+
   const kindLabel = t(
     CAPTURE_KINDS.find((kind) => kind.id === capture.kind)?.label ?? capture.kind,
   );
-  const maps =
-    capture.latitude != null && capture.longitude != null
-      ? `https://www.google.com/maps?q=${capture.latitude},${capture.longitude}`
-      : null;
-  const target = url ?? maps;
 
-  async function guard(action: () => Promise<void>, message: string) {
-    setBusy(true);
-    try {
-      await action();
-      toast.success(message);
-    } catch {
-      toast.error(t("Não foi possível enviar a captura."));
-    } finally {
-      setBusy(false);
+  // Carrega conteúdo de texto ou notas se for documento, texto ou ficheiro legível
+  useEffect(() => {
+    if (!preview) return;
+    if (capture.note?.trim()) {
+      setTextContent(capture.note.trim());
+      return;
     }
-  }
+    const isReadableFile =
+      capture.kind === "text" ||
+      capture.kind === "document" ||
+      capture.mime_type?.startsWith("text/") ||
+      capture.mime_type?.includes("json") ||
+      Boolean(
+        capture.file_name?.match(
+          /\.(txt|md|json|js|ts|tsx|jsx|html|css|py|csv|xml|yaml|yml|sh|log)$/i,
+        ),
+      );
 
-  const sends = [
-    {
-      id: "chat",
-      label: t("Conversa"),
-      Icon: MessageSquare,
-      run: () =>
-        guard(async () => {
-          await sendCaptureToConversation(capture, userId);
-        }, t("Enviado para a conversa.")),
-    },
-    {
-      id: "quick",
-      label: t("Quick"),
-      Icon: Plus,
-      run: () =>
-        guard(async () => {
-          pushQuickCapture(capture.id);
-        }, t("Disponível no + do chat.")),
-    },
-    {
-      id: "control",
-      label: t("Control"),
-      Icon: SlidersHorizontal,
-      run: () =>
-        guard(async () => {
-          await sendCaptureToControl(capture, userId);
-        }, t("Enviado para o Control.")),
-    },
-  ];
+    if (url && isReadableFile) {
+      setLoadingText(true);
+      fetch(url)
+        .then((res) => res.text())
+        .then((text) => setTextContent(text))
+        .catch(() => setTextContent(null))
+        .finally(() => setLoadingText(false));
+    }
+  }, [preview, url, capture]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div
-        className="sheet-up relative w-full rounded-t-[28px] border-t border-hairline bg-surface px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+24px)]"
+        className="sheet-up relative w-full rounded-t-[28px] border-t border-hairline bg-surface px-5 pt-3 pb-[calc(env(safe-area-inset-bottom)+24px)] max-h-[85vh] overflow-y-auto"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto h-1 w-10 rounded-full bg-muted" />
@@ -106,69 +105,78 @@ export function CaptureDetail({
             <p className="mt-1 text-[12.5px] text-muted-foreground">
               {kindLabel} · {exactDateTime(capture.created_at)}
             </p>
+            {isLocation && capture.latitude != null && capture.longitude != null && (
+              <p className="mt-1 text-[12px] text-muted-foreground tabular-nums">
+                Lat: {capture.latitude.toFixed(6)} · Lon: {capture.longitude.toFixed(6)}
+              </p>
+            )}
           </div>
           <span className="shrink-0 rounded-full border border-hairline px-2.5 py-1 text-[12px] text-muted-foreground">
             {kindLabel}
           </span>
         </div>
 
-        {preview &&
-        url &&
-        (capture.mime_type?.startsWith("image/") ||
-          capture.kind === "photo" ||
-          capture.kind === "gallery") ? (
-          <img
-            src={url}
-            alt={captureTitle(capture)}
-            className="mt-4 max-h-[42vh] w-full rounded-2xl object-cover"
-          />
-        ) : null}
-        {preview && url && (capture.mime_type?.startsWith("video/") || capture.kind === "video") ? (
-          <video src={url} controls className="mt-4 max-h-[42vh] w-full rounded-2xl" />
-        ) : null}
-        {preview && url && (capture.mime_type?.startsWith("audio/") || capture.kind === "audio") ? (
-          <audio src={url} controls className="mt-4 w-full" />
-        ) : null}
+        {preview && (
+          <div className="mt-4 animate-in fade-in zoom-in-95 duration-200">
+            {isImage && url && (
+              <img
+                src={url}
+                alt={captureTitle(capture)}
+                className="max-h-[42vh] w-full rounded-2xl object-cover border border-hairline/40 shadow-xs"
+              />
+            )}
+            {isVideo && url && (
+              <video src={url} controls className="max-h-[42vh] w-full rounded-2xl bg-black" />
+            )}
+            {isAudio && url && (
+              <div className="rounded-2xl border border-hairline bg-background/60 p-4">
+                <audio src={url} controls className="w-full" />
+              </div>
+            )}
+            {isPdf && url && (
+              <iframe
+                src={url}
+                title={captureTitle(capture)}
+                className="h-[42vh] w-full rounded-2xl border border-hairline"
+              />
+            )}
+            {!isImage && !isVideo && !isAudio && !isPdf && (
+              <div className="max-h-[42vh] w-full overflow-y-auto rounded-2xl border border-hairline bg-background/80 p-4 text-[13.5px] leading-relaxed text-foreground select-text whitespace-pre-wrap font-sans">
+                {loadingText ? (
+                  <p className="text-muted-foreground">{t("A carregar conteúdo…")}</p>
+                ) : textContent || capture.note ? (
+                  textContent || capture.note
+                ) : url ? (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <FileText className="size-4 shrink-0" />
+                    <span className="truncate">{capture.file_name || url}</span>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground">
+                    {t("Sem conteúdo adicional para visualização.")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
-        <button
-          onClick={() => {
-            if (!target) {
-              toast(t("Esta captura não tem ficheiro."));
-              return;
-            }
-            const inline =
-              capture.mime_type?.startsWith("image/") ||
-              capture.mime_type?.startsWith("video/") ||
-              capture.mime_type?.startsWith("audio/") ||
-              capture.kind === "photo" ||
-              capture.kind === "video" ||
-              capture.kind === "gallery" ||
-              capture.kind === "audio";
-            if (inline && url) setPreview((current) => !current);
-            else window.open(target, "_blank", "noopener");
-          }}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-hairline py-3.5 text-[15px] font-medium transition-transform duration-200 active:scale-[0.98]"
-        >
-          {maps && !url ? <MapPin className="size-4" /> : <Eye className="size-4" />}
-          {preview ? t("Esconder conteúdo") : t("Ver conteúdo")}
-        </button>
-
-        <p className="mt-5 text-[12px] font-medium tracking-wide text-muted-foreground uppercase">
-          {t("Enviar para")}
-        </p>
-        <div className="mt-2.5 grid grid-cols-3 gap-2.5">
-          {sends.map(({ id, label, Icon, run }) => (
-            <button
-              key={id}
-              disabled={busy}
-              onClick={() => void run()}
-              className="grid place-items-center gap-1.5 rounded-2xl border border-hairline py-3.5 text-[13.5px] font-medium transition-transform duration-200 active:scale-95 disabled:opacity-40"
-            >
-              <Icon className="size-[18px]" />
-              {label}
-            </button>
-          ))}
-        </div>
+        {!isLocation && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!url && !capture.note) {
+                toast(t("Esta captura não tem ficheiro ou texto."));
+                return;
+              }
+              setPreview((current) => !current);
+            }}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-hairline py-3.5 text-[15px] font-medium transition-transform duration-200 active:scale-[0.98] bg-secondary/50 hover:bg-secondary"
+          >
+            {preview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            {preview ? t("Esconder conteúdo") : t("Ver conteúdo")}
+          </button>
+        )}
       </div>
     </div>
   );

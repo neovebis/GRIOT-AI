@@ -141,12 +141,14 @@ export function planShowsAds(tier: string = getLocalGcuTier()): boolean {
 export function canUseSheol(userId?: string, tier: string = getLocalGcuTier()): boolean {
   if (getPlan(tier).sheolUnlimited) return true;
   if (typeof window === "undefined") return false;
-  return localStorage.getItem(`${SHEOL_TRIAL_KEY}:${userId ?? "anon"}`) !== "1";
+  const uid = userId && userId !== "anonymous" ? userId : "anon";
+  return localStorage.getItem(`${SHEOL_TRIAL_KEY}:${uid}`) !== "1";
 }
 
 export function markSheolTrialUsed(userId?: string): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(`${SHEOL_TRIAL_KEY}:${userId ?? "anon"}`, "1");
+  const uid = userId && userId !== "anonymous" ? userId : "anon";
+  localStorage.setItem(`${SHEOL_TRIAL_KEY}:${uid}`, "1");
 }
 
 /**
@@ -192,6 +194,18 @@ export async function consumeGcu(params: {
 
   if (typeof window !== "undefined") {
     localStorage.setItem(GCU_STORAGE_BALANCE_KEY, String(newBalance));
+    try {
+      const rawLog = localStorage.getItem("griot_gcu_usage_log");
+      const log = rawLog ? JSON.parse(rawLog) : [];
+      log.unshift({
+        id: `local-usage-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        amount_gcu: amount,
+        created_at: new Date().toISOString(),
+        event_type: "usage_debit",
+        reason: label,
+      });
+      localStorage.setItem("griot_gcu_usage_log", JSON.stringify(log.slice(0, 200)));
+    } catch {}
     window.dispatchEvent(
       new CustomEvent("griot:gcu-updated", {
         detail: { balance: newBalance, consumed: amount, label },
@@ -260,3 +274,20 @@ export async function consumeGcu(params: {
 
   return newBalance;
 }
+
+export function getLocalUsageLog(): Array<{
+  id: string;
+  amount_gcu: number;
+  created_at: string;
+  event_type: string;
+  reason: string;
+}> {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("griot_gcu_usage_log");
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+

@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n";
 import { toast } from "sonner";
 import { Mail, KeyRound, ArrowRight, Loader2, ShieldCheck, Lock } from "lucide-react";
 import { initNativeAuthDeepLink, startOAuthFlow } from "@/lib/native-auth-deeplink";
+import { syncUserApisWithRemote } from "@/lib/user-apis";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -68,6 +69,8 @@ function AuthPage() {
       if (userDisplayName) localStorage.setItem("griot_user_name", userDisplayName);
       if (userAvatar) localStorage.setItem("griot_user_avatar", userAvatar);
     }
+
+    void syncUserApisWithRemote().catch(() => undefined);
 
     toast.success(t("Sessão iniciada com sucesso!"));
     void navigate({ to: "/home", replace: true });

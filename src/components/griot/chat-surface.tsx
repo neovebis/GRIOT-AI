@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_MODEL, getAvailableModels, modelLabel, isModelOS, isSheolModel } from "@/lib/griot";
-import { getUserSavedApis } from "@/lib/user-apis";
+import { getUserSavedApis, syncUserApisWithRemote } from "@/lib/user-apis";
 import { getPrimaryWorkspaceId } from "@/lib/griot-api";
 import { resolveProviderAndModel, getSavedApiKey } from "@/lib/ai-client";
 import { AddApiModal } from "@/components/griot/add-api-modal";
@@ -45,7 +45,7 @@ import {
   type ExecutionStepItem,
 } from "@/lib/chat-execution-manager";
 import { DeliberationBar } from "@/components/griot/deliberation-bar";
-import { fetchUserGcuWallet, checkGcuAllowance, canUseSheol, markSheolTrialUsed } from "@/lib/gcu-service";
+import { fetchUserGcuWallet, checkGcuAllowance, canUseSheol } from "@/lib/gcu-service";
 import {
   DELIBERATION_MISSIONS,
   DELIBERATION_ROLES,
@@ -442,15 +442,27 @@ export function ChatSurface({ userId }: { userId: string }) {
   useEffect(() => {
     const handlePrefsChange = () => setPrefs(loadPrefs());
     const handleApisUpdate = () => setApisRevision((v) => v + 1);
+
+    // Sincroniza ativamente credenciais remotas ao abrir o chat
+    void syncUserApisWithRemote().then(() => handleApisUpdate());
+
     window.addEventListener("storage", handlePrefsChange);
     window.addEventListener("griot:prefs-changed", handlePrefsChange);
     window.addEventListener("focus", handlePrefsChange);
+    window.addEventListener("focus", handleApisUpdate);
     window.addEventListener("griot-apis-updated", handleApisUpdate);
+
+    const { data: authSub } = supabase.auth.onAuthStateChange(() => {
+      void syncUserApisWithRemote().then(() => handleApisUpdate());
+    });
+
     return () => {
       window.removeEventListener("storage", handlePrefsChange);
       window.removeEventListener("griot:prefs-changed", handlePrefsChange);
       window.removeEventListener("focus", handlePrefsChange);
+      window.removeEventListener("focus", handleApisUpdate);
       window.removeEventListener("griot-apis-updated", handleApisUpdate);
+      authSub.subscription.unsubscribe();
     };
   }, []);
 
@@ -1156,10 +1168,6 @@ export function ChatSurface({ userId }: { userId: string }) {
         return updated;
       });
       return;
-    }
-
-    if (isSheolModel(activeModel)) {
-      markSheolTrialUsed(userId);
     }
 
     const targetConvId = conversationId;

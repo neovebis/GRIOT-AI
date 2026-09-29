@@ -341,7 +341,6 @@ class ChatExecutionManager {
         clearTimeout(hardTimeoutTimer);
         return;
       }
-      markSheolTrialUsed(userId);
     }
 
     // 1. Registar a mensagem do utilizador localmente apenas se ainda não existir
@@ -753,6 +752,9 @@ class ChatExecutionManager {
                   : `Execução BASE (${modelLabel(effectiveModelId)})`,
                 modelId: effectiveModelId,
               });
+              if (isSheolModel(effectiveModelId)) {
+                markSheolTrialUsed(userId);
+              }
             } catch (gcuErr) {
               console.warn("[ChatExecutionManager] Falha ao debitar GCU:", gcuErr);
             }

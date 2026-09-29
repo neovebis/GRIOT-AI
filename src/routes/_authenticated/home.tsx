@@ -11,9 +11,10 @@ import { greeting, relativeTime } from "@/lib/griot";
 import { useTheme } from "@/lib/theme";
 import { UserAvatar } from "@/components/griot/user-avatar";
 import { useCurrentUser } from "@/hooks/use-user";
-import { Moon, Sun, ChevronRight, Zap, AlertTriangle, ShieldCheck } from "lucide-react";
+import { Moon, Sun, ChevronRight, Wallet, AlertTriangle, ShieldCheck } from "lucide-react";
 import { getUnifiedProjects, getActiveProjectSync } from "@/lib/project-service";
-import { fetchUserGcuWallet, type GcuWalletState } from "@/lib/gcu-service";
+import { fetchUserGcuWallet, getLocalUsageLog, type GcuWalletState } from "@/lib/gcu-service";
+import { getCurrentWorkspaceId } from "@/lib/workspace";
 
 export const Route = createFileRoute("/_authenticated/home")({
   head: () => ({
@@ -73,6 +74,7 @@ function HomePage() {
 
         // Carrega a carteira real do utilizador (garante criação inicial com 5 GCU se for novo)
         const walletPromise = fetchUserGcuWallet(currentUser?.id);
+        const workspaceId = currentUser?.id ? await getCurrentWorkspaceId(currentUser.id) : null;
 
         const [profile, projectsRes, pipelineRes, ledgerRes, credsRes, opbEventsRes, wallet] =
           await Promise.all([
@@ -83,11 +85,11 @@ function HomePage() {
               .eq("archived", false)
               .order("updated_at", { ascending: false }),
             (supabase as any).from("griot_pipeline_configs").select("nodes").limit(1).maybeSingle(),
-            currentUser
+            workspaceId
               ? (supabase as any)
                   .from("griot_gcu_ledger")
                   .select("id, amount_gcu, event_type, reason, created_at")
-                  .eq("user_id", currentUser.id)
+                  .eq("workspace_id", workspaceId)
                   .gte("created_at", since)
                   .order("created_at", { ascending: false })
                   .limit(100)
@@ -139,9 +141,23 @@ function HomePage() {
             ? pipelineNodes.filter((n: any) => n.enabled !== false).length
             : 4;
 
-        // Registo real de consumos do griot_gcu_ledger no Supabase
-        const rawLedger = ledgerRes?.data || [];
-        const mappedRuns: RunRow[] = rawLedger
+        // Registo real de consumos do griot_gcu_ledger no Supabase e cache local
+        const rawLedger = Array.isArray(ledgerRes?.data) ? ledgerRes.data : [];
+        const localUsage = getLocalUsageLog();
+
+        // Combina o ledger do Supabase e as execuções locais sem duplicados
+        const combinedUsageMap = new Map<string, any>();
+        for (const item of rawLedger) {
+          combinedUsageMap.set(item.id || item.created_at, item);
+        }
+        for (const item of localUsage) {
+          if (!combinedUsageMap.has(item.id) && !combinedUsageMap.has(item.created_at)) {
+            combinedUsageMap.set(item.id, item);
+          }
+        }
+
+        const allEntries = Array.from(combinedUsageMap.values());
+        const mappedRuns: RunRow[] = allEntries
           .filter(
             (u: any) =>
               u.event_type === "usage_debit" ||
@@ -274,7 +290,7 @@ function HomePage() {
               {isWalletDepleted ? (
                 <AlertTriangle className="size-5" />
               ) : (
-                <Zap className="size-5" />
+                <Wallet className="size-5" />
               )}
             </div>
             <div>

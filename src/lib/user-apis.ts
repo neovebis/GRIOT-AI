@@ -182,6 +182,73 @@ export function getUserSavedApis(): UserSavedApi[] {
   return list;
 }
 
+/** Sincroniza as credenciais ativas do utilizador no Supabase com o armazenamento local */
+export async function syncUserApisWithRemote(): Promise<UserSavedApi[]> {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const { data: creds, error } = await (supabase as any)
+      .from("griot_credentials")
+      .select("id, provider_id, label, settings, status, secret_hint, created_at")
+      .eq("status", "active")
+      .eq("kind", "provider");
+
+    if (error || !Array.isArray(creds) || creds.length === 0) {
+      return getUserSavedApis();
+    }
+
+    const localApis = getUserSavedApis();
+    let changed = false;
+
+    for (const cred of creds) {
+      const provider = (cred.provider_id || "").toLowerCase() as UserSavedApi["providerId"];
+      const settings = (cred.settings && typeof cred.settings === "object" ? cred.settings : {}) as Record<string, any>;
+      const existing = localApis.find(
+        (a) =>
+          a.remoteId === cred.id ||
+          a.id === cred.id ||
+          (a.providerId === provider && (a.label === cred.label || !cred.label)),
+      );
+
+      if (existing) {
+        if (!existing.remoteId) {
+          existing.remoteId = cred.id;
+          changed = true;
+        }
+        if (existing.status !== "active") {
+          existing.status = "active";
+          changed = true;
+        }
+      } else {
+        const apiKey = settings.apiKey || settings.secret || "";
+        const defaultLabel = PROVIDER_DEFAULT_NAMES[provider] || provider;
+        localApis.push({
+          id: cred.id,
+          remoteId: cred.id,
+          providerId: provider,
+          label: cred.label || defaultLabel,
+          apiKey: apiKey || (provider === "gemini" ? (localStorage.getItem("griot_gemini_key") || "") : ""),
+          model: settings.model || PROVIDER_DEFAULT_MODELS[provider],
+          secretHint: cred.secret_hint || "••••••••",
+          status: "active",
+          createdAt: cred.created_at || new Date().toISOString(),
+        });
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(localApis));
+      window.dispatchEvent(new Event("griot-apis-updated"));
+    }
+
+    return localApis;
+  } catch (err) {
+    console.warn("[user-apis] Falha ao sincronizar APIs remotas:", err);
+    return getUserSavedApis();
+  }
+}
+
 /** Guarda ou adiciona uma nova API */
 export async function saveUserApi(input: {
   providerId: string;
@@ -357,8 +424,8 @@ export function findApiByIdOrProvider(idOrProvider: string): UserSavedApi | null
   const apis = getUserSavedApis();
   if (!apis.length) return null;
 
-  // 1. Procura por ID exato
-  const byId = apis.find((a) => a.id === idOrProvider);
+  // 1. Procura por ID exato ou remoteId
+  const byId = apis.find((a) => a.id === idOrProvider || a.remoteId === idOrProvider);
   if (byId) return byId;
 
   // 2. Procura por rótulo amigável exato (ex: "Dam", "Google Gemini")
