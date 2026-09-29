@@ -83,5 +83,9 @@ class GRIOTRuntime:
     def persist(self, path: str) -> None:
         self.quid.persist_storage(path)
 
+    @classmethod
+    def from_storage(cls, path: str) -> "GRIOTRuntime":
+        return cls(Quid.from_storage(path))
+
 
 __all__ = ["GRIOTRuntime", "RuntimeAnalysis", "RuntimeHealth"]
