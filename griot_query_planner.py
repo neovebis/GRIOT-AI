@@ -160,8 +160,21 @@ class QueryPlanner:
                 record = self.engine.context.get(match.record_id)
                 if record is None:
                     continue
+                context_facts = tuple(
+                    Fact(
+                        fact.subject,
+                        fact.relation,
+                        fact.object,
+                        fact.confidence,
+                        fact.negated,
+                        record.source,
+                        fact.evidence,
+                        fact.timestamp,
+                    )
+                    for fact in record.gir.facts()
+                )
                 working.extend(
-                    record.gir.facts(),
+                    context_facts,
                     origin=f"context:{record.record_id}",
                     score=max(0.0, min(1.0, match.score / 10.0)),
                 )
