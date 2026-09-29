@@ -103,6 +103,57 @@ class WorkingGraph:
             out.append(entry)
         return tuple(out)
 
+    def build(
+        self,
+        gir: object,
+        *,
+        context: object | None = None,
+        durable_graph: object | None = None,
+    ) -> WorkingGraphState:
+        if not hasattr(gir, "validate") or not hasattr(gir, "facts") or not hasattr(gir, "edges"):
+            raise TypeError("gir must be a GIR-compatible object")
+        gir.validate()
+        self.clear()
+
+        # Current semantic facts are the first-class working hypotheses.
+        self.extend(gir.facts(), origin="current-gir", score=1.0)
+
+        # Pull exact durable evidence for query relations, preserving all
+        # direct-source facts and rule-derived inferences.
+        if durable_graph is not None and hasattr(durable_graph, "facts") and hasattr(durable_graph, "query"):
+            nodes = {node.node_id: node for node in gir.nodes}
+            for edge in gir.edges:
+                if edge.relation not in {
+                    "is_a", "part_of", "member_of", "has", "causes",
+                    "before", "after", "located_in", "attacks", "eats",
+                    "sees", "uses", "builds", "creates", "helps", "hurts",
+                    "wants", "needs", "knows", "believes",
+                }:
+                    continue
+                source = nodes.get(edge.source)
+                target = nodes.get(edge.target)
+                if source is None or target is None:
+                    continue
+                direct = [
+                    fact for fact in durable_graph.facts()
+                    if fact.subject == source.quid
+                    and fact.relation == edge.relation
+                    and fact.object == target.quid
+                ]
+                self.extend(direct, origin="durable-direct", score=0.98)
+                inferred = [
+                    item for item in durable_graph.query(source.quid, edge.relation, target.quid)
+                    if isinstance(item, Inference)
+                ]
+                self.extend(inferred, origin="durable-inference", score=0.90)
+
+        if context is not None and hasattr(context, "matches") and hasattr(context, "_records"):
+            # ContextView deliberately exposes record IDs rather than mutable
+            # records. Resolve them only through a supplied record lookup.
+            pass
+
+        return self.state()
+
     def state(self) -> WorkingGraphState:
         items = self.evidence()
         quids: set[str] = set()
