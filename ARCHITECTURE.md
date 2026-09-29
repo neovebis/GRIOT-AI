@@ -74,6 +74,20 @@ GIR invariants:
 - GIR fingerprints are derived from that canonical representation, allowing integrity checks and cache/index keys without changing QUID identity.
 
 `MeaningRepresentation` remains the compatibility-facing semantic type, but it is now an immutable GIR instance. Reasoning consumes the same GIR object produced by semantic compilation, so semantic parsing is not repeated between representation and proof layers.
+## Centralized context engine
+
+Transient discourse context is owned by the GRIOT engine through a bounded Context Engine.
+
+The context layer:
+- stores validated GIR records without writing durable graph facts;
+- preserves turn order, source and GIR fingerprint for traceability;
+- indexes QUID mentions and relations;
+- computes deterministic recency/salience scores;
+- exposes active QUIDs and a current topic view;
+- ranks prior GIR records against a query using shared QUIDs, shared relations and recency;
+- remains independent from truth decisions, so context can be observed before it is allowed to influence proof conclusions.
+
+Context is intentionally transient. Durable knowledge remains in the knowledge graph, while context acts as working discourse memory between reasoning turns.
 ## Structured knowledge induction
 
 Phase-2 induction extracts reusable structures from hygienized text:
