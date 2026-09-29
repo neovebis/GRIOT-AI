@@ -7,6 +7,7 @@ from griot_cognition_v100 import Assessment, EpistemicStateEngine, ProvenanceTra
 from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
 from griot_extraction import ExtractionBatch, KnowledgeExtractor
 from griot_validation import KnowledgeValidator, ValidationReport
+from griot_versioning import KnowledgeVersion, KnowledgeVersionStore
 from griot_deduplication import DeduplicationReport, SemanticDeduplicator
 from griot_consolidation import ConsolidationReport, KnowledgeConsolidator
 from griot_demotion import DemotionAssessment, KnowledgeDemotionEngine
@@ -98,6 +99,15 @@ class Quid:
 
     def knowledge_level(self, fact: Fact) -> KnowledgeLevel:
         return self.promotion.level(fact)
+
+    def version_knowledge(self) -> KnowledgeVersion:
+        return self.versions.commit(self.engine.graph.facts())
+
+    def get_knowledge_version(self, version_id: str) -> KnowledgeVersion | None:
+        return self.versions.get(version_id)
+
+    def knowledge_history(self) -> tuple[KnowledgeVersion, ...]:
+        return self.versions.history()
 
     def reconcile_knowledge(self) -> tuple[DemotionAssessment, ...]:
         return self.demotion.reconcile()
