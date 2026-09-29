@@ -83,6 +83,20 @@ class KnowledgePromotionEngine:
             self.key(fact), KnowledgeLevel.CANDIDATE, 0, 0, 0.0, ()
         )).level
 
+    def demote(self, fact: Fact) -> KnowledgeAssessment:
+        key = self.key(fact)
+        previous = self._levels.get(key)
+        assessment = KnowledgeAssessment(
+            key,
+            KnowledgeLevel.DEMOTED,
+            previous.evidence_count if previous else 0,
+            previous.source_count if previous else 0,
+            previous.confidence if previous else float(fact.confidence),
+            previous.sources if previous else ((fact.provenance,) if fact.provenance else ()),
+        )
+        self._levels[key] = assessment
+        return assessment
+
     def snapshot(self) -> tuple[KnowledgeAssessment, ...]:
         return tuple(
             self._levels[key]
