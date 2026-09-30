@@ -25,7 +25,7 @@ class TestH1IntegrationPipeline(unittest.TestCase):
         self.assertEqual(result.epistemic_status, TruthStatus.SUPPORTED)
         self.assertTrue(result.verification_ok)
         self.assertTrue(result.query_plan.targets)
-        self.assertTrue(result.working_graph.facts or result.working_graph.inferences)
+        self.assertGreater(result.working_graph.evidence_count, 0)
         self.assertEqual(result.next_operation, "stop")
         self.assertIn("query", {record.source for record in self.quid.engine.context.records()})
 
@@ -47,7 +47,7 @@ class TestH1IntegrationPipeline(unittest.TestCase):
         self.assertTrue(report.changed)
         self.assertEqual(len(report.facts), 1)
         self.assertEqual(result.epistemic_status, TruthStatus.SUPPORTED)
-        self.assertEqual(result.advanced_reasoning.result.strategy, "direct")
+        self.assertEqual(result.advanced_reasoning.strategy, "direct")
         self.assertEqual(result.query_plan.gir_fingerprint, result.gir.fingerprint())
         self.assertTrue(result.verification_ok)
 
