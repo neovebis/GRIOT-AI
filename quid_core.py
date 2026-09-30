@@ -16,6 +16,13 @@ from griot_context import ContextView
 from griot_discourse import DiscourseState
 from griot_engine import Fact, GRIOT, Inference, TransitionRule
 from griot_incremental import IncrementalLearner, IncrementalUpdate
+from griot_knowledge_acquisition import (
+    AcquisitionReport,
+    KnowledgeAcquisitionEngine,
+    KnowledgeDocument,
+    KnowledgeSource,
+    ReviewItem,
+)
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
 from griot_hypothesis_v050 import HypothesisController, HypothesisReport
@@ -89,6 +96,7 @@ class Quid:
         self.demotion = KnowledgeDemotionEngine(self.engine, self.promotion)
         self.versions = KnowledgeVersionStore()
         self.incremental = IncrementalLearner(self.engine)
+        self.knowledge = KnowledgeAcquisitionEngine(self.engine)
         self.verifier = VerificationEngine()
 
     def simulate(
@@ -113,6 +121,64 @@ class Quid:
         return self.deduplicator.deduplicate(
             item.candidate for item in self.validator.validate(batch).valid
         )
+
+    def acquire_knowledge(
+        self,
+        text: str,
+        *,
+        source: str | KnowledgeSource,
+        document_id: str | None = None,
+        auto_commit: bool = True,
+        replace: bool = True,
+    ) -> AcquisitionReport:
+        return self.knowledge.acquire_text(
+            text,
+            source=source,
+            document_id=document_id,
+            auto_commit=auto_commit,
+            replace=replace,
+        )
+
+    def acquire_document(
+        self,
+        document: KnowledgeDocument,
+        *,
+        auto_commit: bool = True,
+        replace: bool = True,
+    ) -> AcquisitionReport:
+        return self.knowledge.acquire_text(
+            document.text,
+            source=document.source,
+            document_id=document.document_id,
+            auto_commit=auto_commit,
+            replace=replace,
+        )
+
+    def acquire_file(
+        self,
+        path: str,
+        *,
+        source: str | KnowledgeSource | None = None,
+        document_id: str | None = None,
+        auto_commit: bool = True,
+        replace: bool = True,
+    ) -> AcquisitionReport:
+        return self.knowledge.acquire_file(
+            path,
+            source=source,
+            document_id=document_id,
+            auto_commit=auto_commit,
+            replace=replace,
+        )
+
+    def review_knowledge(self, review_id: str, decision: str) -> ReviewItem:
+        return self.knowledge.review(review_id, decision)
+
+    def knowledge_review_queue(self) -> tuple[ReviewItem, ...]:
+        return self.knowledge.review_queue()
+
+    def assess_acquired_knowledge(self) -> tuple[KnowledgeAssessment, ...]:
+        return self.knowledge.assess()
 
     def assess_knowledge(self) -> tuple[KnowledgeAssessment, ...]:
         return self.promotion.assess(self.engine.graph.facts())

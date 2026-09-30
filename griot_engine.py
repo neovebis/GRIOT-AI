@@ -474,6 +474,31 @@ class KnowledgeGraph:
         self._by_relation.setdefault(f.relation, set()).add(f)
         return f
 
+    def remove_fact(self, fact: Fact) -> bool:
+        """Remove one exact fact and rebuild derived indexes consistently."""
+        if not isinstance(fact, Fact):
+            raise TypeError("fact must be a Fact")
+        if fact not in self._facts:
+            return False
+        self._facts.remove(fact)
+        relation_facts = self._by_relation.get(fact.relation)
+        if relation_facts is not None:
+            relation_facts.discard(fact)
+            if not relation_facts:
+                self._by_relation.pop(fact.relation, None)
+        self._contradictions = {
+            (item.subject, item.relation, item.object)
+            for item in self._facts
+            for other in self._facts
+            if (
+                item.subject == other.subject
+                and item.relation == other.relation
+                and item.object == other.object
+                and item.negated != other.negated
+            )
+        }
+        return True
+
     def facts(self) -> tuple[Fact, ...]:
         return tuple(self._facts)
 
