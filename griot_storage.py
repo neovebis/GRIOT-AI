@@ -127,12 +127,19 @@ class SQLiteKnowledgeStore:
                 )
 
     def load_engine(self, engine: GRIOT) -> None:
+        existing_symbols = {quid.symbol for quid in engine.quids.all()}
+        existing_codes = {str(quid.code) for quid in engine.quids.all()}
+
         for row in self.connection.execute(
             "SELECT * FROM quids ORDER BY code"
         ):
+            symbol = row["symbol"]
+            code = str(row["code"])
+            if symbol in existing_symbols or code in existing_codes:
+                continue
             quid = QUID(
                 code=int(row["code"]),
-                symbol=row["symbol"],
+                symbol=symbol,
                 label=row["label"],
                 base=BaseLayer(row["base"]),
                 family_id=int(row["family_id"]),
@@ -140,6 +147,8 @@ class SQLiteKnowledgeStore:
                 metadata=json.loads(row["metadata"]),
             )
             engine.quids.load((quid,))
+            existing_symbols.add(symbol)
+            existing_codes.add(code)
 
         for row in self.connection.execute(
             """
