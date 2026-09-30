@@ -109,8 +109,13 @@ class SemanticLexicon:
             return cls.CANONICAL_RELATIONS[key]
         if key in cls.ALIASES:
             return cls.CANONICAL_RELATIONS[cls.ALIASES[key]]
+        irregular = cls.IRREGULAR_FORMS.get(key)
+        if irregular is not None:
+            canonical = cls.ALIASES.get(irregular, irregular)
+            return cls.CANONICAL_RELATIONS.get(canonical)
         lemma = cls._generated_forms().get(key)
-        return cls.CANONICAL_RELATIONS.get(lemma)
+        canonical = cls.ALIASES.get(lemma, lemma)
+        return cls.CANONICAL_RELATIONS.get(canonical)
 
     @classmethod
     def resolve_verb(cls, value: str) -> LexicalResolution | None:
