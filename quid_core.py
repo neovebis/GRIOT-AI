@@ -33,6 +33,13 @@ from griot_advanced_reasoning import (
     ReasoningSubproblem,
 )
 from griot_integration_pipeline import GriotIntegrationPipeline, IntegratedReasoningResult
+from griot_execution_control import (
+    ExecutionControlPlane,
+    ExecutionResult,
+    ExecutionOperation,
+    ExecutionStatus,
+    ExecutionStep,
+)
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
 from griot_hypothesis_v050 import HypothesisController, HypothesisReport
@@ -110,6 +117,7 @@ class Quid:
         self.advanced_reasoning = AdvancedReasoningEngine(self.engine)
         self.verifier = VerificationEngine()
         self.integration = GriotIntegrationPipeline(self)
+        self.execution = ExecutionControlPlane(self)
 
     def simulate(
         self,
@@ -169,6 +177,24 @@ class Quid:
     ) -> IntegratedReasoningResult:
         """Run the canonical G1 -> retrieval -> reasoning -> G3 pipeline."""
         return self.integration.run(
+            query,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+            context_source=context_source,
+        )
+
+    def executar_proximo_passo(
+        self,
+        query: str,
+        *,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+        context_source: str = "query",
+    ) -> ExecutionResult:
+        """Run G1-G3 and execute the operation selected by metacognition."""
+        return self.execution.run(
             query,
             decompose=decompose,
             hypothesis_limit=hypothesis_limit,
