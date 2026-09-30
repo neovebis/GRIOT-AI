@@ -29,6 +29,7 @@ class ProofStep:
     confidence: float
     rule: str
     provenance: str
+    negated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,6 +281,7 @@ class ReasoningEngine:
                         item.confidence,
                         item.rule,
                         fact.provenance,
+                        fact.negated,
                     )
                 )
                 for support in item.support:
@@ -291,6 +293,7 @@ class ReasoningEngine:
                             support.confidence,
                             "support",
                             support.provenance,
+                            support.negated,
                         )
                     )
             else:
@@ -302,6 +305,7 @@ class ReasoningEngine:
                         item.confidence,
                         "direct",
                         item.provenance,
+                        item.negated,
                     )
                 )
         return tuple(out)
