@@ -192,6 +192,7 @@ class LanguageIntelligence:
         "precisa": "precisar", "precisou": "precisar", "precisar": "precisar", "precisam": "precisar",
         "sabe": "saber", "soube": "saber", "saber": "saber", "sabem": "saber",
         "faz": "fazer", "fez": "fazer", "fazer": "fazer", "fazem": "fazer",
+        "deu": "dar", "dar": "dar", "dá": "dar", "dao": "dar", "dão": "dar",
         "é": "ser", "era": "ser", "foi": "ser", "ser": "ser", "são": "ser", "sao": "ser",
         "está": "estar", "esta": "estar", "estava": "estar", "estavam": "estar", "estar": "estar",
         "fica": "ficar", "ficou": "ficar", "ficar": "ficar",
@@ -299,7 +300,12 @@ class LanguageIntelligence:
 
         words = clause.split()
         verb_word = words[verb_index]
-        subject = self._strip_det(" ".join(words[:verb_index]).strip()) or None
+        subject_text = " ".join(words[:verb_index]).strip()
+        subject_text = re.sub(r"\b(?:não|nao|nunca|jamais)\b", "", subject_text, flags=re.I)
+        subject_words = subject_text.split()
+        while subject_words and self._lemma(subject_words[-1]) in self.AUXILIARIES:
+            subject_words.pop()
+        subject = self._strip_det(" ".join(subject_words).strip()) or None
         tail = " ".join(words[verb_index + 1:]).strip()
         object_ = self._extract_object(tail)
         lemma = self._lemma(verb_word)
@@ -346,10 +352,14 @@ class LanguageIntelligence:
 
     def _main_verb_index(self, clause: str) -> int | None:
         words = clause.split()
-        for index, word in enumerate(words):
-            if self._pos(word) == "VERB":
-                return index
-        return None
+        verb_indexes = [index for index, word in enumerate(words) if self._pos(word) == "VERB"]
+        if not verb_indexes:
+            return None
+        lexical = [
+            index for index in verb_indexes
+            if self._lemma(words[index]) not in self.AUXILIARIES
+        ]
+        return lexical[0] if lexical else verb_indexes[0]
 
     def _find_main_verb(self, clause: str) -> str | None:
         index = self._main_verb_index(clause)
@@ -363,6 +373,7 @@ class LanguageIntelligence:
             "usar": "uses",
             "construir": "builds",
             "criar": "creates",
+            "dar": "gives",
             "ajudar": "helps",
             "ferir": "hurts",
             "querer": "wants",
@@ -440,6 +451,7 @@ class LanguageIntelligence:
             "deve": ("present", 3, "sing"), "devem": ("present", 3, "plur"), "deveria": ("conditional", 3, "sing"),
             "quer": ("present", 3, "sing"), "queria": ("past_imperfect", 3, "sing"),
             "soube": ("past_perfect", 3, "sing"), "sabe": ("present", 3, "sing"),
+            "deu": ("past_perfect", 3, "sing"), "dá": ("present", 3, "sing"), "dão": ("present", 3, "plur"),
         }
         if key in irregular:
             tense, person, number = irregular[key]
@@ -484,6 +496,8 @@ class LanguageIntelligence:
             return "NUM"
         if key in self.NEGATIONS:
             return "NEG"
+        if key in self.MODALS:
+            return "AUX"
         if key in self.PRONOUNS:
             return "PRON"
         if key in self.DETERMINERS:
@@ -494,8 +508,6 @@ class LanguageIntelligence:
             return "CONJ"
         if key in self.VERB_LEMMAS or self._morphology(key)[0] is not None:
             return "VERB"
-        if key in self.MODALS:
-            return "AUX"
         if key in self.TEMPORAL:
             return "ADV"
         if re.fullmatch(r"[A-Za-zÀ-ÿ]+", key):
