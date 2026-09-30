@@ -540,4 +540,6 @@ __all__ = [
     "Mention",
     "SemanticIntent",
     "SemanticIntentDetector",
+    "LanguageAnalysis",
+    "LanguageIntelligence",
 ]
