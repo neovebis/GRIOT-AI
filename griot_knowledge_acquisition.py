@@ -63,9 +63,7 @@ class KnowledgeDocument:
             raise ValueError("text must not be empty")
         normalized = re.sub(r"\\s+", " ", text.strip())
         fingerprint = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        stable_id = document_id or hashlib.sha256(
-            f"{source.source_id}\\0{fingerprint}".encode("utf-8")
-        ).hexdigest()[:24]
+        stable_id = document_id or source.source_id
         return cls(stable_id, text, source, fingerprint)
 
 
@@ -194,7 +192,8 @@ class KnowledgeAcquisitionEngine:
         replace: bool = True,
     ) -> AcquisitionReport:
         source_obj = self._source(source)
-        previous = self._documents.get(document_id) if document_id else None
+        stable_document_id = document_id or source_obj.source_id
+        previous = self._documents.get(stable_document_id)
         version_number = previous.source.version + 1 if previous is not None else 1
         if source_obj.version == 1 and previous is not None:
             source_obj = KnowledgeSource(
@@ -210,7 +209,7 @@ class KnowledgeAcquisitionEngine:
         document = KnowledgeDocument.from_text(
             text,
             source_obj,
-            document_id=document_id,
+            document_id=stable_document_id,
         )
         previous = self._documents.get(document.document_id)
         if previous is not None and previous.fingerprint == document.fingerprint:
@@ -285,7 +284,8 @@ class KnowledgeAcquisitionEngine:
                 self._restore_facts(old_facts)
                 version = self._ensure_head(before_facts)
                 diff = KnowledgeDiff((), ())
-                self._documents.setdefault(document.document_id, previous or document)
+                if previous is not None:
+                    self._documents[document.document_id] = previous
                 return AcquisitionReport(
                     document, batch, entities, entity_resolution, events, temporals,
                     effective_validation, deduplication, consolidation, version, diff,
