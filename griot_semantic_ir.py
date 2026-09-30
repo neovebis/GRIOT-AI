@@ -82,7 +82,7 @@ class MeaningCompiler:
     @staticmethod
     def normalize(text: str) -> str:
         value = unicodedata.normalize("NFKC", text).casefold().strip()
-        return re.sub(r"\s+", " ", re.sub(r"[!?;:]+", " ", value))
+        return re.sub(r"\s+", " ", re.sub(r"[.!?;:]+", " ", value))
 
     @staticmethod
     def clean(value: str) -> str:
