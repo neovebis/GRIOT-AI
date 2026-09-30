@@ -113,8 +113,8 @@ class TestG3AdvancedReasoning(unittest.TestCase):
         self.assertEqual(result.metacognition.next_operation, "stop")
 
     def test_explicit_reasoning_modes_exist(self) -> None:
-        self.engine.learn("A é B. B é C.", "knowledge")
-        self.assertEqual(self.g3.deduce("A é C?").status, TruthStatus.SUPPORTED)
+        self.engine.learn("O lobo é um animal. O animal é um ser vivo.", "knowledge")
+        self.assertEqual(self.g3.deduce("O lobo é um ser vivo?").status, TruthStatus.SUPPORTED)
         self.assertTrue(self.g3.induce(min_support=2) == ())
         self.engine.learn("X causa Y.", "knowledge")
         self.assertEqual(self.g3.abduce("Y").direction, "causes")
