@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from fractions import Fraction
 import math
 import re
-from typing import Callable
 
 from griot_engine import GRIOT
 
@@ -28,11 +27,12 @@ class MathResult:
 
 
 class MathEngine:
-    """Deterministic arithmetic layer using exact rational arithmetic when possible."""
+    """Deterministic arithmetic layer using exact rational evaluation where possible."""
 
     PREFIXES = (
-        r"^s*(?:calcula(?:r)?|calcule|quantos+(?:é|e)|quals+é|resolva)s*",
+        r"^\s*(?:calcula(?:r)?|calcule|quanto\s+(?:é|e)|qual\s+é|resolva)\s*",
     )
+    SAFE_TEXT = re.compile(r"^[0-9A-Za-z_ππτ+\-*/%().,\s]+$")
 
     def __init__(self, engine: GRIOT | None = None) -> None:
         self.engine = engine or GRIOT.create()
@@ -44,14 +44,17 @@ class MathEngine:
         for pattern in self.PREFIXES:
             value = re.sub(pattern, "", value, count=1, flags=re.I)
         value = value.strip(" .?!")
-        # Remove trailing natural-language wrappers while retaining an allowed
-        # mathematical expression.
-        match = re.search(r"[0-9pi eEτ+-*/%().,s]+$", value)
-        if match:
-            candidate = match.group(0).strip()
-            if candidate and any(ch.isdigit() for ch in candidate):
-                value = candidate
-        return value.replace(",", ".")
+        value = value.replace(",", ".")
+        value = re.sub(
+            r"\b(?:por\s+favor|porfavor|me\s+diga|diz-me|diga-me)\b",
+            " ",
+            value,
+            flags=re.I,
+        )
+        value = re.sub(r"\s+", " ", value).strip()
+        if not self.SAFE_TEXT.fullmatch(value):
+            raise ValueError("text does not contain a supported mathematical expression")
+        return value
 
     def calculate(self, text: str) -> MathResult:
         expression = self.extract_expression(text)
@@ -129,18 +132,19 @@ class MathEngine:
             if isinstance(node.op, ast.Mod):
                 return left % right
             if isinstance(node.op, ast.Pow):
-                if right.denominator != 1:
+                if right.denominator != 1 or abs(right.numerator) > 10000:
                     return None
-                exponent = right.numerator
-                if abs(exponent) > 10000:
-                    return None
-                return left ** exponent
+                return left ** right.numerator
             return None
         return None
 
     @staticmethod
     def _render(value: Fraction) -> str:
-        return str(value.numerator) if value.denominator == 1 else f"{value.numerator}/{value.denominator}"
+        return (
+            str(value.numerator)
+            if value.denominator == 1
+            else f"{value.numerator}/{value.denominator}"
+        )
 
 
 __all__ = ["MathEngine", "MathResult", "MathStatus"]
