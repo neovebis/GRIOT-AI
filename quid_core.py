@@ -35,6 +35,7 @@ from griot_advanced_reasoning import (
 from griot_integration_pipeline import GriotIntegrationPipeline, IntegratedReasoningResult
 from griot_execution_control import (
     ExecutionControlPlane,
+    ExecutionCycleResult,
     ExecutionResult,
     ExecutionOperation,
     ExecutionStatus,
@@ -196,6 +197,26 @@ class Quid:
         """Run G1-G3 and execute the operation selected by metacognition."""
         return self.execution.run(
             query,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+            context_source=context_source,
+        )
+
+    def executar_ciclo(
+        self,
+        query: str,
+        *,
+        max_cycles: int = 4,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+        context_source: str = "query-cycle",
+    ) -> ExecutionCycleResult:
+        """Run a bounded G1-G3 execution loop with loop detection."""
+        return self.execution.run_cycle(
+            query,
+            max_cycles=max_cycles,
             decompose=decompose,
             hypothesis_limit=hypothesis_limit,
             max_hops=max_hops,
