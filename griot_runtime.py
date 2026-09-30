@@ -34,6 +34,7 @@ class GRIOTRuntime:
         "reasoning",
         "epistemic",
         "verification",
+        "execution_control",
     )
 
     def __init__(self, quid: Quid | None = None) -> None:
@@ -68,6 +69,7 @@ class GRIOTRuntime:
             "reasoning": lambda: self.quid.reasoning,
             "epistemic": lambda: self.quid.epistemic,
             "verification": lambda: self.quid.verifier,
+            "execution_control": lambda: self.quid.execution,
         }
         missing = []
         for stage in self.STAGES:
@@ -78,6 +80,21 @@ class GRIOTRuntime:
             if value is None:
                 missing.append(stage)
         return RuntimeHealth(self.STAGES, not missing, tuple(missing))
+
+    def execute_next(
+        self,
+        text: str,
+        *,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+    ):
+        return self.quid.executar_proximo_passo(
+            text,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+        )
 
     def ask(self, text: str):
         return self.quid.engine.ask(text)
