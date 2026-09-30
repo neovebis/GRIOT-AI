@@ -118,5 +118,7 @@ jobs:
         run: python -m unittest tests.test_h5_canonical_runtime -v
       - name: H6 integrated runtime API tests
         run: python -m unittest tests.test_h6_integrated_runtime_api -v
+      - name: H7 semantic verification matrix
+        run: python -m unittest tests.test_h7_semantic_verification -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
