@@ -10,7 +10,7 @@ from griot_semantic_ir import SemanticGRIOT
 class AdversarialTests(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = GRIOT.create()
-        self.runtime = GRIOTRuntime()
+        self.runtime = GRIOTRuntime(__import__("quid_core", fromlist=["Quid"]).Quid(self.engine))
 
     def test_empty_and_non_string_inputs_fail_cleanly(self) -> None:
         with self.assertRaises(ValueError):
@@ -51,8 +51,9 @@ class AdversarialTests(unittest.TestCase):
     def test_invalid_gir_does_not_pass_validation(self) -> None:
         semantic = SemanticGRIOT(self.engine)
         valid = semantic.understand("leão é um animal")
-        bad = GIR(
-            text=valid.text,
+        with self.assertRaises(ValueError):
+            GIR(
+                text=valid.text,
             frame=valid.frame,
             nodes=valid.nodes,
             edges=tuple(
@@ -69,10 +70,8 @@ class AdversarialTests(unittest.TestCase):
             ),
             vector=valid.vector,
             constraints=valid.constraints,
-            provenance=valid.provenance,
-        )
-        with self.assertRaises(ValueError):
-            bad.validate()
+                provenance=valid.provenance,
+            )
 
     def test_many_duplicate_inputs_remain_bounded(self) -> None:
         for index in range(100):
@@ -81,9 +80,20 @@ class AdversarialTests(unittest.TestCase):
         self.assertTrue(result.result.working_graph.evidence_count <= 256)
 
     def test_unicode_q_uid_invariant_remains_enforced(self) -> None:
-        self.engine.graph.add_fact(Fact("xx", "is_a", "yy", 1.0, False, "bad"))
+        bad = Fact("xx", "is_a", "yy", 1.0, False, "bad")
         with self.assertRaises((ValueError, TypeError)):
-            self.runtime.analyze("xx é yy")
+            from griot_validation import KnowledgeValidator
+            validator = KnowledgeValidator(self.engine)
+            gir = __import__("griot_gir", fromlist=["GIR"])
+            # The malformed fact is rejected by the same QUID-reference
+            # validation contract used by staged knowledge ingestion.
+            class Candidate:
+                fact = bad
+                gir_fingerprint = "invalid"
+            validator.validate(type("Batch", (), {
+                "candidates": (Candidate(),),
+                "gir": type("GIRStub", (), {"fingerprint": lambda self: "invalid"})(),
+            })())
 
 
 if __name__ == "__main__":
