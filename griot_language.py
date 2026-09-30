@@ -472,8 +472,11 @@ class LanguageIntelligence:
             ("ávamos", "past_imperfect", 1, "plur"), ("íamos", "past_imperfect", 1, "plur"), ("ávamos", "past_imperfect", 1, "plur"),
             ("ava", "past_imperfect", 3, "sing"), ("ia", "past_imperfect", 3, "sing"),
             ("avam", "past_imperfect", 3, "plur"), ("iam", "past_imperfect", 3, "plur"),
-            ("aste", "past_perfect", 2, "sing"), ("aram", "past_perfect", 3, "plur"),
-            ("ávamos", "past_imperfect", 1, "plur"), ("amos", "present", 1, "plur"),
+            ("ávamos", "past_imperfect", 1, "plur"), ("íamos", "past_imperfect", 1, "plur"),
+            ("aram", "past_perfect", 3, "plur"), ("aste", "past_perfect", 2, "sing"),
+            ("iste", "past_perfect", 2, "sing"), ("imos", "past_perfect", 1, "plur"),
+            ("ou", "past_perfect", 3, "sing"), ("eu", "past_perfect", 1, "sing"),
+            ("iu", "past_perfect", 3, "sing"), ("amos", "present", 1, "plur"),
             ("ais", "present", 2, "plur"), ("am", "present", 3, "plur"),
             ("as", "present", 2, "sing"), ("es", "present", 2, "sing"),
             ("is", "present", 2, "sing"), ("a", "present", 3, "sing"),
@@ -492,12 +495,29 @@ class LanguageIntelligence:
         key = self.normalize_token(word)
         if key in self.VERB_LEMMAS:
             return self.VERB_LEMMAS[key]
+        if key.endswith("ando") and len(key) > 5:
+            return f"{key[:-4]}ar"
+        if key.endswith("endo") and len(key) > 5:
+            return f"{key[:-4]}er"
+        if key.endswith("indo") and len(key) > 5:
+            return f"{key[:-4]}ir"
+        if key.endswith("ado") and len(key) > 4:
+            return f"{key[:-3]}ar"
+        if key.endswith("ido") and len(key) > 4:
+            return f"{key[:-3]}ir"
         return key
 
     def _pos(self, word: str) -> str:
         key = self.normalize_token(word)
         if re.fullmatch(r"\d+(?:[\.,]\d+)?", key):
             return "NUM"
+        if (
+            isinstance(word, str)
+            and word[:1].isupper()
+            and key not in self.VERB_LEMMAS
+            and key not in self.MODALS
+        ):
+            return "WORD"
         if key in self.NEGATIONS:
             return "NEG"
         if key in self.MODALS:
@@ -549,9 +569,9 @@ class LanguageIntelligence:
 
     def _comparison(self, text: str) -> Comparison | None:
         patterns = (
-            (r"(.+?)\s+é\s+mais\s+(.+?)\s+do\s+que\s+(.+)$", "greater_than"),
-            (r"(.+?)\s+é\s+menos\s+(.+?)\s+do\s+que\s+(.+)$", "less_than"),
-            (r"(.+?)\s+é\s+tão\s+(.+?)\s+quanto\s+(.+)$", "equal_degree"),
+            (r"(.+?)\s+(?:é|são)\s+mais\s+(.+?)\s+do\s+que\s+(.+)$", "greater_than"),
+            (r"(.+?)\s+(?:é|são)\s+menos\s+(.+?)\s+do\s+que\s+(.+)$", "less_than"),
+            (r"(.+?)\s+(?:é|são)\s+tão\s+(.+?)\s+quanto\s+(.+)$", "equal_degree"),
         )
         for pattern, operator in patterns:
             match = re.match(pattern, text.strip(), re.I)
