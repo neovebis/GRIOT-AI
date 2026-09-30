@@ -39,7 +39,7 @@ class TestG3AdvancedReasoning(unittest.TestCase):
         self.assertEqual(result.metacognition.next_operation, "stop")
 
     def test_temporal_reasoning_is_transitive(self) -> None:
-        self.engine.learn("O lobo está antes de o gato. O gato está antes de o cão.", "timeline")
+        self.engine.learn("lobo antes de gato. gato antes de cão.", "timeline")
         result = self.g3.temporal_query("lobo antes de cão?")
         self.assertEqual(result.status, TruthStatus.SUPPORTED)
         self.assertTrue(any(step.rule != "direct" for step in result.proofs))
