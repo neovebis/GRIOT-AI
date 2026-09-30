@@ -179,7 +179,7 @@ class LanguageIntelligence:
     )
 
     VERB_LEMMAS = {
-        "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar",
+        "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar", "ruge": "rugir", "rugiu": "rugir", "rugir": "rugir", "rugem": "rugir", "habita": "habitar", "habitou": "habitar", "habitar": "habitar", "habitam": "habitar", "vive": "viver", "viveu": "viver", "viver": "viver", "vivem": "viver",
         "come": "comer", "comeu": "comer", "comer": "comer", "comem": "comer",
         "vê": "ver", "ve": "ver", "viu": "ver", "ver": "ver", "veem": "ver",
         "usa": "usar", "usou": "usar", "usar": "usar", "usam": "usar",
@@ -207,6 +207,9 @@ class LanguageIntelligence:
         "ser", "estar", "ter", "haver", "ir", "poder", "dever", "precisar",
         "é", "era", "foi", "está", "esta", "estava", "tem", "tinha", "teve",
         "vai", "vão", "vao", "pode", "podem", "deve", "devem",
+    })
+    AUXILIARY_HELPERS = frozenset({
+        "ser", "estar", "ter", "haver", "ir",
     })
 
     @staticmethod
@@ -352,14 +355,17 @@ class LanguageIntelligence:
 
     def _main_verb_index(self, clause: str) -> int | None:
         words = clause.split()
-        verb_indexes = [index for index, word in enumerate(words) if self._pos(word) == "VERB"]
-        if not verb_indexes:
+        predicate_indexes = [
+            index for index, word in enumerate(words)
+            if self._pos(word) in {"VERB", "AUX"}
+        ]
+        if not predicate_indexes:
             return None
         lexical = [
-            index for index in verb_indexes
-            if self._lemma(words[index]) not in self.AUXILIARIES
+            index for index in predicate_indexes
+            if self._lemma(words[index]) not in self.AUXILIARY_HELPERS
         ]
-        return lexical[0] if lexical else verb_indexes[0]
+        return lexical[0] if lexical else predicate_indexes[0]
 
     def _find_main_verb(self, clause: str) -> str | None:
         index = self._main_verb_index(clause)
@@ -486,7 +492,7 @@ class LanguageIntelligence:
             ("iu", "past_perfect", 3, "sing"), ("amos", "present", 1, "plur"),
             ("ais", "present", 2, "plur"), ("am", "present", 3, "plur"),
             ("as", "present", 2, "sing"), ("es", "present", 2, "sing"),
-            ("is", "present", 2, "sing"), ("a", "present", 3, "sing"),
+            ("is", "present", 2, "sing"), ("em", "present", 3, "plur"), ("a", "present", 3, "sing"),
             ("e", "present", 3, "sing"), ("o", "present", 1, "sing"),
         )
         for ending, tense, person, number in endings:

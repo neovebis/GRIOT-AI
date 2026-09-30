@@ -154,7 +154,7 @@ class AdvancedReasoningEngine:
         if max_hops < 0:
             raise ValueError("max_hops must be >= 0")
 
-        strategy = self.select_strategy(query)
+        strategy = self.select_strategy(query, meaning=meaning)
         subproblems = self.decompose(query) if decompose else (
             ReasoningSubproblem(query.strip(), strategy, "single problem"),
         )
@@ -236,18 +236,20 @@ class AdvancedReasoningEngine:
             metacognition,
         )
 
-    def select_strategy(self, query: str) -> str:
+    def select_strategy(self, query: str, *, meaning: GIR | None = None) -> str:
+        if not isinstance(query, str):
+            raise TypeError("query must be a string")
         normalized = query.casefold().strip()
+        if not normalized:
+            raise ValueError("query must not be empty")
         if re.fullmatch(r"[0-9\s+\-*/%().,]+", normalized):
             return "mathematical"
-        try:
-            frame = self.semantic.understand(query)
-            intent = frame.intent.casefold()
-        except Exception:
-            intent = ""
+        intent = getattr(getattr(meaning, "frame", None), "intent", "").casefold()
 
         if re.search(r"\b(?:e se|se isso|caso contrário|caso contrario)\b", normalized):
             return "counterfactual"
+        if re.search(r"\b(?:poderia|seria possível|seria possivel|hipótese|hipotese|supondo|assumindo)\b", normalized):
+            return "hypothetical"
         if intent == "calculate" or re.search(r"(?:calcula|equação|equacao|matriz|estatística|estatistica)\b", normalized):
             return "mathematical"
         if re.search(r"\b(?:probabilidade|probabilidade de|chance|risco|percentagem|porcentagem)\b", normalized):
