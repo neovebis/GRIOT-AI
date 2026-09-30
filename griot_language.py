@@ -402,6 +402,11 @@ class LanguageIntelligence:
 
     def _clause_tense(self, clause: str) -> str | None:
         words = [self.normalize_token(w) for w in re.findall(r"[\wÀ-ÿ]+", clause)]
+        # Portuguese near-future periphrasis has a dedicated precedence rule:
+        # present-tense "ir" + infinitive must win over suffix heuristics.
+        for i, word in enumerate(words[:-1]):
+            if word in {"vai", "vao", "vão"} and self._morphology(words[i + 1])[0] == "infinitive":
+                return "near_future"
         for i, word in enumerate(words):
             if self._pos(word) not in {"VERB", "AUX"}:
                 continue
