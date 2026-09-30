@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from griot_execution_control import (
+    ExecutionCycleResult,
     ExecutionOperation,
     ExecutionStatus,
 )
@@ -65,6 +66,34 @@ class TestH2ExecutionControl(unittest.TestCase):
         self.assertNotIn("execution_control", health.missing)
         result = runtime.execute_next("2 + 2")
         self.assertEqual(result.operation, ExecutionOperation.STOP)
+
+    def test_bounded_cycle_stops_on_verified_result(self) -> None:
+        self.quid.engine.learn("O lobo é um animal.", "memory")
+        result = self.quid.executar_ciclo("O lobo é um animal?", max_cycles=4)
+        self.assertIsInstance(result, ExecutionCycleResult)
+        self.assertEqual(result.stopped_reason, "stop")
+        self.assertEqual(result.cycles, 1)
+        self.assertEqual(result.steps[0].operation, ExecutionOperation.STOP)
+
+    def test_bounded_cycle_does_not_spin_on_unknown(self) -> None:
+        result = self.quid.executar_ciclo(
+            "A é uma entidade desconhecida?",
+            max_cycles=4,
+        )
+        self.assertEqual(result.stopped_reason, "repeated_control_state")
+        self.assertEqual(result.cycles, 1)
+        self.assertEqual(
+            result.steps[0].operation,
+            ExecutionOperation.RETRIEVE_MORE_EVIDENCE,
+        )
+
+    def test_bounded_cycle_stops_conflict_in_waiting(self) -> None:
+        self.quid.engine.learn("O lobo é um animal.", "positive")
+        self.quid.engine.learn("O lobo não é um animal.", "negative")
+        result = self.quid.executar_ciclo("O lobo é um animal?", max_cycles=4)
+        self.assertEqual(result.stopped_reason, "waiting")
+        self.assertEqual(result.cycles, 1)
+        self.assertEqual(result.steps[0].operation, ExecutionOperation.RESOLVE_CONFLICT)
 
 
 if __name__ == "__main__":
