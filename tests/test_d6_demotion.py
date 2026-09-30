@@ -14,8 +14,8 @@ class DemotionTests(unittest.TestCase):
         self.quid = Quid(self.engine)
 
     def _facts(self):
-        lion = self.engine.quids.get("leão").symbol
-        animal = self.engine.quids.get("animal").symbol
+        lion = self.engine.quids.ensure("leão", family_id=1).symbol
+        animal = self.engine.quids.ensure("animal", family_id=1).symbol
         return (
             Fact(lion, "is_a", animal, 0.9, False, "a"),
             Fact(lion, "is_a", animal, 0.9, False, "b"),
