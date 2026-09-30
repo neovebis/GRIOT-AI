@@ -38,7 +38,12 @@ class ReasoningContractTests(unittest.TestCase):
         self.semantic.learn("O animal é um ser vivo.", source="b")
         result = self.reasoning.reason("leão é um ser vivo")
         self.assertEqual(result.status, TruthStatus.SUPPORTED)
-        self.assertTrue(any(step.rule == "is_a_transitivity" for step in result.proofs))
+        self.assertTrue(
+            any(
+                step.rule in {"type_transitivity", "transitive:type"}
+                for step in result.proofs
+            )
+        )
 
     def test_negative_query_can_be_supported(self) -> None:
         self.semantic.learn("O leão não é um planeta.", source="a")
