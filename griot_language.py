@@ -392,6 +392,14 @@ class LanguageIntelligence:
             "ser": "is_a",
             "estar": "located_in",
         }
+        if lemma == "ir":
+            # Near-future periphrases ("vai/vão + infinitive") carry the
+            # semantic relation of the lexical infinitive, not of "ir".
+            match = re.search(r"\\b(?:vai|vao|vão)\\s+([^\\s,;:.!?]+)", clause, flags=re.I)
+            if match:
+                future_lemma = self._lemma(match.group(1))
+                if future_lemma in explicit:
+                    return explicit[future_lemma]
         if lemma in explicit:
             return explicit[lemma]
         if re.search(r"\b(?:causa|causou|provoca|provocou)\b", clause, re.I):
