@@ -507,7 +507,7 @@ class SemanticGrammar:
             (r"^o que\s+tem\s+(?:o|a|os|as)\s+(.+)$", "object", "has", "has", "forward"),
             (r"^quem\s+tem\s+(?:o|a|os|as)\s+(.+)$", "subject", "has", "has", "forward"),
             (r"^onde\s+(?:esta|está|fica|vive)\s+(.+)$", "location", "located_in", "located_in", "forward"),
-            (r"^quem\s+(ataca|atacou|come|comeu|viu|usa|usou|ajuda|ajudou|fere|feriu)\s+(.+)$", "subject", None, None, "forward"),
+            (r"^quem\s+(ataca|atacou|come|comeu|viu|usa|usou|ajuda|ajudou|fere|feriu|precisa|precisou|sabe|soube)\s+(.+)$", "subject", None, None, "forward"),
             (r"^o que\s+(.+?)\s+(ataca|atacou|come|comeu|viu|usou|usa|ajuda|ajudou|fere|feriu)$", "object", None, None, "forward"),
             (r"^o que\s+(.+?)\s+(ataca|atacou|come|comeu|viu|usou|usa|ajuda|ajudou|fere|feriu)\s+(.+)$", "object", None, None, "forward"),
             (r"^o que\s+(.+?)\s+tem$", "object", "has", "has", "forward"),
@@ -548,7 +548,7 @@ class SemanticGrammar:
     def _strip_determiner(value: str | None) -> str | None:
         if value is None:
             return None
-        return re.sub(r"^(?:o|a|os|as|um|uma|uns|umas)\s+", "", value).strip(" ,;:!?") or None
+        return re.sub(r"^(?:o|a|os|as|um|uma|uns|umas|do|da|dos|das|no|na|nos|nas)\s+", "", value).strip(" ,;:!?") or None
 
 
 __all__ = [
