@@ -40,6 +40,7 @@ class ClaimReasoning:
     status: TruthStatus
     confidence: float
     proofs: tuple[ProofStep, ...]
+    evidence: tuple[Fact | Inference, ...] = ()
     causes: tuple[ProofStep, ...] = ()
 
 
@@ -151,6 +152,7 @@ class ReasoningEngine:
                     status=status,
                     confidence=claim_confidence,
                     proofs=proofs,
+                    evidence=evidence,
                     causes=self._causes_for(object_),
                 )
             )
