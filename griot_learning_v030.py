@@ -105,7 +105,13 @@ class KnowledgeInducer:
                 k = self._quid(kind)
                 facts.append(Fact(s.symbol, "is_a", k.symbol, 0.94, False, "induction", sentence))
             if tail and subject:
-                for property_fact in self._simple_property(tail, subject):
+                property_match = re.match(
+                    r"^(?:possui|tem|contém|cobre)\s+(?:um|uma|o|a|os|as)?\s*(.+)$",
+                    tail,
+                    re.I,
+                )
+                expression = property_match.group(1) if property_match else tail
+                for property_fact in self._simple_property(expression, subject):
                     facts.append(property_fact)
         return facts
 
