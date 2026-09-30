@@ -32,6 +32,7 @@ from griot_advanced_reasoning import (
     ProbabilisticAssessment,
     ReasoningSubproblem,
 )
+from griot_integration_pipeline import GriotIntegrationPipeline, IntegratedReasoningResult
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
 from griot_hypothesis_v050 import HypothesisController, HypothesisReport
@@ -108,6 +109,7 @@ class Quid:
         self.knowledge = KnowledgeAcquisitionEngine(self.engine)
         self.advanced_reasoning = AdvancedReasoningEngine(self.engine)
         self.verifier = VerificationEngine()
+        self.integration = GriotIntegrationPipeline(self)
 
     def simulate(
         self,
@@ -155,6 +157,52 @@ class Quid:
 
     def discover_reasoning_rules(self, *, min_support: int = 2) -> tuple[DiscoveredRule, ...]:
         return self.advanced_reasoning.discover_rules(min_support=min_support)
+
+    def analisar_integrado(
+        self,
+        query: str,
+        *,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+        context_source: str = "query",
+    ) -> IntegratedReasoningResult:
+        """Run the canonical G1 -> retrieval -> reasoning -> G3 pipeline."""
+        return self.integration.run(
+            query,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+            context_source=context_source,
+        )
+
+    def adquirir_e_analisar(
+        self,
+        text: str,
+        *,
+        source: str | KnowledgeSource,
+        query: str | None = None,
+        document_id: str | None = None,
+        auto_commit: bool = True,
+        replace: bool = True,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+        context_source: str = "acquired-query",
+    ) -> tuple[AcquisitionReport, IntegratedReasoningResult]:
+        """Acquire durable knowledge through G2, then run the same G1-G3 path."""
+        return self.integration.acquire_and_run(
+            text,
+            source=source,
+            query=query,
+            document_id=document_id,
+            auto_commit=auto_commit,
+            replace=replace,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+            context_source=context_source,
+        )
 
     def acquire_knowledge(
         self,
