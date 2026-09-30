@@ -195,6 +195,7 @@ class SQLiteKnowledgeStore:
         relation: str | None = None,
         object_: str | None = None,
         negated: bool | None = None,
+        provenance: str | None = None,
         limit: int | None = None,
     ) -> tuple[Fact, ...]:
         clauses: list[str] = []
@@ -211,6 +212,9 @@ class SQLiteKnowledgeStore:
         if negated is not None:
             clauses.append("negated = ?")
             values.append(int(negated))
+        if provenance is not None:
+            clauses.append("provenance = ?")
+            values.append(provenance)
 
         sql = """
             SELECT subject, relation, object, confidence, negated,
