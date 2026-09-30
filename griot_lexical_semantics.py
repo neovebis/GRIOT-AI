@@ -84,6 +84,7 @@ class SemanticLexicon:
     )
 
     _GENERATED_FORMS: dict[str, str] | None = None
+    AMBIGUOUS_FORMS = frozenset({"a", "e", "o", "as", "os", "em", "am", "um", "uma", "esta", "este", "essa", "esse"})
 
     @staticmethod
     def normalize(value: str) -> str:
@@ -154,7 +155,8 @@ class SemanticLexicon:
             for suffixes, _ in paradigms:
                 for suffix in suffixes:
                     form = cls.normalize(stem + suffix)
-                    forms.setdefault(form, lemma)
+                    if len(form) >= 4 and form not in cls.AMBIGUOUS_FORMS:
+                        forms.setdefault(form, lemma)
 
         cls._GENERATED_FORMS = forms
         return forms
@@ -174,8 +176,6 @@ class SemanticLexicon:
         normalized = cls.normalize(clause)
         for pattern, relation in cls.relation_patterns():
             if pattern.match(normalized):
-                # "caused_by" is a deliberate boundary: it is not silently
-                # collapsed into "causes" because argument direction changes.
                 return relation
         return None
 
