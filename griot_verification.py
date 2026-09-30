@@ -7,6 +7,7 @@ from griot_cognition_v100 import Assessment, EpistemicStatus
 from griot_engine import Fact, Inference
 from griot_gir import GIR
 from griot_reasoning_v040 import ReasoningEngine, ReasoningResult, TruthStatus
+from griot_reasoning_invariants import ReasoningInvariantEngine
 
 
 class VerificationStatus(str, Enum):
@@ -168,6 +169,18 @@ class VerificationEngine:
                 VerificationIssue(
                     "nondeterministic-replay",
                     "reasoning replay did not reproduce the same status/confidence",
+                )
+            )
+
+        invariant_report = ReasoningInvariantEngine().check(
+            result,
+            durable_facts=direct_facts,
+        )
+        for issue in invariant_report.issues:
+            issues.append(
+                VerificationIssue(
+                    f"invariant:{issue.code}",
+                    issue.message,
                 )
             )
 
