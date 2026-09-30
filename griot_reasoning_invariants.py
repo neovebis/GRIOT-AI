@@ -116,7 +116,10 @@ class ReasoningInvariantEngine:
                     "direct-proof-not-in-durable-set",
                     f"direct proof {proof.subject} {proof.relation} {proof.object} is absent from durable facts",
                 ))
-            if proof.subject not in {node.quid for node in meaning.nodes} or proof.object not in {node.quid for node in meaning.nodes}:
+            if proof.rule != "support" and (
+                proof.subject not in {node.quid for node in meaning.nodes}
+                or proof.object not in {node.quid for node in meaning.nodes}
+            ):
                 issues.append(InvariantIssue(
                     "proof-outside-meaning",
                     f"proof {proof.subject} {proof.relation} {proof.object} references a QUID absent from GIR",
