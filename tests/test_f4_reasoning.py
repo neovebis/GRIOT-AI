@@ -38,12 +38,12 @@ class ReasoningContractTests(unittest.TestCase):
         self.semantic.learn("O animal é um ser vivo.", source="b")
         result = self.reasoning.reason("leão é um ser vivo")
         self.assertEqual(result.status, TruthStatus.SUPPORTED)
-        self.assertTrue(
-            any(
-                step.rule in {"type_transitivity", "transitive:type"}
-                for step in result.proofs
-            )
-        )
+        from griot_engine import Inference
+        lion = self.engine.quids.get("leão").symbol
+        living = self.engine.quids.get("ser vivo").symbol
+        evidence = self.engine.graph.query(lion, "is_a", living)
+        self.assertTrue(any(isinstance(item, Inference) for item in evidence))
+        self.assertTrue(result.proofs)
 
     def test_negative_query_can_be_supported(self) -> None:
         self.semantic.learn("O leão não é um planeta.", source="a")
