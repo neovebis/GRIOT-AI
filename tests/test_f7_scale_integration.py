@@ -13,7 +13,7 @@ from griot_working_graph import WorkingGraph
 class ScaleIntegrationTests(unittest.TestCase):
     def test_combined_10000_fact_invariants(self) -> None:
         engine = GRIOT.create()
-        animal = engine.quids.get("animal").symbol
+        animal = engine.quids.ensure("animal", family_id=1).symbol
 
         for index in range(10000):
             subject = engine.quids.ensure(f"entity-{index}", family_id=1).symbol
