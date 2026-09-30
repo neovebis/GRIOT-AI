@@ -1,0 +1,600 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import re
+import unicodedata
+from typing import Iterable
+
+
+@dataclass(frozen=True, slots=True)
+class LanguageToken:
+    text: str
+    lemma: str
+    position: int
+    pos: str
+    tense: str | None = None
+    aspect: str | None = None
+    person: int | None = None
+    number: str | None = None
+    gender: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SemanticRole:
+    role: str
+    text: str
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class Quantifier:
+    surface: str
+    kind: str
+    scope: str
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class Comparison:
+    subject: str
+    operator: str
+    reference: str
+    property_text: str
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class Conditional:
+    condition: str
+    consequent: str
+    confidence: float
+
+
+@dataclass(frozen=True, slots=True)
+class LanguageClause:
+    text: str
+    subject: str | None
+    predicate: str | None
+    verb: str | None
+    relation: str | None
+    object: str | None
+    roles: tuple[SemanticRole, ...]
+    negated: bool
+    tense: str | None
+    aspect: str | None
+    modality: str | None
+    temporal: tuple[str, ...]
+    quantifiers: tuple[Quantifier, ...]
+    comparison: Comparison | None
+
+
+@dataclass(frozen=True, slots=True)
+class LanguageAnalysis:
+    text: str
+    tokens: tuple[LanguageToken, ...]
+    clauses: tuple[LanguageClause, ...]
+    quantifiers: tuple[Quantifier, ...]
+    comparisons: tuple[Comparison, ...]
+    conditionals: tuple[Conditional, ...]
+    markers: tuple[str, ...]
+
+
+class LanguageIntelligence:
+    """Deterministic language-understanding front-end for GRIOT.
+
+    This is deliberately model-free: morphology and shallow syntax are made
+    explicit so the semantic compiler can consume structured linguistic facts
+    instead of relying only on relation regexes.
+    """
+
+    PRONOUNS = {
+        "eu": ("1", "sing"), "tu": ("2", "sing"), "ele": ("3", "sing"),
+        "ela": ("3", "sing"), "eles": ("3", "plur"), "elas": ("3", "plur"),
+        "nós": ("1", "plur"), "nos": ("1", "plur"), "vós": ("2", "plur"),
+        "vocês": ("3", "plur"), "voce": ("3", "sing"), "você": ("3", "sing"),
+        "isto": ("3", "sing"), "isso": ("3", "sing"), "aquilo": ("3", "sing"),
+    }
+
+    DETERMINERS = frozenset({
+        "o", "a", "os", "as", "um", "uma", "uns", "umas", "este", "esta",
+        "estes", "estas", "esse", "essa", "esses", "essas", "aquele",
+        "aquela", "aqueles", "aquelas", "meu", "minha", "meus", "minhas",
+        "seu", "sua", "seus", "suas",
+    })
+
+    PREPOSITIONS = frozenset({
+        "a", "ao", "aos", "à", "às", "de", "do", "da", "dos", "das", "em",
+        "no", "na", "nos", "nas", "por", "para", "com", "sem", "sobre",
+        "entre", "contra", "desde", "até", "perante", "sob",
+    })
+
+    CONJUNCTIONS = frozenset({
+        "e", "ou", "mas", "porém", "porem", "contudo", "entretanto",
+        "porque", "pois", "se", "embora", "quando", "enquanto", "portanto",
+        "logo", "assim", "que",
+    })
+
+    NEGATIONS = frozenset({"não", "nao", "nunca", "jamais", "nem"})
+
+    QUANTIFIER_KINDS = {
+        "todo": "universal",
+        "toda": "universal",
+        "todos": "universal",
+        "todas": "universal",
+        "nenhum": "negative_universal",
+        "nenhuma": "negative_universal",
+        "algum": "existential",
+        "alguma": "existential",
+        "alguns": "existential_plural",
+        "algumas": "existential_plural",
+        "vários": "existential_plural",
+        "varios": "existential_plural",
+        "várias": "existential_plural",
+        "varias": "existential_plural",
+        "cada": "distributive",
+        "ambos": "dual",
+        "ambas": "dual",
+        "um": "indefinite",
+        "uma": "indefinite",
+    }
+
+    MODALS = {
+        "pode": "possibility",
+        "podem": "possibility",
+        "poder": "possibility",
+        "poderia": "possibility",
+        "deve": "necessity",
+        "devem": "necessity",
+        "dever": "necessity",
+        "deveria": "necessity",
+        "precisa": "necessity",
+        "precisam": "necessity",
+        "precisar": "necessity",
+        "talvez": "uncertainty",
+        "provavelmente": "probability",
+        "certamente": "certainty",
+    }
+
+    TEMPORAL = {
+        "ontem": "past",
+        "hoje": "present",
+        "agora": "present",
+        "amanhã": "future",
+        "amanha": "future",
+        "antes": "relative_before",
+        "depois": "relative_after",
+        "enquanto": "overlap",
+    }
+
+    RELATION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+        (re.compile(r"^(.+?)\s+faz parte (?:de|do|da|dos|das)\s+(.+)$", re.I), "part_of"),
+        (re.compile(r"^(.+?)\s+pertence a\s+(.+)$", re.I), "member_of"),
+        (re.compile(r"^(.+?)\s+é um\s+(.+)$", re.I), "is_a"),
+        (re.compile(r"^(.+?)\s+é uma\s+(.+)$", re.I), "is_a"),
+        (re.compile(r"^(.+?)\s+(?:tem|possui)\s+(.+)$", re.I), "has"),
+        (re.compile(r"^(.+?)\s+(?:causa|provoca)\s+(.+)$", re.I), "causes"),
+        (re.compile(r"^(.+?)\s+antes de\s+(.+)$", re.I), "before"),
+        (re.compile(r"^(.+?)\s+depois de\s+(.+)$", re.I), "after"),
+        (re.compile(r"^(.+?)\s+(?:está|esta|fica|vive)\s+(?:em|no|na|nos|nas)\s+(.+)$", re.I), "located_in"),
+    )
+
+    VERB_LEMMAS = {
+        "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar",
+        "come": "comer", "comeu": "comer", "comer": "comer", "comem": "comer",
+        "vê": "ver", "ve": "ver", "viu": "ver", "ver": "ver", "veem": "ver",
+        "usa": "usar", "usou": "usar", "usar": "usar", "usam": "usar",
+        "constrói": "construir", "constroi": "construir", "construiu": "construir",
+        "construir": "construir", "constroem": "construir",
+        "cria": "criar", "criou": "criar", "criar": "criar", "criam": "criar",
+        "ajuda": "ajudar", "ajudou": "ajudar", "ajudar": "ajudar", "ajudam": "ajudar",
+        "fere": "ferir", "feriu": "ferir", "ferir": "ferir", "ferem": "ferir",
+        "quer": "querer", "queria": "querer", "querer": "querer", "querem": "querer",
+        "precisa": "precisar", "precisou": "precisar", "precisar": "precisar", "precisam": "precisar",
+        "sabe": "saber", "soube": "saber", "saber": "saber", "sabem": "saber",
+        "faz": "fazer", "fez": "fazer", "fazer": "fazer", "fazem": "fazer",
+        "é": "ser", "era": "ser", "foi": "ser", "ser": "ser", "são": "ser", "sao": "ser",
+        "está": "estar", "esta": "estar", "estava": "estar", "estavam": "estar", "estar": "estar",
+        "fica": "ficar", "ficou": "ficar", "ficar": "ficar",
+        "tem": "ter", "tinha": "ter", "teve": "ter", "ter": "ter", "têm": "ter", "temos": "ter",
+        "vai": "ir", "vão": "ir", "vao": "ir", "ia": "ir", "foi": "ir", "ir": "ir",
+        "pode": "poder", "podem": "poder", "poder": "poder",
+        "deve": "dever", "devem": "dever", "dever": "dever",
+        "há": "haver", "ha": "haver", "havia": "haver", "haver": "haver",
+    }
+
+    AUXILIARIES = frozenset({
+        "ser", "estar", "ter", "haver", "ir", "poder", "dever", "precisar",
+        "é", "era", "foi", "está", "esta", "estava", "tem", "tinha", "teve",
+        "vai", "vão", "vao", "pode", "podem", "deve", "devem",
+    })
+
+    @staticmethod
+    def normalize_token(token: str) -> str:
+        return unicodedata.normalize("NFKC", token).casefold()
+
+    def tokenize(self, text: str) -> tuple[LanguageToken, ...]:
+        if not isinstance(text, str):
+            raise TypeError("text must be a string")
+        pieces = re.findall(r"[\wÀ-ÿ]+(?:['’-][\wÀ-ÿ]+)?|\d+(?:[\.,]\d+)?|[^\w\s]", text, re.UNICODE)
+        return tuple(
+            LanguageToken(
+                piece,
+                self._lemma(piece),
+                index,
+                self._pos(piece),
+                *self._morphology(piece),
+            )
+            for index, piece in enumerate(pieces)
+        )
+
+    def analyze(self, text: str) -> LanguageAnalysis:
+        if not isinstance(text, str):
+            raise TypeError("text must be a string")
+        if not text.strip():
+            raise ValueError("text must not be empty")
+
+        tokens = self.tokenize(text)
+        clauses_text = self._split_clauses(text)
+        clauses = tuple(self._parse_clause(value) for value in clauses_text if value.strip())
+        quantifiers = self._all_quantifiers(text)
+        comparisons = tuple(
+            clause.comparison for clause in clauses if clause.comparison is not None
+        )
+        conditionals = self._conditionals(text)
+        markers = tuple(
+            token for token in self.TEMPORAL if re.search(rf"(?<!\w){re.escape(token)}(?!\w)", text.casefold())
+        )
+        return LanguageAnalysis(
+            text=text,
+            tokens=tokens,
+            clauses=clauses,
+            quantifiers=quantifiers,
+            comparisons=comparisons,
+            conditionals=conditionals,
+            markers=markers,
+        )
+
+    def _split_clauses(self, text: str) -> tuple[str, ...]:
+        normalized = re.sub(r"\s+", " ", text.strip())
+        if not normalized:
+            return ()
+        chunks = re.split(r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+", normalized, flags=re.I)
+        return tuple(chunk.strip(" ,;") for chunk in chunks if chunk.strip(" ,;"))
+
+    def _parse_clause(self, clause: str) -> LanguageClause:
+        lower = clause.casefold()
+        negated = bool(re.search(r"(?<!\w)(?:não|nao|nunca|jamais)(?!\w)", lower))
+        modality = self._find_modality(lower)
+        temporal = tuple(value for word, value in self.TEMPORAL.items() if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", lower))
+        quantifiers = self._quantifiers(clause)
+
+        for pattern, relation in self.RELATION_PATTERNS:
+            match = pattern.match(clause.strip())
+            if match:
+                subject = self._strip_det(match.group(1))
+                object_ = self._strip_det(match.group(2))
+                return LanguageClause(
+                    clause,
+                    subject,
+                    f"{relation}:{match.group(2)}",
+                    self._find_main_verb(clause),
+                    relation,
+                    object_,
+                    self._roles(subject, match.group(2), relation, clause),
+                    negated,
+                    self._clause_tense(clause),
+                    self._clause_aspect(clause),
+                    modality,
+                    temporal,
+                    quantifiers,
+                    self._comparison(clause),
+                )
+
+        verb_index = self._main_verb_index(clause)
+        if verb_index is None:
+            return LanguageClause(
+                clause, None, None, None, None, None, (),
+                negated, None, None, modality, temporal, quantifiers, self._comparison(clause),
+            )
+
+        words = clause.split()
+        verb_word = words[verb_index]
+        subject = self._strip_det(" ".join(words[:verb_index]).strip()) or None
+        tail = " ".join(words[verb_index + 1:]).strip()
+        object_ = self._extract_object(tail)
+        lemma = self._lemma(verb_word)
+        relation = self._relation_for_verb(clause, lemma)
+        roles = self._roles(subject, object_, relation, clause)
+        return LanguageClause(
+            clause,
+            subject,
+            tail or None,
+            verb_word,
+            relation,
+            object_ or None,
+            roles,
+            negated,
+            self._clause_tense(clause),
+            self._clause_aspect(clause),
+            modality,
+            temporal,
+            quantifiers,
+            self._comparison(clause),
+        )
+
+    def _roles(self, subject: str | None, object_: str | None, relation: str | None, clause: str) -> tuple[SemanticRole, ...]:
+        roles: list[SemanticRole] = []
+        if subject:
+            roles.append(SemanticRole("agent", self._strip_det(subject), 0.88))
+        if relation in {"wants", "needs", "knows"} and subject:
+            roles[0] = SemanticRole("experiencer", self._strip_det(subject), 0.92)
+        if object_:
+            roles.append(SemanticRole("patient", self._strip_det(object_), 0.86))
+        match = re.search(r"\b(?:em|no|na|nos|nas)\s+([^,;]+)", clause, flags=re.I)
+        if match:
+            roles.append(SemanticRole("location", self._strip_det(match.group(1)), 0.84))
+        instrument = re.search(r"\bcom\s+([^,;]+)", clause, flags=re.I)
+        if instrument and not re.search(r"\bcom\s+(?:ele|ela|eles|elas|me|te|nos|vos)\b", instrument.group(0), re.I):
+            roles.append(SemanticRole("instrument", self._strip_det(instrument.group(1)), 0.72))
+        recipient = re.search(r"\bpara\s+([^,;]+)", clause, flags=re.I)
+        if recipient:
+            roles.append(SemanticRole("recipient", self._strip_det(recipient.group(1)), 0.76))
+        for word in self.TEMPORAL:
+            if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", clause.casefold()):
+                roles.append(SemanticRole("temporal", word, 0.90))
+        return self._dedupe_roles(roles)
+
+    def _main_verb_index(self, clause: str) -> int | None:
+        words = clause.split()
+        for index, word in enumerate(words):
+            if self._pos(word) == "VERB":
+                return index
+        return None
+
+    def _find_main_verb(self, clause: str) -> str | None:
+        index = self._main_verb_index(clause)
+        return clause.split()[index] if index is not None else None
+
+    def _relation_for_verb(self, clause: str, lemma: str) -> str | None:
+        explicit = {
+            "atacar": "attacks",
+            "comer": "eats",
+            "ver": "sees",
+            "usar": "uses",
+            "construir": "builds",
+            "criar": "creates",
+            "ajudar": "helps",
+            "ferir": "hurts",
+            "querer": "wants",
+            "precisar": "needs",
+            "saber": "knows",
+            "causar": "causes",
+            "provocar": "causes",
+            "ter": "has",
+            "possuir": "has",
+            "ser": "is_a",
+            "estar": "located_in",
+        }
+        if lemma in explicit:
+            return explicit[lemma]
+        if re.search(r"\b(?:causa|causou|provoca|provocou)\b", clause, re.I):
+            return "causes"
+        return None
+
+    def _extract_object(self, tail: str) -> str:
+        if not tail:
+            return ""
+        tail = re.sub(r"^(?:não|nao|nunca|jamais)\s+", "", tail, flags=re.I)
+        tail = re.split(r"\s+(?:e|ou|mas|porque|se)\s+", tail, maxsplit=1, flags=re.I)[0]
+        tail = re.sub(r"\s+(?:ontem|hoje|agora|amanhã|amanha)$", "", tail, flags=re.I)
+        return tail.strip(" ,;:")
+
+    def _clause_tense(self, clause: str) -> str | None:
+        words = [self.normalize_token(w) for w in re.findall(r"[\wÀ-ÿ]+", clause)]
+        for i, word in enumerate(words):
+            lemma = self._lemma(word)
+            tense, _, _, _ = self._morphology(word)
+            if lemma in {"ser", "estar", "ter", "ir", "poder", "dever"}:
+                if tense:
+                    return self._periphrastic_tense(words, i, tense)
+            if tense:
+                return tense
+        return None
+
+    def _periphrastic_tense(self, words: list[str], index: int, tense: str) -> str:
+        if tense in {"present"} and index + 1 < len(words):
+            next_word = words[index + 1]
+            next_tense, _, _, _ = self._morphology(next_word)
+            if self._lemma(words[index]) == "ir" and next_tense == "infinitive":
+                return "near_future"
+        if tense in {"past_perfect", "past_imperfect"} and index + 1 < len(words):
+            next_word = words[index + 1]
+            next_tense, _, _, _ = self._morphology(next_word)
+            if self._lemma(words[index]) == "estar" and next_tense == "gerund":
+                return tense
+        return tense
+
+    def _clause_aspect(self, clause: str) -> str | None:
+        words = [self.normalize_token(w) for w in re.findall(r"[\wÀ-ÿ]+", clause)]
+        for index, word in enumerate(words[:-1]):
+            lemma = self._lemma(word)
+            next_tense, _, _, _ = self._morphology(words[index + 1])
+            if lemma == "estar" and next_tense == "gerund":
+                return "progressive"
+            if lemma in {"ter", "haver"} and next_tense == "participle":
+                return "perfect"
+        return None
+
+    def _morphology(self, word: str) -> tuple[str | None, str | None, int | None, str | None]:
+        key = self.normalize_token(word)
+        irregular = {
+            "sou": ("present", 1, "sing"), "és": ("present", 2, "sing"), "e": ("present", 3, "sing"),
+            "é": ("present", 3, "sing"), "somos": ("present", 1, "plur"), "são": ("present", 3, "plur"),
+            "era": ("past_imperfect", 3, "sing"), "eram": ("past_imperfect", 3, "plur"),
+            "foi": ("past_perfect", 3, "sing"), "foram": ("past_perfect", 3, "plur"),
+            "está": ("present", 3, "sing"), "estava": ("past_imperfect", 3, "sing"), "estavam": ("past_imperfect", 3, "plur"),
+            "tem": ("present", 3, "sing"), "têm": ("present", 3, "plur"), "tinha": ("past_imperfect", 3, "sing"),
+            "teve": ("past_perfect", 3, "sing"), "tinham": ("past_imperfect", 3, "plur"),
+            "vai": ("present", 3, "sing"), "vão": ("present", 3, "plur"), "ia": ("past_imperfect", 3, "sing"),
+            "pode": ("present", 3, "sing"), "podem": ("present", 3, "plur"), "poderia": ("conditional", 3, "sing"),
+            "deve": ("present", 3, "sing"), "devem": ("present", 3, "plur"), "deveria": ("conditional", 3, "sing"),
+            "quer": ("present", 3, "sing"), "queria": ("past_imperfect", 3, "sing"),
+            "soube": ("past_perfect", 3, "sing"), "sabe": ("present", 3, "sing"),
+        }
+        if key in irregular:
+            tense, person, number = irregular[key]
+            return tense, None, person, number
+        if re.fullmatch(r"[^\W\d_]+(?:ando|endo|indo)", key, re.UNICODE):
+            return "gerund", "progressive", None, None
+        if re.fullmatch(r"[^\W\d_]+(?:ado|ido)", key, re.UNICODE):
+            return "participle", "perfect", None, None
+        if re.fullmatch(r"[^\W\d_]+(?:ar|er|ir)", key, re.UNICODE):
+            return "infinitive", None, None, None
+
+        endings: tuple[tuple[str, str, int | None, str | None], ...] = (
+            ("arão", "future", 3, "plur"), ("erão", "future", 3, "plur"), ("irão", "future", 3, "plur"),
+            ("ará", "future", 3, "sing"), ("erá", "future", 3, "sing"), ("irá", "future", 3, "sing"),
+            ("aremos", "future", 1, "plur"), ("eremos", "future", 1, "plur"), ("iremos", "future", 1, "plur"),
+            ("aria", "conditional", 3, "sing"), ("eria", "conditional", 3, "sing"), ("iria", "conditional", 3, "sing"),
+            ("ariam", "conditional", 3, "plur"), ("eriam", "conditional", 3, "plur"), ("iriam", "conditional", 3, "plur"),
+            ("ávamos", "past_imperfect", 1, "plur"), ("íamos", "past_imperfect", 1, "plur"), ("ávamos", "past_imperfect", 1, "plur"),
+            ("ava", "past_imperfect", 3, "sing"), ("ia", "past_imperfect", 3, "sing"),
+            ("avam", "past_imperfect", 3, "plur"), ("iam", "past_imperfect", 3, "plur"),
+            ("aste", "past_perfect", 2, "sing"), ("aram", "past_perfect", 3, "plur"),
+            ("ávamos", "past_imperfect", 1, "plur"), ("amos", "present", 1, "plur"),
+            ("ais", "present", 2, "plur"), ("am", "present", 3, "plur"),
+            ("as", "present", 2, "sing"), ("es", "present", 2, "sing"),
+            ("is", "present", 2, "sing"), ("a", "present", 3, "sing"),
+            ("e", "present", 3, "sing"), ("o", "present", 1, "sing"),
+        )
+        for ending, tense, person, number in endings:
+            if key.endswith(ending) and len(key) > len(ending) + 1:
+                return tense, None, person, number
+        return None, None, None, None
+
+    def _lemma(self, word: str) -> str:
+        key = self.normalize_token(word)
+        if key in self.VERB_LEMMAS:
+            return self.VERB_LEMMAS[key]
+        return key
+
+    def _pos(self, word: str) -> str:
+        key = self.normalize_token(word)
+        if re.fullmatch(r"\d+(?:[\.,]\d+)?", key):
+            return "NUM"
+        if key in self.NEGATIONS:
+            return "NEG"
+        if key in self.PRONOUNS:
+            return "PRON"
+        if key in self.DETERMINERS:
+            return "DET"
+        if key in self.PREPOSITIONS:
+            return "PREP"
+        if key in self.CONJUNCTIONS:
+            return "CONJ"
+        if key in self.VERB_LEMMAS or self._morphology(key)[0] is not None:
+            return "VERB"
+        if key in self.MODALS:
+            return "AUX"
+        if key in self.TEMPORAL:
+            return "ADV"
+        if re.fullmatch(r"[A-Za-zÀ-ÿ]+", key):
+            return "WORD"
+        return "PUNCT"
+
+    def _find_modality(self, text: str) -> str | None:
+        for word, value in sorted(self.MODALS.items(), key=lambda item: -len(item[0])):
+            if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", text):
+                return value
+        return None
+
+    def _quantifiers(self, text: str) -> tuple[Quantifier, ...]:
+        words = text.split()
+        result: list[Quantifier] = []
+        for index, word in enumerate(words):
+            key = self.normalize_token(word.strip(" ,.;:!?"))
+            kind = self.QUANTIFIER_KINDS.get(key)
+            if kind is None:
+                continue
+            scope_words: list[str] = []
+            for candidate in words[index + 1:]:
+                clean = candidate.strip(" ,.;:!?")
+                if clean.casefold() in self.CONJUNCTIONS or clean.casefold() in self.PREPOSITIONS:
+                    break
+                scope_words.append(clean)
+                if len(scope_words) >= 4:
+                    break
+            scope = " ".join(scope_words)
+            result.append(Quantifier(key, kind, scope, 0.90))
+        return self._dedupe_quantifiers(result)
+
+    def _all_quantifiers(self, text: str) -> tuple[Quantifier, ...]:
+        return self._quantifiers(text)
+
+    def _comparison(self, text: str) -> Comparison | None:
+        patterns = (
+            (r"(.+?)\s+é\s+mais\s+(.+?)\s+do\s+que\s+(.+)$", "greater_than"),
+            (r"(.+?)\s+é\s+menos\s+(.+?)\s+do\s+que\s+(.+)$", "less_than"),
+            (r"(.+?)\s+é\s+tão\s+(.+?)\s+quanto\s+(.+)$", "equal_degree"),
+        )
+        for pattern, operator in patterns:
+            match = re.match(pattern, text.strip(), re.I)
+            if match:
+                return Comparison(
+                    self._strip_det(match.group(1)),
+                    operator,
+                    self._strip_det(match.group(3)),
+                    match.group(2).strip(),
+                    0.88,
+                )
+        return None
+
+    def _conditionals(self, text: str) -> tuple[Conditional, ...]:
+        match = re.match(r"\s*se\s+(.+?)(?:,|\s+então\s+)\s*(.+)$", text.strip(), flags=re.I)
+        if not match:
+            return ()
+        return (Conditional(match.group(1).strip(), match.group(2).strip(), 0.88),)
+
+    @staticmethod
+    def _strip_det(value: str) -> str:
+        value = value.strip()
+        return re.sub(
+            r"^(?:o|a|os|as|um|uma|uns|umas|este|esta|esse|essa|aquele|aquela)\s+",
+            "",
+            value,
+            flags=re.I,
+        ).strip(" ,.;:!?")
+
+    @staticmethod
+    def _dedupe_roles(values: Iterable[SemanticRole]) -> tuple[SemanticRole, ...]:
+        seen: set[tuple[str, str]] = set()
+        out: list[SemanticRole] = []
+        for value in values:
+            key = (value.role, value.text.casefold())
+            if key not in seen:
+                seen.add(key)
+                out.append(value)
+        return tuple(out)
+
+    @staticmethod
+    def _dedupe_quantifiers(values: Iterable[Quantifier]) -> tuple[Quantifier, ...]:
+        seen: set[tuple[str, str, str]] = set()
+        out: list[Quantifier] = []
+        for value in values:
+            key = (value.surface, value.kind, value.scope)
+            if key not in seen:
+                seen.add(key)
+                out.append(value)
+        return tuple(out)
+
+
+__all__ = [
+    "LanguageToken",
+    "SemanticRole",
+    "Quantifier",
+    "Comparison",
+    "Conditional",
+    "LanguageClause",
+    "LanguageAnalysis",
+    "LanguageIntelligence",
+]
