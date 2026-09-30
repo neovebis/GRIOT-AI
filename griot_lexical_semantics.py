@@ -84,6 +84,10 @@ class SemanticLexicon:
 
     _GENERATED_FORMS: dict[str, str] | None = None
     AMBIGUOUS_FORMS = frozenset({"a", "e", "o", "as", "os", "em", "am", "um", "uma", "esta", "este", "essa", "esse"})
+    IRREGULAR_FORMS = {
+        "agride": "agredir",
+        "agridem": "agredir",
+    }
 
     @staticmethod
     def normalize(value: str) -> str:
@@ -116,6 +120,15 @@ class SemanticLexicon:
         if key in cls.ALIASES:
             lemma = cls.ALIASES[key]
             return LexicalResolution(key, lemma, cls.CANONICAL_RELATIONS[lemma], "alias", 0.95)
+        irregular = cls.IRREGULAR_FORMS.get(key)
+        if irregular is not None:
+            return LexicalResolution(
+                key,
+                irregular,
+                cls.CANONICAL_RELATIONS[cls.ALIASES.get(irregular, irregular)],
+                "irregular",
+                0.93,
+            )
         forms = cls._generated_forms()
         lemma = forms.get(key)
         if lemma is None:
@@ -139,7 +152,7 @@ class SemanticLexicon:
             return cls._GENERATED_FORMS
 
         verbs = set(cls.CANONICAL_RELATIONS) | set(cls.ALIASES)
-        forms: dict[str, str] = {}
+        forms: dict[str, str] = dict(cls.IRREGULAR_FORMS)
         for lemma in verbs:
             forms.setdefault(lemma, cls.ALIASES.get(lemma, lemma))
             if lemma.endswith("ar"):
