@@ -49,11 +49,13 @@ class SelectiveRetriever:
 
         candidates: dict[Fact, tuple[float, str]] = {}
 
-        exact = self.indices.query(
-            subject=subject,
-            relation=relation,
-            object_=object_,
-        )
+        exact = ()
+        if subject is not None and relation is not None and object_ is not None:
+            exact = self.indices.query(
+                subject=subject,
+                relation=relation,
+                object_=object_,
+            )
         for fact in exact:
             candidates[fact] = (
                 1.00 + 0.15 * float(fact.confidence),
