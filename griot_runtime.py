@@ -56,21 +56,25 @@ class GRIOTRuntime:
         return RuntimeAnalysis(result, self.STAGES, integrated)
 
     def health(self) -> RuntimeHealth:
-        missing = []
-        required = {
-            "semantic_intent": getattr(self.quid.semantic, "intent", None),
-            "ambiguity": getattr(self.quid.semantic, "ambiguity", None),
-            "polysemy": getattr(self.quid.semantic, "polysemy", None),
-            "coreference": getattr(self.quid.semantic, "coreference", None),
-            "discourse_context": getattr(self.quid.engine, "discourse", None),
-            "query_planner": getattr(self.quid, "query_planner", None),
-            "working_graph": getattr(self.quid, "query_planner", None),
-            "reasoning": getattr(self.quid, "reasoning", None),
-            "epistemic": getattr(self.quid, "epistemic", None),
-            "verification": getattr(self.quid, "verifier", None),
+        components = {
+            "semantic_intent": lambda: self.quid.semantic.intent,
+            "ambiguity": lambda: self.quid.semantic.ambiguity,
+            "polysemy": lambda: self.quid.semantic.polysemy,
+            "coreference": lambda: self.quid.semantic.coreference,
+            "discourse_context": lambda: self.quid.engine.discourse,
+            "query_planner": lambda: self.quid.query_planner,
+            "working_graph": lambda: self.quid.query_planner.retriever if hasattr(self.quid.query_planner, "retriever") else None,
+            "reasoning": lambda: self.quid.reasoning,
+            "epistemic": lambda: self.quid.epistemic,
+            "verification": lambda: self.quid.verifier,
         }
+        missing = []
         for stage in self.STAGES:
-            if required.get(stage) is None:
+            try:
+                value = components[stage]()
+            except (AttributeError, TypeError):
+                value = None
+            if value is None:
                 missing.append(stage)
         return RuntimeHealth(self.STAGES, not missing, tuple(missing))
 
