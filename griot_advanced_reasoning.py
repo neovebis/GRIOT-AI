@@ -152,7 +152,16 @@ class AdvancedReasoningEngine:
         if strategy == "hypothetical" and result.status is TruthStatus.UNKNOWN:
             hypotheses = self.hypotheses.generate(query, limit=hypothesis_limit)
         elif strategy == "counterfactual":
-            counterfactual = self.counterfactual_engine.run(query, query, steps=max_hops)
+            assumption = self._counterfactual_assumption(query)
+            if assumption:
+                try:
+                    counterfactual = self.counterfactual_engine.run(
+                        assumption,
+                        query,
+                        steps=max_hops,
+                    )
+                except ValueError:
+                    counterfactual = None
         elif strategy == "causal":
             target = self._first_query_object(query)
             if target is not None:
@@ -244,32 +253,13 @@ class AdvancedReasoningEngine:
                 clauses = parts
 
         clauses = clauses[:max_parts]
-        return tuple(
-            ReasoningSubproblem(text=item, strategy=self.select_strategy(item), reason=self._strategy_reason(self.select_strategy(item)))
-            for item in clauses
-        )
+        return tuple(self._make_subproblem(item) for item in clauses)
 
     def probabilistic(self, result: ReasoningResult) -> ProbabilisticAssessment:
-        supports: list[float] = []
-        refutations: list[float] = []
-        sources_support: set[str] = set()
-        sources_refute: set[str] = set()
-
-        for evidence in result.proofs:
-            confidence = max(0.0, min(1.0, float(evidence.confidence)))
-            if evidence.rule == "direct":
-                if evidence.provenance:
-                    (sources_refute if evidence.subject == "" else sources_support).add(evidence.provenance)
-            if result.status is TruthStatus.REFUTED:
-                refutations.append(confidence)
-            elif result.status is TruthStatus.SUPPORTED:
-                supports.append(confidence)
-
-        # Use graph evidence because proof steps of contrary claims are included
-        # in the same ReasoningResult. Source diversity stays explicit.
         support_facts: list[Fact] = []
         refute_facts: list[Fact] = []
         graph = self.engine.graph
+
         for claim in result.claims:
             direct = [
                 fact for fact in graph.facts()
@@ -286,7 +276,8 @@ class AdvancedReasoningEngine:
         def combine(values: Iterable[float]) -> float:
             probability = 0.0
             for value in values:
-                probability = 1.0 - (1.0 - probability) * (1.0 - value)
+                bounded = max(0.0, min(1.0, float(value)))
+                probability = 1.0 - (1.0 - probability) * (1.0 - bounded)
             return max(0.0, min(1.0, probability))
 
         support_sources = {fact.provenance for fact in support_facts if fact.provenance}
@@ -302,40 +293,30 @@ class AdvancedReasoningEngine:
     def discover_rules(self, *, min_support: int = 2) -> tuple[DiscoveredRule, ...]:
         if min_support <= 0:
             raise ValueError("min_support must be > 0")
-        facts = tuple(
-            fact for fact in self.engine.graph.facts()
-            if not fact.negated
-        )
-        rules: dict[tuple[str, str, str], list[tuple[str, str, str]]] = {}
-
-        by_subject = {}
+        facts = tuple(fact for fact in self.engine.graph.facts() if not fact.negated)
+        by_subject: dict[str, list[Fact]] = {}
+        by_pair: dict[tuple[str, str], list[Fact]] = {}
         for fact in facts:
             by_subject.setdefault(fact.subject, []).append(fact)
+            by_pair.setdefault((fact.subject, fact.object), []).append(fact)
 
+        patterns: dict[tuple[str, str, str], set[tuple[str, str, str]]] = {}
         for first in facts:
-            bridges = [
-                second for second in facts
-                if second.subject == first.object
-            ]
-            for second in bridges:
-                for third in facts:
-                    if (
-                        third.subject == first.subject
-                        and third.object == second.object
-                    ):
-                        key = (first.relation, second.relation, third.relation)
-                        rules.setdefault(key, []).append(
-                            (first.subject, first.object, second.object)
-                        )
+            for second in by_subject.get(first.object, ()):
+                for third in by_pair.get((first.subject, second.object), ()):
+                    key = (first.relation, second.relation, third.relation)
+                    patterns.setdefault(key, set()).add(
+                        (first.subject, first.object, second.object)
+                    )
 
-        output = []
-        for (r1, r2, r3), examples in sorted(rules.items()):
-            unique_examples = tuple(sorted(set(examples)))
-            if len(unique_examples) < min_support:
+        output: list[DiscoveredRule] = []
+        for (r1, r2, r3), examples_set in sorted(patterns.items()):
+            examples = tuple(sorted(examples_set))
+            if len(examples) < min_support:
                 continue
-            confidence = min(1.0, len(unique_examples) / max(1, len(facts)))
+            confidence = min(1.0, len(examples) / max(1, len(facts)))
             output.append(
-                DiscoveredRule(r1, r2, r3, len(unique_examples), confidence, unique_examples[:16])
+                DiscoveredRule(r1, r2, r3, len(examples), confidence, examples[:16])
             )
         return tuple(output)
 
@@ -480,6 +461,20 @@ class AdvancedReasoningEngine:
             seen.add(key)
             out.append(proof)
         return tuple(out)
+
+    def _make_subproblem(self, text: str) -> ReasoningSubproblem:
+        strategy = self.select_strategy(text)
+        return ReasoningSubproblem(text, strategy, self._strategy_reason(strategy))
+
+    @staticmethod
+    def _counterfactual_assumption(query: str) -> str:
+        return re.sub(
+            r"^\s*e\s+se\s+",
+            "",
+            query.strip(),
+            count=1,
+            flags=re.I,
+        ).rstrip(" ?!.")
 
     @staticmethod
     def _strategy_reason(strategy: str) -> str:
