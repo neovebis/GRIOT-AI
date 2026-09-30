@@ -19,6 +19,7 @@ from griot_intent import SemanticIntentDetector, SemanticIntent
 from griot_metaphor import MetaphorResolver
 from griot_polysemy import PolysemyAnalysis, PolysemyResolver
 from griot_language import LanguageAnalysis, LanguageIntelligence
+from griot_semantic_grammar import SemanticGrammar
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +74,7 @@ class MeaningCompiler:
         self.metaphor = MetaphorResolver()
         self.intent = SemanticIntentDetector()
         self.language = LanguageIntelligence()
+        self.grammar = SemanticGrammar(self.griot)
         self._ambiguity_analysis: AmbiguityAnalysis | None = None
         self._polysemy_analysis: PolysemyAnalysis | None = None
 
@@ -290,6 +292,8 @@ class MeaningCompiler:
             for family in (self._polysemy_analysis.families if self._polysemy_analysis else ())
         )
         constraints["language"] = self._language_constraints(language_analysis)
+        grammar_analysis = self.grammar.analyze(text, language_analysis)
+        constraints["grammar"] = grammar_analysis.to_dict()
 
         return MeaningRepresentation(
             text,
