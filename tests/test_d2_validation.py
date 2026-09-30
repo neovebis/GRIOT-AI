@@ -16,7 +16,7 @@ class ValidationTests(unittest.TestCase):
         self.quid = Quid(self.engine)
 
     def test_new_fact_is_valid(self) -> None:
-        batch = self.quid.extract_knowledge("O leão é um animal.")
+        batch = self.quid.extract_knowledge("O leão é um animal.", source="memory")
         report = self.quid.validate_knowledge(batch)
         self.assertTrue(report.can_commit)
         self.assertEqual(report.valid[0].status, ValidationStatus.VALID)
