@@ -80,7 +80,7 @@ class TestH2ExecutionControl(unittest.TestCase):
             "A é uma entidade desconhecida?",
             max_cycles=4,
         )
-        self.assertEqual(result.stopped_reason, "repeated_control_state")
+        self.assertEqual(result.stopped_reason, "waiting")
         self.assertEqual(result.cycles, 1)
         self.assertEqual(
             result.steps[0].operation,
