@@ -10,7 +10,7 @@ class SelectiveRetrievalTests(unittest.TestCase):
     def setUp(self) -> None:
         self.engine = GRIOT.create()
         self.engine.learn(
-            "O leão é um animal. O leão vive na savana. A savana fica em África. O lobo é um animal.",
+            "O leão é um animal. O leão tem uma juba. A savana fica em África. O lobo é um animal.",
             source="memory",
         )
         self.retriever = SelectiveRetriever(self.engine, budget=3)
