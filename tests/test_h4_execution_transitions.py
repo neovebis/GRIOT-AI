@@ -35,7 +35,7 @@ class TestH4ExecutionTransitions(unittest.TestCase):
 
         self.assertEqual(result.stopped_reason, "repeated_control_state")
         self.assertEqual(result.cycles, 2)
-        self.assertEqual(len(result.steps), 1)
+        self.assertEqual(len(result.steps), 2)
         self.assertEqual(len(result.transitions), 2)
         self.assertFalse(result.transitions[1].changed)
         self.assertEqual(
