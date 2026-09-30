@@ -423,30 +423,18 @@ class Quid:
         )
 
     def analisar(self, text: str) -> QuidAnalysis:
-        if not isinstance(text, str):
-            raise TypeError("text must be a string")
-        if not text.strip():
-            raise ValueError("text must not be empty")
+        """Return the legacy analysis contract projected from the canonical pipeline."""
+        integrated = self.integration.run(text)
 
-        gir = self.semantic.understand(text)
-        context_view = self.engine.context.view(gir)
-        discourse_state = self.engine.discourse.observe(
+        gir = integrated.gir
+        result = integrated.advanced_reasoning.result
+        assessment = integrated.advanced_reasoning.epistemic
+        verification = integrated.advanced_reasoning.verification
+        semantic_intent = self.advanced_reasoning.semantic.intent.detect(
             text,
-            gir,
-            previous_records=self.engine.context.records(),
+            gir.frame,
         )
-        result = self.reasoning.reason_meaning(text, gir, context_view)
-        assessment = self.epistemic.assess(result, text)
-        semantic_intent = SemanticIntentDetector().detect(text, gir.frame)
-        math_result = (
-            self.math.calculate(text)
-            if semantic_intent.primary is IntentType.CALCULATION
-            else None
-        )
-        query_plan = self.query_planner.plan(gir, context_view)
-        execution = self.query_planner.execute(query_plan, gir, context_view)
-        working_state = execution.working_graph
-        self.engine.context.ingest(gir, source="query")
+        math_result = integrated.advanced_reasoning.math_result
 
         answer: bool | None
         if result.status is TruthStatus.SUPPORTED:
@@ -455,31 +443,19 @@ class Quid:
             answer = False
         else:
             answer = None
-
-        verification = self.verifier.verify(
-            gir,
-            result,
-            assessment,
-            reasoning_engine=self.reasoning,
-        )
         if not verification.ok:
             answer = None
 
-        semantic_facts = gir.facts()
-
         graph_evidence: tuple[Fact | Inference, ...] = ()
-        nodes = {node.node_id: node for node in gir.nodes}
-        for edge in gir.edges:
-            if edge.relation not in self.reasoning.QUERY_RELATIONS:
-                continue
-            source = nodes.get(edge.source)
-            target = nodes.get(edge.target)
-            if source is None or target is None:
-                continue
+        if integrated.query_plan.targets:
+            target = integrated.query_plan.targets[0]
             graph_evidence = tuple(
-                self.engine.graph.query(source.quid, edge.relation, target.quid)
+                self.engine.graph.query(
+                    target.subject,
+                    target.relation,
+                    target.object,
+                )
             )
-            break
 
         resolved = tuple(dict.fromkeys(node.quid for node in gir.nodes))
         provenance_items = set(assessment.provenance.sources)
@@ -487,30 +463,28 @@ class Quid:
             provenance_items.add("inference")
         provenance = tuple(sorted(provenance_items))
 
-        explanation = self._explanation(result)
-
         return QuidAnalysis(
             text=text,
             gir=gir,
             reasoning=result,
-            context=result.context or context_view,
-            discourse=discourse_state,
+            context=integrated.context,
+            discourse=integrated.discourse,
             intent=semantic_intent,
             math_result=math_result,
-            answer_value=(math_result.value if math_result and math_result.value is not None else answer),
+            answer_value=integrated.answer_value,
             verification=verification,
             epistemic=assessment,
             provenance_trace=assessment.provenance,
-            query_plan=query_plan,
-            working_graph=working_state,
+            query_plan=integrated.query_plan,
+            working_graph=integrated.working_graph,
             answer=answer,
             epistemic_status=result.status,
             confidence=result.confidence,
-            semantic_facts=semantic_facts,
+            semantic_facts=gir.facts(),
             graph_evidence=graph_evidence,
             resolved_quids=resolved,
             provenance=provenance,
-            explanation=explanation,
+            explanation=self._explanation(result),
         )
 
     @staticmethod
