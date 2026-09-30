@@ -57,7 +57,18 @@ class MathEngine:
         return value
 
     def calculate(self, text: str) -> MathResult:
-        expression = self.extract_expression(text)
+        try:
+            expression = self.extract_expression(text)
+        except (TypeError, ValueError) as exc:
+            return MathResult(
+                text.strip() if isinstance(text, str) else "",
+                None,
+                False,
+                MathStatus.INVALID,
+                (),
+                0.0,
+                str(exc),
+            )
         return self.evaluate(expression)
 
     def evaluate(self, expression: str) -> MathResult:
