@@ -322,7 +322,7 @@ class SemanticGrammar:
 
     def _selection(self, frame: VerbFrame, clause: LanguageClause) -> SelectionalCheck:
         subject_kinds = self._kinds(clause.subject)
-        object_kinds = self._kinds(clause.object)
+        object_kinds = self._kinds(self._argument_surface(clause.object, frame.governed_prepositions))
         violations: list[str] = []
         unknown = False
 
@@ -365,10 +365,20 @@ class SemanticGrammar:
             return True
         return False
 
+    def _argument_surface(self, surface: str | None, governed: tuple[str, ...] = ()) -> str | None:
+        if not surface:
+            return None
+        value = self._norm(surface).strip(" ,;:.!?")
+        for prep in governed:
+            prefix = prep + " "
+            if value.startswith(prefix):
+                return value[len(prefix):].strip(" ,;:.!?")
+        return value
+
     def _kinds(self, surface: str | None) -> frozenset[str]:
         if not surface:
             return frozenset()
-        normalized = self._norm(surface)
+        normalized = self._argument_surface(surface) or ""
         normalized = self._strip_determiner(normalized) or normalized
         base = set(self.LEXICAL_KINDS.get(normalized, ()))
         quid = self.engine.quids.get(surface) if self.engine is not None else None
@@ -444,8 +454,8 @@ class SemanticGrammar:
         issues: list[AgreementIssue] = []
 
         for index, word in enumerate(words[:-1]):
-            noun = self.NOUN_FEATURES.get(word)
             determiner = self.DETERMINER_FEATURES.get(word)
+            noun = self.NOUN_FEATURES.get(words[index + 1])
             if determiner is None or noun is None:
                 continue
             expected_gender, expected_number = noun
