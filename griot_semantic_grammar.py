@@ -517,8 +517,8 @@ class SemanticGrammar:
             (r"^o que\s+tem\s+(?:o|a|os|as)\s+(.+)$", "object", "has", "has", "forward"),
             (r"^quem\s+tem\s+(?:o|a|os|as)\s+(.+)$", "subject", "has", "has", "forward"),
             (r"^onde\s+(?:esta|está|fica|vive)\s+(.+)$", "location", "located_in", "located_in", "forward"),
-            (r"^quem\s+(ataca|atacou|come|comeu|viu|usa|usou|ajuda|ajudou|fere|feriu|precisa|precisou|sabe|soube)\s+(.+)$", "subject", None, None, "forward"),
-            (r"^o que\s+(.+?)\s+(ataca|atacou|come|comeu|viu|usou|usa|ajuda|ajudou|fere|feriu)$", "object", None, None, "forward"),
+            (r"^quem\s+(ataca|atacou|come|comeu|viu|usa|usou|ajuda|ajudou|fere|feriu|precisa|precisou|sabe|soube|quer|queria|querem|cria|criou|criam|constrói|construiu|ajuda|ajudou|fere|feriu)\s+(.+)$", "subject", None, None, "forward"),
+            (r"^o que\s+(.+?)\s+(ataca|atacou|come|comeu|viu|usou|usa|ajuda|ajudou|fere|feriu|quer|queria|querem|cria|criou|criam|constrói|construiu|constrói|usou|usa|precisa|precisou|sabe|soube)$", "object", None, None, "forward"),
             (r"^o que\s+(.+?)\s+(ataca|atacou|come|comeu|viu|usou|usa|ajuda|ajudou|fere|feriu)\s+(.+)$", "object", None, None, "forward"),
             (r"^o que\s+(.+?)\s+tem$", "object", "has", "has", "forward"),
         )
@@ -528,7 +528,10 @@ class SemanticGrammar:
             if not match:
                 continue
             groups = match.groups()
-            if kind == "subject":
+            if kind == "location":
+                anchor = self._strip_determiner(groups[0])
+                out.append(QuerySpec("location", "?x", "located_in", anchor, direction))
+            elif kind == "subject":
                 if fixed_relation == "causes":
                     anchor = self._strip_determiner(groups[0])
                     out.append(QuerySpec("subject", "?x", "causes", anchor, direction))
