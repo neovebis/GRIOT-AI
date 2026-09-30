@@ -61,7 +61,7 @@ class KnowledgeDocument:
             raise TypeError("text must be a string")
         if not text.strip():
             raise ValueError("text must not be empty")
-        normalized = re.sub(r"\\s+", " ", text.strip())
+        normalized = re.sub(r"\s+", " ", text.strip())
         fingerprint = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
         stable_id = document_id or source.source_id
         return cls(stable_id, text, source, fingerprint)
@@ -558,9 +558,9 @@ class KnowledgeAcquisitionEngine:
             for marker in clause.get("temporal", ()) or ():
                 normalized = self.TEMPORAL_NORMALIZATION.get(str(marker), str(marker))
                 output.append(TemporalExtraction(str(marker), normalized, sentence, 0.90))
-        for value in re.findall(r"\\b\\d{4}-\\d{2}-\\d{2}\\b", batch.text):
+        for value in re.findall(r"\\b\d{4}-\d{2}-\d{2}\\b", batch.text):
             output.append(TemporalExtraction(value, "date", batch.text, 0.98))
-        for value in re.findall(r"\\b(?:\\d{1,2}\\s+(?:dias?|semanas?|meses?|anos?|anos|horas?|minutos?)\\s+(?:atrás|depois|antes))\\b", batch.text.casefold()):
+        for value in re.findall(r"\\b(?:\d{1,2}\s+(?:dias?|semanas?|meses?|anos?|anos|horas?|minutos?)\s+(?:atrás|depois|antes))\\b", batch.text.casefold()):
             output.append(TemporalExtraction(value, "relative_duration", batch.text, 0.82))
         seen = set()
         unique: list[TemporalExtraction] = []
