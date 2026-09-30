@@ -127,6 +127,19 @@ class H8InvariantTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn("supported-without-polarity-evidence", report.codes)
 
+    def test_verification_accepts_transitive_reasoning(self) -> None:
+        self._learn("O leão é um animal.", "O animal é um ser vivo.")
+        result = self._solve("O leão é um ser vivo?")
+        from griot_cognition_v100 import EpistemicStateEngine
+        from griot_verification import VerificationEngine
+        report = VerificationEngine().verify(
+            result.meaning,
+            result,
+            EpistemicStateEngine().assess(result, "O leão é um ser vivo?"),
+            reasoning_engine=self.reasoning,
+        )
+        self.assertTrue(report.ok, report.issues)
+
     def test_proof_order_is_canonical(self) -> None:
         self.engine.graph.add_fact(Fact(
             self.engine.quids.get("lobo").symbol,
