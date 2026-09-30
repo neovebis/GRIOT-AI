@@ -335,7 +335,27 @@ class GIR:
         return cls.from_dict(decoded)
 
     def fingerprint(self) -> str:
-        return hashlib.sha256(self.canonical_json().encode("utf-8")).hexdigest()
+        # Fingerprints describe the canonical semantic form, not incidental
+        # whitespace in the original surface text.  Keep canonical_json()
+        # lossless for round-tripping while normalizing whitespace only for
+        # the fingerprint identity.
+        payload = self.to_dict()
+        payload["text"] = " ".join(str(payload["text"]).split())
+        for node in payload.get("nodes", []):
+            node["surface"] = " ".join(str(node["surface"]).split())
+        for edge in payload.get("edges", []):
+            if isinstance(edge.get("evidence"), str):
+                edge["evidence"] = " ".join(edge["evidence"].split())
+            if isinstance(edge.get("provenance"), str):
+                edge["provenance"] = " ".join(edge["provenance"].split())
+        canonical = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 __all__ = [

@@ -392,8 +392,26 @@ class LanguageIntelligence:
             "ser": "is_a",
             "estar": "located_in",
         }
+        if lemma == "ir":
+            # Near-future periphrases ("vai/vão + infinitive") carry the
+            # semantic relation of the lexical infinitive, not of "ir".
+            match = re.search(r"\b(?:vai|vao|vão)\s+([^\s,;:.!?]+)", clause, flags=re.I)
+            if match:
+                future_lemma = self._lemma(match.group(1))
+                if future_lemma in explicit:
+                    return explicit[future_lemma]
         if lemma in explicit:
             return explicit[lemma]
+
+        # Defensive fallback: a clause can contain an auxiliary/periphrastic
+        # verb sequence whose lexical head was not selected by the shallow
+        # predicate detector. Recover the first explicit lexical relation.
+        for word in clause.split():
+            candidate = self._lemma(word.strip(" ,;:.!?"))
+            if candidate in self.AUXILIARY_HELPERS:
+                continue
+            if candidate in explicit:
+                return explicit[candidate]
         if re.search(r"\b(?:causa|causou|provoca|provocou)\b", clause, re.I):
             return "causes"
         return None

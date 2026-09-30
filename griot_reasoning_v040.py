@@ -29,6 +29,7 @@ class ProofStep:
     confidence: float
     rule: str
     provenance: str
+    negated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,18 +206,39 @@ class ReasoningEngine:
 
         # Read all direct facts from durable storage so distinct provenance
         # entries are not collapsed by graph.query's semantic deduplication.
-        direct = [
-            fact
-            for fact in graph.facts()
-            if fact.subject == subject
-            and fact.relation == relation
-            and fact.object == object_
-        ]
-        inferred = [
-            item
-            for item in graph.query(subject, relation, object_)
-            if isinstance(item, Inference)
-        ]
+        direct = sorted(
+            (
+                fact
+                for fact in graph.facts()
+                if fact.subject == subject
+                and fact.relation == relation
+                and fact.object == object_
+            ),
+            key=lambda fact: (
+                fact.subject,
+                fact.relation,
+                fact.object,
+                bool(fact.negated),
+                -float(fact.confidence),
+                fact.provenance,
+                fact.evidence or "",
+            ),
+        )
+        inferred = sorted(
+            (
+                item
+                for item in graph.query(subject, relation, object_)
+                if isinstance(item, Inference)
+            ),
+            key=lambda item: (
+                item.fact.subject,
+                item.fact.relation,
+                item.fact.object,
+                bool(item.fact.negated),
+                -float(item.confidence),
+                item.rule,
+            ),
+        )
         # Direct facts stay source-complete; inferred results are already
         # generated from the graph's transitive/rule machinery.
         return tuple(direct) + tuple(inferred)
@@ -239,8 +261,16 @@ class ReasoningEngine:
 
     @staticmethod
     def _proofs(items: Iterable[Fact | Inference]) -> tuple[ProofStep, ...]:
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                (item.fact.relation, item.fact.subject, item.fact.object, bool(item.fact.negated), -float(item.confidence), item.rule)
+                if isinstance(item, Inference)
+                else (item.relation, item.subject, item.object, bool(item.negated), -float(item.confidence), "direct")
+            ),
+        )
         out: list[ProofStep] = []
-        for item in items:
+        for item in ordered:
             if isinstance(item, Inference):
                 fact = item.fact
                 out.append(
@@ -251,6 +281,7 @@ class ReasoningEngine:
                         item.confidence,
                         item.rule,
                         fact.provenance,
+                        fact.negated,
                     )
                 )
                 for support in item.support:
@@ -262,6 +293,7 @@ class ReasoningEngine:
                             support.confidence,
                             "support",
                             support.provenance,
+                            support.negated,
                         )
                     )
             else:
@@ -273,6 +305,7 @@ class ReasoningEngine:
                         item.confidence,
                         "direct",
                         item.provenance,
+                        item.negated,
                     )
                 )
         return tuple(out)
