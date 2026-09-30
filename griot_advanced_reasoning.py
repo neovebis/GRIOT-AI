@@ -9,7 +9,8 @@ from griot_causality import CausalAnalysis, CausalityEngine
 from griot_cognition_v100 import Assessment, EpistemicStateEngine
 from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
 from griot_engine import Fact, GRIOT, Inference
-from griot_hypothesis_v050 import Hypothesis, HypothesisController, HypothesisReport
+from griot_hypothesis_v050 import HypothesisController, HypothesisReport
+from griot_math import MathEngine, MathResult
 from griot_planning_v080 import ActionPlan, GoalPlanner
 from griot_reasoning_v040 import ReasoningEngine, ReasoningResult, TruthStatus
 from griot_semantic_ir import SemanticGRIOT
@@ -69,6 +70,7 @@ class AdvancedReasoningResult:
     subresults: tuple[ReasoningResult, ...]
     result: ReasoningResult
     probabilistic: ProbabilisticAssessment
+    math_result: MathResult | None
     hypotheses: HypothesisReport | None
     counterfactual: CounterfactualScenario | None
     causal: CausalAnalysis | None
@@ -80,7 +82,20 @@ class AdvancedReasoningResult:
 
     @property
     def solved(self) -> bool:
-        return self.result.status in {TruthStatus.SUPPORTED, TruthStatus.REFUTED}
+        return (
+            self.result.status in {TruthStatus.SUPPORTED, TruthStatus.REFUTED}
+            or (self.math_result is not None and self.math_result.status != "invalid")
+        )
+
+    @property
+    def answer_value(self):
+        if self.math_result is not None and self.math_result.value is not None:
+            return self.math_result.value
+        if self.result.status is TruthStatus.SUPPORTED:
+            return True
+        if self.result.status is TruthStatus.REFUTED:
+            return False
+        return None
 
     @property
     def proof(self):
@@ -113,6 +128,7 @@ class AdvancedReasoningEngine:
         self.epistemic = EpistemicStateEngine()
         self.verifier = VerificationEngine()
         self.hypotheses = HypothesisController(self.reasoning)
+        self.math = MathEngine(self.engine)
         self.counterfactual_engine = CounterfactualEngine(self.engine)
         self.causality = CausalityEngine(self.engine)
         self.planner = GoalPlanner(self.engine)
@@ -193,6 +209,7 @@ class AdvancedReasoningEngine:
             subresults,
             result,
             probabilistic,
+            math_result,
             hypotheses,
             counterfactual,
             causal,
@@ -372,6 +389,32 @@ class AdvancedReasoningEngine:
     ) -> ActionPlan | None:
         return self.planner.plan(initial, goal, max_depth=max_depth)
 
+    def deduce(self, query: str) -> ReasoningResult:
+        return self.reasoning.reason(query)
+
+    def induce(self, *, min_support: int = 2) -> tuple[DiscoveredRule, ...]:
+        return self.discover_rules(min_support=min_support)
+
+    def abduce(self, target: str, *, max_depth: int = 8) -> CausalAnalysis:
+        return self.causality.causes_of(target, max_depth=max_depth)
+
+    def hierarchical_plan(
+        self,
+        initial: Iterable[str],
+        goals: Iterable[str],
+        *,
+        max_depth: int = 8,
+    ) -> tuple[ActionPlan, ...]:
+        current = tuple(initial)
+        plans: list[ActionPlan] = []
+        for goal in goals:
+            plan = self.planner.plan(current, goal, max_depth=max_depth)
+            if plan is None:
+                break
+            plans.append(plan)
+            current = self.planner.labels(plan.final)
+        return tuple(plans)
+
     def test_hypotheses(
         self,
         query: str,
@@ -513,6 +556,8 @@ class AdvancedReasoningEngine:
         strategy: str,
     ) -> MetacognitiveState:
         limitations: list[str] = []
+        if strategy == "mathematical":
+            return "stop" if not verification.ok or True else "stop"
         if result.status is TruthStatus.UNKNOWN:
             limitations.append("insufficient explicit evidence")
         if result.status is TruthStatus.CONFLICT:
