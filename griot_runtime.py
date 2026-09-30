@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from griot_integration_pipeline import IntegratedReasoningResult
 from quid_core import Quid, QuidAnalysis
 
 
@@ -56,6 +57,24 @@ class GRIOTRuntime:
             )
         )
         return RuntimeAnalysis(result, self.STAGES, integrated)
+
+    def analyze_integrated(
+        self,
+        text: str,
+        *,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+        context_source: str = "query",
+    ) -> IntegratedReasoningResult:
+        """Expose the canonical G1 -> G3 result without the legacy projection."""
+        return self.quid.analisar_integrado(
+            text,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+            context_source=context_source,
+        )
 
     def health(self) -> RuntimeHealth:
         components = {
