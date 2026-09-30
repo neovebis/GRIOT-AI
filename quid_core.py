@@ -76,6 +76,20 @@ class Quid:
         self.epistemic = EpistemicStateEngine()
         self.query_planner = QueryPlanner(self.engine)
         self.math = MathEngine(self.engine)
+        self.hypotheses = HypothesisController(self.reasoning)
+        self.planner = GoalPlanner(self.engine)
+        self.counterfactual = CounterfactualEngine(self.engine)
+        self.causality = CausalityEngine(self.engine)
+        self.simulation = SimulationEngine(self.engine)
+        self.extractor = KnowledgeExtractor(self.engine)
+        self.validator = KnowledgeValidator(self.engine)
+        self.deduplicator = SemanticDeduplicator()
+        self.consolidator = KnowledgeConsolidator(self.engine)
+        self.promotion = KnowledgePromotionEngine()
+        self.demotion = KnowledgeDemotionEngine(self.engine, self.promotion)
+        self.versions = KnowledgeVersionStore()
+        self.incremental = IncrementalLearner(self.engine)
+        self.verifier = VerificationEngine()
 
     def simulate(
         self,
