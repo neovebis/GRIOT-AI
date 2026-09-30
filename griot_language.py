@@ -403,6 +403,8 @@ class LanguageIntelligence:
     def _clause_tense(self, clause: str) -> str | None:
         words = [self.normalize_token(w) for w in re.findall(r"[\wÀ-ÿ]+", clause)]
         for i, word in enumerate(words):
+            if self._pos(word) not in {"VERB", "AUX"}:
+                continue
             lemma = self._lemma(word)
             tense, _, _, _ = self._morphology(word)
             if lemma in {"ser", "estar", "ter", "ir", "poder", "dever"}:
