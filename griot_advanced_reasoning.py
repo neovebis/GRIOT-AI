@@ -6,6 +6,8 @@ import re
 from typing import Iterable, Mapping
 
 from griot_causality import CausalAnalysis, CausalityEngine
+from griot_context import ContextView
+from griot_gir import GIR
 from griot_cognition_v100 import Assessment, EpistemicStateEngine
 from griot_counterfactual import CounterfactualEngine, CounterfactualScenario
 from griot_engine import Fact, GRIOT, Inference
@@ -140,6 +142,8 @@ class AdvancedReasoningEngine:
         decompose: bool = True,
         hypothesis_limit: int = 8,
         max_hops: int = 8,
+        meaning: GIR | None = None,
+        context: ContextView | None = None,
     ) -> AdvancedReasoningResult:
         if not isinstance(query, str):
             raise TypeError("query must be a string")
@@ -154,10 +158,20 @@ class AdvancedReasoningEngine:
         subproblems = self.decompose(query) if decompose else (
             ReasoningSubproblem(query.strip(), strategy, "single problem"),
         )
-        subresults = tuple(
-            self.reasoning.reason(self._clean_reasoning_text(problem.text))
-            for problem in subproblems
-        )
+        if meaning is not None and len(subproblems) == 1:
+            meaning.validate()
+            subresults = (
+                self.reasoning.reason_meaning(
+                    query,
+                    meaning,
+                    context,
+                ),
+            )
+        else:
+            subresults = tuple(
+                self.reasoning.reason(self._clean_reasoning_text(problem.text))
+                for problem in subproblems
+            )
         result = self._synthesize(query, subresults)
         math_result = self.math.calculate(query) if strategy == "mathematical" else None
 
