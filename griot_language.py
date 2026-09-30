@@ -208,6 +208,9 @@ class LanguageIntelligence:
         "é", "era", "foi", "está", "esta", "estava", "tem", "tinha", "teve",
         "vai", "vão", "vao", "pode", "podem", "deve", "devem",
     })
+    AUXILIARY_HELPERS = frozenset({
+        "ser", "estar", "ter", "haver", "ir",
+    })
 
     @staticmethod
     def normalize_token(token: str) -> str:
@@ -352,14 +355,17 @@ class LanguageIntelligence:
 
     def _main_verb_index(self, clause: str) -> int | None:
         words = clause.split()
-        verb_indexes = [index for index, word in enumerate(words) if self._pos(word) == "VERB"]
-        if not verb_indexes:
+        predicate_indexes = [
+            index for index, word in enumerate(words)
+            if self._pos(word) in {"VERB", "AUX"}
+        ]
+        if not predicate_indexes:
             return None
         lexical = [
-            index for index in verb_indexes
-            if self._lemma(words[index]) not in self.AUXILIARIES
+            index for index in predicate_indexes
+            if self._lemma(words[index]) not in self.AUXILIARY_HELPERS
         ]
-        return lexical[0] if lexical else verb_indexes[0]
+        return lexical[0] if lexical else predicate_indexes[0]
 
     def _find_main_verb(self, clause: str) -> str | None:
         index = self._main_verb_index(clause)
