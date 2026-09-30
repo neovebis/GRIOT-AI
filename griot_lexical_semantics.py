@@ -121,7 +121,14 @@ class SemanticLexicon:
         lemma = forms.get(key)
         if lemma is None:
             return None
-        return LexicalResolution(key, lemma, cls.CANONICAL_RELATIONS.get(lemma), "inflection", 0.93)
+        canonical = cls.ALIASES.get(lemma, lemma)
+        return LexicalResolution(
+            key,
+            canonical,
+            cls.CANONICAL_RELATIONS.get(canonical),
+            "inflection",
+            0.93,
+        )
 
     @classmethod
     def relation_patterns(cls) -> tuple[tuple[re.Pattern[str], str], ...]:
