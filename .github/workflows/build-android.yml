@@ -56,17 +56,28 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Generate Release Keystore
+      - name: Ensure Permanent Release Keystore
         run: |
-          keytool -genkeypair -v \
-            -keystore android/app/griot-release.keystore \
-            -alias griot-release \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass "GriotMobileApp2026!" \
-            -keypass "GriotMobileApp2026!" \
-            -dname "CN=GRIOT AI, OU=Mobile, O=GRIOT AI, L=Luanda, ST=Luanda, C=AO"
+          if [ -f "android/app/griot-release.keystore" ]; then
+            echo "Permanent release keystore already present."
+          else
+            echo "Generating permanent release keystore..."
+            keytool -genkeypair -v \
+              -keystore android/app/griot-release.keystore \
+              -alias griot-release \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "GriotMobileApp2026!" \
+              -keypass "GriotMobileApp2026!" \
+              -dname "CN=GRIOT AI, OU=Mobile, O=GRIOT AI, L=Luanda, ST=Luanda, C=AO"
+            
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add -f android/app/griot-release.keystore
+            git commit -m "chore(release): persist permanent release keystore" || true
+            git push origin HEAD:main || true
+          fi
 
       - name: Build APKs (Release and Debug)
         working-directory: android
