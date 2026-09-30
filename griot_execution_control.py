@@ -50,6 +50,36 @@ class ExecutionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutionState:
+    """Observable G1-G3 control state used for deterministic transitions."""
+
+    gir_fingerprint: str
+    epistemic_status: str
+    confidence: float
+    next_operation: str
+    evidence_count: int
+
+    def key(self) -> tuple[object, ...]:
+        return (
+            self.gir_fingerprint,
+            self.epistemic_status,
+            round(self.confidence, 12),
+            self.next_operation,
+            self.evidence_count,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ExecutionTransition:
+    """Relationship between two observed control states."""
+
+    before: ExecutionState | None
+    after: ExecutionState
+    changed: bool
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionCycleResult:
     """Bounded control loop over the canonical G1 -> G3 runtime path."""
 
@@ -58,6 +88,15 @@ class ExecutionCycleResult:
     final_result: ExecutionResult | None
     stopped_reason: str
     cycles: int
+    transitions: tuple[ExecutionTransition, ...] = ()
+
+    @property
+    def progressed(self) -> bool:
+        return any(
+            transition.changed
+            for transition in self.transitions
+            if transition.before is not None
+        )
 
 
 class ExecutionControlPlane:
@@ -112,7 +151,9 @@ class ExecutionControlPlane:
             raise ValueError("max_cycles must be a positive integer")
 
         steps: list[ExecutionResult] = []
+        transitions: list[ExecutionTransition] = []
         seen: set[tuple[object, ...]] = set()
+        previous: ExecutionState | None = None
 
         for _ in range(max_cycles):
             source = self.pipeline.run(
@@ -122,12 +163,21 @@ class ExecutionControlPlane:
                 max_hops=max_hops,
                 context_source=context_source,
             )
-            state_key = (
-                source.gir.fingerprint(),
-                source.epistemic_status.value,
-                round(source.confidence, 12),
-                source.next_operation,
-                source.working_graph.evidence_count,
+            current = self._state(source)
+            state_key = current.key()
+            transitions.append(
+                ExecutionTransition(
+                    before=previous,
+                    after=current,
+                    changed=previous is None or previous.key() != current.key(),
+                    reason=(
+                        "initial_state"
+                        if previous is None
+                        else "observable_control_state_changed"
+                        if previous.key() != current.key()
+                        else "observable_control_state_unchanged"
+                    ),
+                )
             )
             if state_key in seen:
                 final = steps[-1] if steps else None
@@ -137,8 +187,10 @@ class ExecutionControlPlane:
                     final,
                     "repeated_control_state",
                     len(steps),
+                    tuple(transitions),
                 )
             seen.add(state_key)
+            previous = current
 
             result = self.execute(source)
             steps.append(result)
@@ -150,6 +202,7 @@ class ExecutionControlPlane:
                     result,
                     "waiting",
                     len(steps),
+                    tuple(transitions),
                 )
             if result.operation is ExecutionOperation.STOP:
                 return ExecutionCycleResult(
@@ -167,6 +220,17 @@ class ExecutionControlPlane:
             final,
             "max_cycles_reached",
             len(steps),
+            tuple(transitions),
+        )
+
+    @staticmethod
+    def _state(source: IntegratedReasoningResult) -> ExecutionState:
+        return ExecutionState(
+            source.gir.fingerprint(),
+            source.epistemic_status.value,
+            float(source.confidence),
+            source.next_operation,
+            source.working_graph.evidence_count,
         )
 
     def execute(self, source: IntegratedReasoningResult) -> ExecutionResult:
@@ -308,6 +372,8 @@ __all__ = [
     "ExecutionControlPlane",
     "ExecutionCycleResult",
     "ExecutionOperation",
+    "ExecutionState",
+    "ExecutionTransition",
     "ExecutionResult",
     "ExecutionStatus",
     "ExecutionStep",
