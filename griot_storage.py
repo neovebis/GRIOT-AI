@@ -64,9 +64,37 @@ class SQLiteKnowledgeStore:
 
     def put_fact(self, fact: Fact) -> None:
         with self.transaction() as db:
+            exists = db.execute(
+                """
+                SELECT 1 FROM facts
+                WHERE subject = ? AND relation = ? AND object = ?
+                  AND confidence = ? AND negated = ? AND provenance = ?
+                  AND (
+                    (evidence = ?) OR (evidence IS NULL AND ? IS NULL)
+                  )
+                  AND (
+                    (timestamp = ?) OR (timestamp IS NULL AND ? IS NULL)
+                  )
+                LIMIT 1
+                """,
+                (
+                    fact.subject,
+                    fact.relation,
+                    fact.object,
+                    float(fact.confidence),
+                    int(bool(fact.negated)),
+                    fact.provenance,
+                    fact.evidence,
+                    fact.evidence,
+                    fact.timestamp,
+                    fact.timestamp,
+                ),
+            ).fetchone()
+            if exists is not None:
+                return
             db.execute(
                 """
-                INSERT OR IGNORE INTO facts
+                INSERT INTO facts
                 (subject, relation, object, confidence, negated, provenance, evidence, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
@@ -108,9 +136,37 @@ class SQLiteKnowledgeStore:
                     ),
                 )
             for fact in engine.graph.facts():
+                exists = db.execute(
+                    """
+                    SELECT 1 FROM facts
+                    WHERE subject = ? AND relation = ? AND object = ?
+                      AND confidence = ? AND negated = ? AND provenance = ?
+                      AND (
+                        (evidence = ?) OR (evidence IS NULL AND ? IS NULL)
+                      )
+                      AND (
+                        (timestamp = ?) OR (timestamp IS NULL AND ? IS NULL)
+                      )
+                    LIMIT 1
+                    """,
+                    (
+                        fact.subject,
+                        fact.relation,
+                        fact.object,
+                        float(fact.confidence),
+                        int(bool(fact.negated)),
+                        fact.provenance,
+                        fact.evidence,
+                        fact.evidence,
+                        fact.timestamp,
+                        fact.timestamp,
+                    ),
+                ).fetchone()
+                if exists is not None:
+                    continue
                 db.execute(
                     """
-                    INSERT OR IGNORE INTO facts
+                    INSERT INTO facts
                     (subject, relation, object, confidence, negated, provenance, evidence, timestamp)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
