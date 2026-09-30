@@ -61,6 +61,10 @@ class CoreferenceResolver:
     }
 
     AMBIGUITY_MARGIN = 0.70
+    GENERIC_OBJECTS = frozenset({
+        "animal", "pessoa", "coisa", "objeto", "entidade", "ser",
+        "ser vivo", "organismo", "elemento",
+    })
 
     def __init__(self, griot: GRIOT) -> None:
         self.griot = griot
@@ -160,9 +164,15 @@ class CoreferenceResolver:
             mention.gender, mention.number, agreement
         ):
             return 0.0
-        role_bonus = 2.2 if mention.role == "subject" else 0.0
+        role_bonus = 1.0 if mention.role == "subject" else 0.0
         recency_bonus = 1.60 / (rank + 1)
-        return 2.0 + role_bonus + recency_bonus
+        generic_object_penalty = (
+            -1.0
+            if mention.role == "object"
+            and mention.surface.casefold().strip() in CoreferenceResolver.GENERIC_OBJECTS
+            else 0.0
+        )
+        return max(0.0, 2.0 + role_bonus + recency_bonus + generic_object_penalty)
 
     @staticmethod
     def _agreement_matches(gender: str, number: str, agreement: tuple[str, str]) -> bool:
