@@ -574,6 +574,8 @@ class LanguageIntelligence:
             return "CONJ"
         if key in self.VERB_LEMMAS or self._morphology(key)[0] is not None:
             return "VERB"
+        if SemanticLexicon.resolve_verb(key) is not None:
+            return "VERB"
         if key in self.TEMPORAL:
             return "ADV"
         if re.fullmatch(r"[A-Za-zÀ-ÿ]+", key):
