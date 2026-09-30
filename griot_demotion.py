@@ -41,9 +41,6 @@ class KnowledgeDemotionEngine:
                 key = (*semantic_key, polarity)
                 representative = max(subset, key=lambda fact: float(fact.confidence))
                 previous = self.promotion.level(representative)
-                if previous is not KnowledgeLevel.PROMOTED:
-                    continue
-
                 sources = {fact.provenance for fact in subset if fact.provenance}
                 conflicting = bool(positives and negatives)
                 confidence = max(float(fact.confidence) for fact in subset)
@@ -51,6 +48,8 @@ class KnowledgeDemotionEngine:
                 if conflicting:
                     level = self.promotion.demote(representative).level
                     reason = "contradictory-polarity-evidence"
+                elif previous is not KnowledgeLevel.PROMOTED:
+                    continue
                 elif not sources:
                     level = self.promotion.demote(representative).level
                     reason = "evidence-without-source"
