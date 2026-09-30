@@ -80,7 +80,6 @@ class SemanticLexicon:
         (r"^(.+?)\s+(?:está|esta)\s+(?:localizado|localizada|situado|situada)\s+(?:em|no|na|nos|nas)\s+(.+)$", "located_in"),
         (r"^(.+?)\s+(?:encontra-se|encontra se)\s+(?:em|no|na|nos|nas)\s+(.+)$", "located_in"),
         (r"^(.+?)\s+(?:reside|mora|habita)\s+(?:em|no|na|nos|nas)\s+(.+)$", "located_in"),
-        (r"^(.+?)\s+(?:é|e)\s+(?:causado|causada)\s+por\s+(.+)$", "caused_by"),
     )
 
     _GENERATED_FORMS: dict[str, str] | None = None
@@ -124,7 +123,7 @@ class SemanticLexicon:
         canonical = cls.ALIASES.get(lemma, lemma)
         return LexicalResolution(
             key,
-            canonical,
+            lemma,
             cls.CANONICAL_RELATIONS.get(canonical),
             "inflection",
             0.93,
