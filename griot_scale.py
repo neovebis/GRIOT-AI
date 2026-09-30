@@ -34,7 +34,7 @@ class ScaleHarness:
     def generate_engine(self) -> GRIOT:
         engine = GRIOT.create()
         relation = "is_a"
-        animal = engine.quids.get("animal").symbol
+        animal = engine.quids.ensure("animal", family_id=1).symbol
         for index in range(self.facts):
             subject = engine.quids.ensure(
                 f"scale-entity-{index}",
