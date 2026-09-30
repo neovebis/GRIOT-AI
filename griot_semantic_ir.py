@@ -417,6 +417,23 @@ class MeaningCompiler:
             match = re.match(pattern, candidate, re.I)
             if match:
                 return match.group(1), relation, match.group(2)
+
+        # H9 lexical fallback: curated synonyms and their inflected forms must
+        # reach the same canonical relation even when the legacy regex table
+        # has no surface form for the verb.
+        words = candidate.split()
+        for index, word in enumerate(words):
+            relation = SemanticLexicon.relation_for_verb(word.strip(" ,;:.!?"))
+            if relation is None:
+                continue
+            subject_words = words[:index]
+            while subject_words and subject_words[-1].casefold() in {
+                "vai", "vão", "vao", "está", "esta", "estava",
+            }:
+                subject_words.pop()
+            object_words = words[index + 1:]
+            if subject_words and object_words:
+                return " ".join(subject_words), relation, " ".join(object_words)
         return None
 
     @staticmethod
