@@ -155,7 +155,7 @@ class AdvancedReasoningEngine:
             ReasoningSubproblem(query.strip(), strategy, "single problem"),
         )
         subresults = tuple(
-            self.reasoning.reason(problem.text)
+            self.reasoning.reason(self._clean_reasoning_text(problem.text))
             for problem in subproblems
         )
         result = self._synthesize(query, subresults)
@@ -224,6 +224,8 @@ class AdvancedReasoningEngine:
 
     def select_strategy(self, query: str) -> str:
         normalized = query.casefold().strip()
+        if re.fullmatch(r"[0-9\s+\-*/%().,]+", normalized):
+            return "mathematical"
         try:
             frame = self.semantic.understand(query)
             intent = frame.intent.casefold()
@@ -251,22 +253,22 @@ class AdvancedReasoningEngine:
             raise ValueError("max_parts must be > 0")
         text = re.sub(r"\s+", " ", query.strip())
         clauses = [
-            chunk.strip(" ,;")
+            chunk.strip(" ,;.?!")
             for chunk in re.split(
                 r"(?<=[.!?])\s+|\s+(?:e também|além disso|alem disso|mas também|mas tambem)\s+",
                 text,
                 flags=re.I,
             )
-            if chunk.strip(" ,;")
+            if chunk.strip(" ,;.?!")
         ]
 
         if len(clauses) == 1:
             # A compound declarative question with two explicit propositions
             # can be split conservatively at a top-level conjunction.
             parts = [
-                chunk.strip(" ,;")
+                chunk.strip(" ,;.?!")
                 for chunk in re.split(r"\s+e\s+(?=[A-ZÀ-Ý]|[a-zà-ÿ]+\s+(?:é|tem|faz|está|esta|pode|deve|causa|cria|ataca)\b)", clauses[0])
-                if chunk.strip(" ,;")
+                if chunk.strip(" ,;.?!")
             ]
             if 1 < len(parts) <= max_parts:
                 clauses = parts
@@ -392,7 +394,7 @@ class AdvancedReasoningEngine:
         return self.planner.plan(initial, goal, max_depth=max_depth)
 
     def deduce(self, query: str) -> ReasoningResult:
-        return self.reasoning.reason(query)
+        return self.reasoning.reason(self._clean_reasoning_text(query))
 
     def induce(self, *, min_support: int = 2) -> tuple[DiscoveredRule, ...]:
         return self.discover_rules(min_support=min_support)
@@ -506,6 +508,10 @@ class AdvancedReasoningEngine:
             seen.add(key)
             out.append(proof)
         return tuple(out)
+
+    @staticmethod
+    def _clean_reasoning_text(text: str) -> str:
+        return re.sub(r"\s+", " ", text.strip()).rstrip(" ?!.")
 
     def _make_subproblem(self, text: str) -> ReasoningSubproblem:
         strategy = self.select_strategy(text)
