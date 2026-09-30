@@ -480,6 +480,10 @@ class LanguageIntelligence:
             ("e", "present", 3, "sing"), ("o", "present", 1, "sing"),
         )
         for ending, tense, person, number in endings:
+            # Present-tense endings are highly ambiguous with ordinary nouns
+            # (e.g. "casa" ends in -a). Only trust them for known verb forms.
+            if tense == "present" and key not in self.VERB_LEMMAS:
+                continue
             if key.endswith(ending) and len(key) > len(ending) + 1:
                 return tense, None, person, number
         return None, None, None, None
