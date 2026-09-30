@@ -9,6 +9,9 @@ from griot_context import ContextView
 from griot_gir import GIR
 from griot_working_graph import WorkingGraph, WorkingGraphState
 from griot_engine import Fact, Inference
+from griot_cache import GenerationCache
+from griot_indices import FactIndices
+from griot_selective_retrieval import SelectiveRetriever
 
 if TYPE_CHECKING:
     from griot_engine import GRIOT
@@ -71,6 +74,10 @@ class QueryPlanner:
         self.engine = engine
         self.max_evidence = max_evidence
         self.max_context_records = max_context_records
+        self.indices = FactIndices()
+        self._indexed_fact_count = -1
+        self.cache = GenerationCache[tuple[Fact, ...]]()
+        self.retriever = SelectiveRetriever(engine, budget=max_evidence)
 
     def plan(self, gir: GIR, context: ContextView | None = None) -> QueryPlan:
         gir.validate()
@@ -121,21 +128,32 @@ class QueryPlanner:
             fingerprint,
         )
 
+    def _refresh_indices(self) -> None:
+        current_count = len(self.engine.graph.facts())
+        if current_count != self._indexed_fact_count:
+            self.indices.rebuild(self.engine.graph.facts())
+            self._indexed_fact_count = current_count
+            self.cache.invalidate()
+
     def execute(self, plan: QueryPlan, gir: GIR, context: ContextView | None = None) -> QueryExecution:
         gir.validate()
         if plan.gir_fingerprint != gir.fingerprint():
             raise ValueError("QueryPlan does not match the supplied GIR")
 
+        self._refresh_indices()
         working = WorkingGraph(max_evidence=plan.max_evidence)
         working.extend(gir.facts(), origin="current-gir", score=1.0)
 
         for target in plan.targets:
-            direct = [
-                fact for fact in self.engine.graph.facts()
-                if fact.subject == target.subject
-                and fact.relation == target.relation
-                and fact.object == target.object
-            ]
+            cache_key = ("exact", target.subject, target.relation, target.object)
+            direct = self.cache.get(cache_key)
+            if direct is None:
+                direct = self.indices.exact(
+                    target.subject,
+                    target.relation,
+                    target.object,
+                )
+                self.cache.put(cache_key, direct)
             working.extend(direct, origin="durable-direct", score=0.98)
 
             inferred = [
@@ -157,17 +175,42 @@ class QueryPlanner:
                         origin=f"durable-neighborhood:{item.reason}",
                         score=min(0.70, item.score),
                     )
+            neighborhood = self.retriever.retrieve(
+                subject=target.subject,
+                object_=target.object,
+            )
+            for item in neighborhood.items:
+                if item.fact in direct:
+                    continue
+                if item.fact.relation != target.relation:
+                    working.add(
+                        item.fact,
+                        origin=f"durable-neighborhood:{item.reason}",
+                        score=min(0.70, item.score),
+                    )
             working.extend(inferred, origin="durable-inference", score=0.90)
             for inference in inferred:
                 for support in inference.support:
-                    all_support = [
-                        fact
-                        for fact in self.engine.graph.facts()
-                        if fact.subject == support.subject
-                        and fact.relation == support.relation
-                        and fact.object == support.object
-                        and fact.negated == support.negated
-                    ]
+                    support_key = (
+                        "support",
+                        support.subject,
+                        support.relation,
+                        support.object,
+                        support.negated,
+                    )
+                    support_facts = self.cache.get(support_key)
+                    if support_facts is None:
+                        support_facts = tuple(
+                            fact
+                            for fact in self.indices.exact(
+                                support.subject,
+                                support.relation,
+                                support.object,
+                            )
+                            if fact.negated == support.negated
+                        )
+                        self.cache.put(support_key, support_facts)
+                    all_support = support_facts
                     working.extend(
                         all_support or (support,),
                         origin="durable-support",
