@@ -66,7 +66,9 @@ class KnowledgeConsolidator:
         }
 
         records: list[ConsolidationRecord] = []
+        known_groups: set[tuple[str, str, str]] = set()
         for group in deduplication.groups:
+            known_groups.add(group.key)
             committed: list[Fact] = []
             skipped: list[Fact] = []
             sources: set[str] = set()
@@ -110,6 +112,22 @@ class KnowledgeConsolidator:
                     False,
                 )
             )
+
+        for item in validation.rejected:
+            fact = item.candidate.fact
+            key = (fact.subject, fact.relation, fact.object)
+            if key in known_groups:
+                continue
+            if item.status is ValidationStatus.CONFLICT:
+                records.append(
+                    ConsolidationRecord(
+                        key,
+                        (),
+                        (fact,),
+                        (fact.provenance,) if fact.provenance else (),
+                        True,
+                    )
+                )
 
         return ConsolidationReport(tuple(records))
 
