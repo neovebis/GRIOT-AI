@@ -430,7 +430,7 @@ class Quid:
         result = integrated.advanced_reasoning.result
         assessment = integrated.advanced_reasoning.epistemic
         verification = integrated.advanced_reasoning.verification
-        semantic_intent = self.advanced_reasoning.semantic.intent.detect(
+        semantic_intent = self.semantic.compiler.intent.detect(
             text,
             gir.frame,
         )
