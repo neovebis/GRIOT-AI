@@ -248,6 +248,8 @@ class AdvancedReasoningEngine:
 
         if re.search(r"\b(?:e se|se isso|caso contrário|caso contrario)\b", normalized):
             return "counterfactual"
+        if re.search(r"\b(?:poderia|seria possível|seria possivel|hipótese|hipotese|supondo|assumindo)\b", normalized):
+            return "hypothetical"
         if intent == "calculate" or re.search(r"(?:calcula|equação|equacao|matriz|estatística|estatistica)\b", normalized):
             return "mathematical"
         if re.search(r"\b(?:probabilidade|probabilidade de|chance|risco|percentagem|porcentagem)\b", normalized):
