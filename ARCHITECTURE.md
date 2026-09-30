@@ -182,3 +182,10 @@ The v0.8 layer represents actions with one scene QUID plus explicit precondition
 ## Autonomous learning loop
 
 The v0.9 layer separates observation from consolidation. Hygienized text is compiled into candidate facts in a staging ledger; candidates are grouped, checked for opposite-polarity conflicts, evaluated by confidence and source diversity, and only accepted candidates enter durable memory. Held candidates remain unresolved rather than being overwritten.
+
+
+## GRIOT v0.4 hardening status
+
+F8 consolidates the runtime compatibility, storage idempotence, semantic learning edge cases, adversarial input handling, selective retrieval, distributed Working Graph contract and legacy-module interoperability required before the architecture freeze.
+
+The canonical engine constructor remains explicit; historical zero-argument construction is isolated to the `griot.engine` compatibility facade. Package/distribution versioning is intentionally separate from the architecture milestone.
