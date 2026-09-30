@@ -65,7 +65,10 @@ class IncrementalLearner:
             )
 
         before_facts = tuple(self.engine.graph.facts())
-        before = self.versions.commit(before_facts)
+        before = self.versions.head
+        if before is None or set(before.facts) != set(before_facts):
+            before = self.versions.commit(before_facts)
+
         validation = self.validator.validate(batch)
         deduplication = self.deduplicator.deduplicate(
             item.candidate for item in validation.valid
