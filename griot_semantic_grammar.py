@@ -276,8 +276,6 @@ class SemanticGrammar:
         frame = self.VERB_FRAMES.get(lemma) or self.VERB_FRAMES.get(canonical_lemma)
         if frame is not None:
             return frame
-        if frame is not None:
-            return frame
         if language is not None and verb:
             token = next(
                 (
