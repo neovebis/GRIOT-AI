@@ -159,6 +159,7 @@ class AdvancedReasoningEngine:
             for problem in subproblems
         )
         result = self._synthesize(query, subresults)
+        math_result = self.math.calculate(query) if strategy == "mathematical" else None
 
         probabilistic = self.probabilistic(result)
         hypotheses = None
@@ -200,6 +201,7 @@ class AdvancedReasoningEngine:
             counterfactual=counterfactual,
             causal=causal,
             strategy=strategy,
+            math_result=math_result,
         )
 
         return AdvancedReasoningResult(
@@ -554,10 +556,11 @@ class AdvancedReasoningEngine:
         counterfactual: CounterfactualScenario | None,
         causal: CausalAnalysis | None,
         strategy: str,
+        math_result: MathResult | None,
     ) -> MetacognitiveState:
         limitations: list[str] = []
-        if strategy == "mathematical":
-            return "stop" if not verification.ok or True else "stop"
+        if math_result is not None and math_result.status == "invalid":
+            limitations.append("mathematical expression could not be evaluated")
         if result.status is TruthStatus.UNKNOWN:
             limitations.append("insufficient explicit evidence")
         if result.status is TruthStatus.CONFLICT:
@@ -574,7 +577,15 @@ class AdvancedReasoningEngine:
             limitations.append("no causal path was found")
         if strategy == "planning":
             limitations.append("planning requires explicit registered action schemas and an initial state")
-        next_operation = self._next_operation(result, verification, hypotheses, counterfactual, causal)
+        next_operation = self._next_operation(
+            result,
+            verification,
+            hypotheses,
+            counterfactual,
+            causal,
+            strategy=strategy,
+            math_result=math_result,
+        )
         return MetacognitiveState(
             float(result.confidence),
             result.status,
@@ -593,7 +604,12 @@ class AdvancedReasoningEngine:
         hypotheses: HypothesisReport | None,
         counterfactual: CounterfactualScenario | None,
         causal: CausalAnalysis | None,
+        *,
+        strategy: str,
+        math_result: MathResult | None,
     ) -> str:
+        if strategy == "mathematical" and math_result is not None and math_result.status != "invalid":
+            return "stop"
         if not verification.ok:
             return "reverify"
         if result.status is TruthStatus.CONFLICT:
