@@ -23,6 +23,15 @@ from griot_knowledge_acquisition import (
     KnowledgeSource,
     ReviewItem,
 )
+from griot_advanced_reasoning import (
+    AdvancedReasoningEngine,
+    AdvancedReasoningResult,
+    Counterexample,
+    DiscoveredRule,
+    MetacognitiveState,
+    ProbabilisticAssessment,
+    ReasoningSubproblem,
+)
 from griot_intent import IntentType, SemanticIntent, SemanticIntentDetector
 from griot_math import MathEngine, MathResult
 from griot_hypothesis_v050 import HypothesisController, HypothesisReport
@@ -97,6 +106,7 @@ class Quid:
         self.versions = KnowledgeVersionStore()
         self.incremental = IncrementalLearner(self.engine)
         self.knowledge = KnowledgeAcquisitionEngine(self.engine)
+        self.advanced_reasoning = AdvancedReasoningEngine(self.engine)
         self.verifier = VerificationEngine()
 
     def simulate(
@@ -121,6 +131,30 @@ class Quid:
         return self.deduplicator.deduplicate(
             item.candidate for item in self.validator.validate(batch).valid
         )
+
+    def solve_advanced(
+        self,
+        query: str,
+        *,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+    ) -> AdvancedReasoningResult:
+        return self.advanced_reasoning.solve(
+            query,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+        )
+
+    def select_reasoning_strategy(self, query: str) -> str:
+        return self.advanced_reasoning.select_strategy(query)
+
+    def decompose_reasoning(self, query: str) -> tuple[ReasoningSubproblem, ...]:
+        return self.advanced_reasoning.decompose(query)
+
+    def discover_reasoning_rules(self, *, min_support: int = 2) -> tuple[DiscoveredRule, ...]:
+        return self.advanced_reasoning.discover_rules(min_support=min_support)
 
     def acquire_knowledge(
         self,
