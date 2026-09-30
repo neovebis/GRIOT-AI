@@ -96,6 +96,23 @@ class GRIOTRuntime:
             max_hops=max_hops,
         )
 
+    def execute_cycle(
+        self,
+        text: str,
+        *,
+        max_cycles: int = 4,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+    ):
+        return self.quid.executar_ciclo(
+            text,
+            max_cycles=max_cycles,
+            decompose=decompose,
+            hypothesis_limit=hypothesis_limit,
+            max_hops=max_hops,
+        )
+
     def ask(self, text: str):
         return self.quid.engine.ask(text)
 
