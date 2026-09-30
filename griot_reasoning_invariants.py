@@ -97,6 +97,7 @@ class ReasoningInvariantEngine:
                 round(float(proof.confidence), 12),
                 proof.rule,
                 proof.provenance,
+                bool(proof.negated),
             )
             for proof in result.proofs
         ]
@@ -108,6 +109,7 @@ class ReasoningInvariantEngine:
                 fact.subject == proof.subject
                 and fact.relation == proof.relation
                 and fact.object == proof.object
+                and fact.negated == proof.negated
                 and abs(float(fact.confidence) - float(proof.confidence)) < 1e-9
                 for fact in facts
             )
