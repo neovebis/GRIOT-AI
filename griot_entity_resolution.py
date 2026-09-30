@@ -46,8 +46,8 @@ class EntityResolver:
     def normalize(surface: str) -> str:
         value = unicodedata.normalize("NFKD", surface.casefold())
         value = "".join(ch for ch in value if not unicodedata.combining(ch))
-        value = re.sub(r"[^\\w]+", " ", value, flags=re.UNICODE)
-        return re.sub(r"\\s+", " ", value).strip()
+        value = re.sub(r"[^\w]+", " ", value, flags=re.UNICODE)
+        return re.sub(r"\s+", " ", value).strip()
 
     def __init__(self, registry: QUIDRegistry) -> None:
         self.registry = registry
