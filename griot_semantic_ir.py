@@ -315,11 +315,13 @@ class MeaningCompiler:
                 family_id=family,
             )
         else:
-            q = self.griot.quids.get(surface) or self.griot.quids.ensure(
-                surface,
-                base=BaseLayer.RICH,
-                family_id=family,
-            )
+            q = self.griot.quids.get(surface)
+            if q is None:
+                q = self.griot.quids.ensure(
+                    surface,
+                    base=BaseLayer.RICH,
+                    family_id=family,
+                )
         node_id = f"q:{q.symbol}"
         if node_id not in nodes:
             nodes[node_id] = MeaningNode(node_id, q.symbol, surface, kind, q.family_id, 1.0)
