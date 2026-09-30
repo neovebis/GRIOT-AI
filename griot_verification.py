@@ -101,6 +101,7 @@ class VerificationEngine:
                     fact.subject == proof.subject
                     and fact.relation == proof.relation
                     and fact.object == proof.object
+                    and fact.negated == proof.negated
                     and fact.provenance == proof.provenance
                     and abs(float(fact.confidence) - float(proof.confidence)) < 1e-9
                     for fact in direct_facts
