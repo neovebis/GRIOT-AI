@@ -51,6 +51,8 @@ class SemanticIntentDetector:
     """Deterministic semantic-intent classifier with explicit evidence."""
 
     DIRECT_RULES = (
+        (r"^o que\s+é\b", IntentType.DEFINITION, 5.0),
+        (r"^o que\s+são\b", IntentType.DEFINITION, 5.0),
         (r"\bcalcula(?:r)?\b", IntentType.CALCULATION, 4.0),
         (r"\bquanto\s+(?:é|e)\b", IntentType.CALCULATION, 3.8),
         (r"\bcalcule\b", IntentType.CALCULATION, 4.0),
@@ -86,9 +88,10 @@ class SemanticIntentDetector:
                 scores[intent] = scores.get(intent, 0.0) + weight
 
         if normalized.endswith("?") or normalized.startswith(self.QUESTION_PREFIXES):
-            signal = IntentSignal("question-form", IntentType.QUERY, 3.5)
+            question_weight = 1.5 if scores else 3.5
+            signal = IntentSignal("question-form", IntentType.QUERY, question_weight)
             signals.append(signal)
-            scores[IntentType.QUERY] = scores.get(IntentType.QUERY, 0.0) + 3.5
+            scores[IntentType.QUERY] = scores.get(IntentType.QUERY, 0.0) + question_weight
 
         frame_intent = getattr(frame, "intent", None)
         frame_map = {
@@ -102,9 +105,10 @@ class SemanticIntentDetector:
         }
         if frame_intent in frame_map:
             mapped = frame_map[frame_intent]
-            signal = IntentSignal(f"frame:{frame_intent}", mapped, 1.2)
+            frame_weight = 0.20
+            signal = IntentSignal(f"frame:{frame_intent}", mapped, frame_weight)
             signals.append(signal)
-            scores[mapped] = scores.get(mapped, 0.0) + 1.2
+            scores[mapped] = scores.get(mapped, 0.0) + frame_weight
 
         if not scores:
             primary = IntentType.ASSERTION
