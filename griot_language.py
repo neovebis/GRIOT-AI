@@ -5,6 +5,8 @@ import re
 import unicodedata
 from typing import Iterable
 
+from griot_lexical_semantics import SemanticLexicon
+
 
 @dataclass(frozen=True, slots=True)
 class LanguageToken:
@@ -176,7 +178,7 @@ class LanguageIntelligence:
         (re.compile(r"^(.+?)\s+antes de\s+(.+)$", re.I), "before"),
         (re.compile(r"^(.+?)\s+depois de\s+(.+)$", re.I), "after"),
         (re.compile(r"^(.+?)\s+(?:está|esta|fica|vive)\s+(?:em|no|na|nos|nas)\s+(.+)$", re.I), "located_in"),
-    )
+    ) + SemanticLexicon.relation_patterns()
 
     VERB_LEMMAS = {
         "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar", "ruge": "rugir", "rugiu": "rugir", "rugir": "rugir", "rugem": "rugir", "habita": "habitar", "habitou": "habitar", "habitar": "habitar", "habitam": "habitar", "vive": "viver", "viveu": "viver", "viver": "viver", "vivem": "viver",
@@ -400,6 +402,9 @@ class LanguageIntelligence:
                 future_lemma = self._lemma(match.group(1))
                 if future_lemma in explicit:
                     return explicit[future_lemma]
+        lexical_relation = SemanticLexicon.relation_for_verb(lemma)
+        if lexical_relation is not None:
+            return lexical_relation
         if lemma in explicit:
             return explicit[lemma]
 
@@ -410,6 +415,9 @@ class LanguageIntelligence:
             candidate = self._lemma(word.strip(" ,;:.!?"))
             if candidate in self.AUXILIARY_HELPERS:
                 continue
+            lexical_relation = SemanticLexicon.relation_for_verb(candidate)
+            if lexical_relation is not None:
+                return lexical_relation
             if candidate in explicit:
                 return explicit[candidate]
         if re.search(r"\b(?:causa|causou|provoca|provocou)\b", clause, re.I):
@@ -524,6 +532,9 @@ class LanguageIntelligence:
 
     def _lemma(self, word: str) -> str:
         key = self.normalize_token(word)
+        lexical = SemanticLexicon.resolve_verb(key)
+        if lexical is not None:
+            return lexical.lemma
         if key in self.VERB_LEMMAS:
             return self.VERB_LEMMAS[key]
         if key.endswith("ando") and len(key) > 5:
