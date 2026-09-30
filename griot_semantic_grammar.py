@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterable, Mapping
 
 from griot_language import LanguageAnalysis, LanguageClause, LanguageIntelligence
+from griot_lexical_semantics import SemanticLexicon
 
 if TYPE_CHECKING:
     from griot_engine import GRIOT
@@ -269,8 +270,10 @@ class SemanticGrammar:
         language: LanguageAnalysis | None = None,
     ) -> VerbFrame | None:
         verb = self._norm(clause.verb or "")
-        lemma = LanguageIntelligence.VERB_LEMMAS.get(verb, verb)
-        frame = self.VERB_FRAMES.get(lemma)
+        lexical = SemanticLexicon.resolve_verb(verb) if verb else None
+        lemma = lexical.lemma if lexical is not None else LanguageIntelligence.VERB_LEMMAS.get(verb, verb)
+        canonical_lemma = SemanticLexicon.canonical_lemma(lemma)
+        frame = self.VERB_FRAMES.get(lemma) or self.VERB_FRAMES.get(canonical_lemma)
         if frame is not None:
             return frame
         if language is not None and verb:
