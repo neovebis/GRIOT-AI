@@ -351,6 +351,16 @@ class SQLiteKnowledgeStore:
             db.execute("CREATE INDEX IF NOT EXISTS idx_facts_object_relation ON facts(object, relation)")
             db.execute("CREATE INDEX IF NOT EXISTS idx_facts_provenance ON facts(provenance)")
             db.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_facts_semantic_identity
+                ON facts(
+                    subject, relation, object, confidence, negated, provenance,
+                    COALESCE(evidence, ''),
+                    COALESCE(timestamp, '')
+                )
+                """
+            )
+            db.execute(
                 "INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', ?)",
                 (str(self.SCHEMA_VERSION),),
             )
