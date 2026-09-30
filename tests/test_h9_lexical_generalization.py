@@ -93,6 +93,17 @@ class H9LexicalGeneralizationTests(unittest.TestCase):
                 clause = self.language.analyze(sentence).clauses[0]
                 self.assertEqual(clause.relation, relation)
 
+    def test_alias_reaches_gir_edge(self) -> None:
+        meaning = self.semantic.understand("O lobo agride o cão.")
+        self.assertTrue(
+            meaning.nodes,
+            f"no GIR nodes; language={meaning.constraints.get('language')!r}; lexical={meaning.constraints.get('lexical')!r}",
+        )
+        self.assertTrue(
+            any(edge.relation == "attacks" for edge in meaning.edges),
+            f"no attacks edge; nodes={meaning.nodes!r}; language={meaning.constraints.get('language')!r}; edges={meaning.edges!r}",
+        )
+
     def test_lexical_resolution_is_embedded_in_gir(self) -> None:
         meaning = self.semantic.understand("O lobo agride o cão.")
         lexical = meaning.constraints["lexical"]
