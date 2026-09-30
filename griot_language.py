@@ -430,7 +430,7 @@ class LanguageIntelligence:
         tail = re.sub(r"^(?:não|nao|nunca|jamais)\s+", "", tail, flags=re.I)
         tail = re.split(r"\s+(?:e|ou|mas|porque|se)\s+", tail, maxsplit=1, flags=re.I)[0]
         tail = re.sub(r"\s+(?:ontem|hoje|agora|amanhã|amanha)$", "", tail, flags=re.I)
-        return tail.strip(" ,;:")
+        return self._strip_det(tail.strip(" ,;:"))
 
     def _clause_tense(self, clause: str) -> str | None:
         words = [self.normalize_token(w) for w in re.findall(r"[\wÀ-ÿ]+", clause)]
