@@ -91,10 +91,10 @@ class MeaningCompiler:
     def compile(self, text: str) -> MeaningRepresentation:
         if not isinstance(text, str):
             raise TypeError("text must be a string")
-        language_analysis = self.language.analyze(text)
         normalized = self.normalize(text)
         if not normalized:
             raise ValueError("text must not be empty")
+        language_analysis = self.language.analyze(normalized)
 
         frame = self.griot.understand(normalized)
         semantic_intent = self.intent.detect(normalized, frame)
@@ -116,7 +116,10 @@ class MeaningCompiler:
         mentions: list[Mention] = []
         coreference_links: list[CoreferenceLink] = []
 
-        for sentence in (x.strip() for x in re.split(r"[.!?]+", normalized) if x.strip()):
+        for sentence in (x.strip() for x in re.split(r"[.!?]+", text) if x.strip()):
+            sentence = self.normalize(sentence)
+            if not sentence:
+                continue
             negated = bool(re.search(r"\b(?:não|nunca|jamais)\b", sentence))
             sentence_clean = re.sub(r"\b(?:não|nunca|jamais)\b\s*", "", sentence, count=1).strip()
             pronoun = re.match(
