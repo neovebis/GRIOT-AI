@@ -10,8 +10,8 @@ android {
         applicationId "com.griot.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 89
-        versionName "1.0.89"
+        versionCode 90
+        versionName "1.0.90"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [ADMOB_APP_ID: admobAppId]
         resValue "string", "admob_native_ad_unit_id", admobNativeAdUnitId
@@ -55,10 +55,12 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            // NOTE: Do NOT assign signingConfig here.
-            // The CI workflow signs the APK via apksigner to guarantee v1 JAR signing
-            // (Samsung devices need v1 to parse the package).
-            // Gradle's built-in signer (build-tools 35) silently drops v1 on re-sign.
+            // Gradle handles ALL signing (v1+v2) via signingConfigs.release above.
+            // Do NOT re-sign with apksigner — it strips v1 JAR signatures.
+            def releaseKeyStore = file("griot-release.keystore")
+            if ((System.getenv("KEYSTORE_FILE") != null && file(System.getenv("KEYSTORE_FILE")).exists()) || releaseKeyStore.exists()) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

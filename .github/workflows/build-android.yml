@@ -74,63 +74,26 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Verify and Sign Release APK
+      - name: Package and Verify Release APK
         run: |
-          # Gradle produces an UNSIGNED APK (no signingConfig in buildType)
+          # Gradle signs the APK with v1 (JAR) + v2 (APK Sig Scheme v2) via signingConfigs.release.
+          # Do NOT re-sign with apksigner — it STRIPS v1 JAR signatures even with --v1-signing-enabled false.
           RELEASE_APK=$(find android/app/build/outputs/apk/release -type f -name '*.apk' 2>/dev/null | head -n 1)
-          ZIPALIGN_BIN=$(find "$ANDROID_HOME/build-tools/34.0.0" -name zipalign -type f 2>/dev/null || find "$ANDROID_HOME/build-tools" -name zipalign -type f | sort -V | tail -n 1)
-          APKSIGNER_BIN=$(find "$ANDROID_HOME/build-tools/34.0.0" -name apksigner -type f 2>/dev/null || find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | head -n 1)
-          KEYSTORE="android/app/griot-release.keystore"
+          APKSIGNER_BIN=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)
           
-          echo "Using apksigner: $APKSIGNER_BIN"
-          echo "Using zipalign: $ZIPALIGN_BIN"
-          echo "Using jarsigner: $(which jarsigner)"
-          
-          if [ -n "$RELEASE_APK" ] && [ -f "$KEYSTORE" ]; then
-            echo "=== STEP 1: zipalign (on unsigned APK) ==="
-            "$ZIPALIGN_BIN" -p -f -v 4 "$RELEASE_APK" aligned-unsigned.apk
-            
-            echo "=== STEP 2: v1 JAR signing with jarsigner (JDK) ==="
-            # jarsigner ALWAYS creates v1 JAR signatures — no minSdk override issues
-            # Must run AFTER zipalign because jarsigner signs in-place
-            cp aligned-unsigned.apk aligned-v1signed.apk
-            jarsigner -verbose \
-              -keystore "$KEYSTORE" \
-              -storepass "GriotMobileApp2026!" \
-              -keypass "GriotMobileApp2026!" \
-              -sigalg SHA256withRSA \
-              -digestalg SHA-256 \
-              aligned-v1signed.apk \
-              griot-release
-            echo "v1 JAR signing done."
-            
-            # Verify jarsigner applied correctly
-            jarsigner -verify -verbose aligned-v1signed.apk | head -20 || true
-            
-            echo "=== STEP 3: v2+v3 signing with apksigner (preserving existing v1) ==="
-            # apksigner adds v2+v3 blocks; --v1-signing-enabled false prevents it from
-            # touching the existing v1 JAR signatures that jarsigner already created
-            "$APKSIGNER_BIN" sign \
-              --ks "$KEYSTORE" \
-              --ks-pass pass:GriotMobileApp2026! \
-              --ks-key-alias griot-release \
-              --key-pass pass:GriotMobileApp2026! \
-              --v1-signing-enabled false \
-              --v2-signing-enabled true \
-              --v3-signing-enabled true \
-              --v4-signing-enabled false \
-              --out GRIOT-Mobile.apk \
-              aligned-v1signed.apk
-            echo "Release APK signed successfully: GRIOT-Mobile.apk"
-          elif [ -n "$RELEASE_APK" ]; then
+          if [ -n "$RELEASE_APK" ]; then
             cp "$RELEASE_APK" GRIOT-Mobile.apk
+            echo "APK copied from Gradle output: GRIOT-Mobile.apk"
+          else
+            echo "ERROR: No release APK found!"
+            exit 1
           fi
 
           ls -lh GRIOT-Mobile.apk
           sha256sum GRIOT-Mobile.apk
 
           GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-          TAG_TO_USE="v${GRADLE_VER:-1.0.88}"
+          TAG_TO_USE="v${GRADLE_VER:-1.0.90}"
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_TO_USE="${{ github.ref_name }}"
           fi
