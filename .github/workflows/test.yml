@@ -116,5 +116,7 @@ jobs:
         run: python -m unittest tests.test_h4_execution_transitions -v
       - name: H5 canonical runtime tests
         run: python -m unittest tests.test_h5_canonical_runtime -v
+      - name: H6 integrated runtime API tests
+        run: python -m unittest tests.test_h6_integrated_runtime_api -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
