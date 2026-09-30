@@ -19,9 +19,9 @@ class PlanningTests(unittest.TestCase):
         world = WorldModel(self.engine)
         trace = world.simulate(("fogo",), steps=4)
         labels = [set(world.labels(state)) for state in trace.states]
-        self.assertIn("fogo", labels[0])
-        self.assertIn("calor", labels[1])
-        self.assertIn("comida quente", labels[2])
+        self.assertIn(self.engine.quids.get("fogo").label, labels[0])
+        self.assertIn(self.engine.quids.get("calor").label, labels[1])
+        self.assertIn(self.engine.quids.get("comida quente").label, labels[2])
         self.assertLessEqual(trace.terminal.step, 4)
 
     def test_world_model_does_not_mutate_memory(self) -> None:
