@@ -57,11 +57,12 @@ class GRIOTRuntime:
 
     def health(self) -> RuntimeHealth:
         components = {
-            "semantic_intent": lambda: self.quid.semantic.intent,
-            "ambiguity": lambda: self.quid.semantic.ambiguity,
-            "polysemy": lambda: self.quid.semantic.polysemy,
-            "coreference": lambda: self.quid.semantic.coreference,
+            "semantic_intent": lambda: self.quid.semantic.compiler.intent,
+            "ambiguity": lambda: self.quid.semantic.compiler.ambiguity,
+            "polysemy": lambda: self.quid.semantic.compiler.polysemy,
+            "coreference": lambda: self.quid.semantic.compiler.coreference,
             "discourse_context": lambda: self.quid.engine.discourse,
+            "gir": lambda: self.quid.semantic.compiler,
             "query_planner": lambda: self.quid.query_planner,
             "working_graph": lambda: self.quid.query_planner.retriever if hasattr(self.quid.query_planner, "retriever") else None,
             "reasoning": lambda: self.quid.reasoning,
