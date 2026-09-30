@@ -91,18 +91,11 @@ class CausalityEngine:
         cycle_paths: set[tuple[str, ...]] = set()
 
         def visit(node: str, path_nodes: tuple[str, ...], steps: tuple[CausalStep, ...]) -> None:
-            if len(steps) >= max_depth:
-                if steps:
-                    paths.append(
-                        CausalPath(
-                            path_nodes,
-                            steps,
-                            self._path_confidence(steps),
-                        )
-                    )
-                return
+            if not steps:
+                outgoing = adjacency.get(node, ())
+            else:
+                outgoing = adjacency.get(node, ())
 
-            outgoing = adjacency.get(node, ())
             if not outgoing:
                 if steps:
                     paths.append(
@@ -114,25 +107,38 @@ class CausalityEngine:
                     )
                 return
 
+            if len(steps) >= max_depth:
+                paths.append(
+                    CausalPath(
+                        path_nodes,
+                        steps,
+                        self._path_confidence(steps),
+                    )
+                )
+                return
+
             for fact in outgoing:
                 next_node = fact.subject if direction == "causes" else fact.object
                 step = self._step(fact)
-                if next_node in path_nodes:
-                    cycle_paths.add(path_nodes + (next_node,))
-                    if steps:
-                        paths.append(
-                            CausalPath(
-                                path_nodes + (next_node,),
-                                steps + (step,),
-                                self._path_confidence(steps + (step,)),
-                            )
-                        )
-                    continue
-                visit(
-                    next_node,
-                    path_nodes + (next_node,),
-                    steps + (step,),
+                next_steps = steps + (step,)
+                next_nodes = path_nodes + (next_node,)
+
+                # Every reached node is a useful causal path, not only terminal
+                # leaves. This makes bounded reachability and depth analysis
+                # compositional.
+                paths.append(
+                    CausalPath(
+                        next_nodes,
+                        next_steps,
+                        self._path_confidence(next_steps),
+                    )
                 )
+
+                if next_node in path_nodes:
+                    cycle_paths.add(next_nodes)
+                    continue
+
+                visit(next_node, next_nodes, next_steps)
 
         visit(start, (start,), ())
 
