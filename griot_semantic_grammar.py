@@ -172,6 +172,8 @@ class SemanticGrammar:
         "querer": VerbFrame("querer", "wants", "transitive", (), ("person", "animal"), ("entity",)),
         "precisar": VerbFrame("precisar", "needs", "transitive", ("de",), ("person", "animal"), ("entity",)),
         "saber": VerbFrame("saber", "knows", "transitive", (), ("person", "animal"), ("entity",)),
+        "ter": VerbFrame("ter", "has", "transitive", (), ("entity",), ("entity",)),
+        "possuir": VerbFrame("possuir", "has", "transitive", (), ("entity",), ("entity",)),
         "ser": VerbFrame("ser", "is_a", "copulative"),
         "estar": VerbFrame("estar", "located_in", "relational", ("em", "no", "na", "nos", "nas"), ("entity",), ("location",)),
         "habitar": VerbFrame("habitar", "located_in", "relational", ("em", "no", "na", "nos", "nas"), ("entity",), ("location",)),
@@ -339,6 +341,16 @@ class SemanticGrammar:
         if unknown:
             return SelectionalCheck(frame.relation, clause.subject, clause.object, "unknown")
         return SelectionalCheck(frame.relation, clause.subject, clause.object, "valid")
+
+    @staticmethod
+    def coordination_truth(operator: str, values: Iterable[bool]) -> bool:
+        """Return the truth condition for a coordinated phrase."""
+        if operator not in {"e", "ou"}:
+            raise ValueError("operator must be e or ou")
+        items = tuple(values)
+        if not items:
+            raise ValueError("coordination requires at least one value")
+        return all(items) if operator == "e" else any(items)
 
     @staticmethod
     def _matches_any(kinds: frozenset[str], required: tuple[str, ...]) -> bool | None:
