@@ -13,4 +13,4 @@ license = {text = "Proprietary"}
 [tool.griot]
 architecture_version = "0.4.0"
 release_status = "frozen"
-freeze_commit = "8a0603b7efd6ae29df5319ab67cdf4f38f3dd797"
+freeze_commit = "0f432fa70c13a8fb730a2078db9c6bf35f3e9cb2"
