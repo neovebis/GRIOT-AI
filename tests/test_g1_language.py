@@ -60,6 +60,12 @@ class TestLanguageIntelligence(unittest.TestCase):
         self.assertTrue(analysis.tokens)
         self.assertIsInstance(analysis.clauses, tuple)
 
+    def test_common_noun_is_not_mistagged_as_present_verb(self) -> None:
+        tokens = self.language.tokenize("A casa bonita.")
+        casa = next(token for token in tokens if token.text.casefold() == "casa")
+        self.assertEqual(casa.pos, "WORD")
+        self.assertIsNone(casa.tense)
+
 
 if __name__ == "__main__":
     unittest.main()
