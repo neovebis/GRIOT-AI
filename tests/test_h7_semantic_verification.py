@@ -350,7 +350,7 @@ QUERY_CASES = [
         "O que o João criou?",
         "object",
         "creates",
-        "João"
+        "joão"
     ],
     [
         "Quem ajudou o lobo?",
@@ -368,7 +368,7 @@ QUERY_CASES = [
         "O que o João quer?",
         "object",
         "wants",
-        "João"
+        "joão"
     ],
     [
         "Quem precisa do carro?",
