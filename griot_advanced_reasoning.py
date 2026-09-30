@@ -558,13 +558,40 @@ class AdvancedReasoningEngine:
         try:
             meaning = self.semantic.understand(query)
         except Exception:
+            meaning = None
+        if meaning is not None:
+            edges = [
+                edge
+                for edge in meaning.edges
+                if edge.relation in self.reasoning.QUERY_RELATIONS
+            ]
+            if edges:
+                nodes = {node.node_id: node for node in meaning.nodes}
+                target = nodes.get(edges[0].target)
+                if target is not None:
+                    return target.quid
+
+        # Natural-language causal questions may name the effect without
+        # expressing an explicit binary relation, e.g. "Por que existe fumaça?".
+        match = re.search(
+            r"\b(?:existe|há|ha)\s+(.+?)(?:\?|$)",
+            query.casefold().strip(),
+        )
+        if not match:
             return None
-        edges = [edge for edge in meaning.edges if edge.relation in self.reasoning.QUERY_RELATIONS]
-        if not edges:
+        surface = self._clean_entity_surface(match.group(1))
+        if not surface:
             return None
-        nodes = {node.node_id: node for node in meaning.nodes}
-        target = nodes.get(edges[0].target)
-        return target.quid if target else None
+        existing = self.semantic.engine.quids.get(surface)
+        return existing.symbol if existing is not None else None
+
+    @staticmethod
+    def _clean_entity_surface(value: str) -> str:
+        return re.sub(
+            r"^(?:o|a|os|as|um|uma|uns|umas)\s+",
+            "",
+            value.strip(" ,.!?"),
+        )
 
     def _metacognition(
         self,
@@ -628,20 +655,29 @@ class AdvancedReasoningEngine:
         strategy: str,
         math_result: MathResult | None,
     ) -> str:
-        if strategy == "mathematical" and math_result is not None and math_result.status != "invalid":
-            return "stop"
-        if not verification.ok:
-            return "reverify"
+        # Control decisions are ordered by epistemic safety and by the
+        # availability of a concrete next operation. Exploratory operations
+        # do not assert truth or mutate durable knowledge, so they can proceed
+        # even when the current proof trace needs re-verification.
         if result.status is TruthStatus.CONFLICT:
             return "resolve_conflict"
-        if result.status is TruthStatus.UNKNOWN:
-            if hypotheses is not None and hypotheses.hypotheses:
-                return "test_hypotheses"
-            return "retrieve_more_evidence"
         if counterfactual is not None and counterfactual.changed:
             return "inspect_counterfactual_effect"
         if causal is not None and causal.paths:
             return "inspect_causal_paths"
+        if (
+            strategy == "hypothetical"
+            and result.status is TruthStatus.UNKNOWN
+            and hypotheses is not None
+            and hypotheses.hypotheses
+        ):
+            return "test_hypotheses"
+        if strategy == "mathematical" and math_result is not None and math_result.status != "invalid":
+            return "stop"
+        if not verification.ok:
+            return "reverify"
+        if result.status is TruthStatus.UNKNOWN:
+            return "retrieve_more_evidence"
         return "stop"
     
 
