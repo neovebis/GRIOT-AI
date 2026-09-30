@@ -104,10 +104,11 @@ class ExecutionControlPlane:
             )
 
         if operation is ExecutionOperation.REVERIFY:
+            advanced_result = source.advanced_reasoning.result
             report = self.verifier.verify(
                 source.gir,
-                source.base_reasoning,
-                self.quid.epistemic.assess(source.base_reasoning, source.query),
+                advanced_result,
+                source.advanced_reasoning.epistemic,
                 reasoning_engine=self.quid.reasoning,
             )
             status = (
