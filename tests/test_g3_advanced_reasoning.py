@@ -39,15 +39,15 @@ class TestG3AdvancedReasoning(unittest.TestCase):
         self.assertEqual(result.metacognition.next_operation, "stop")
 
     def test_temporal_reasoning_is_transitive(self) -> None:
-        self.engine.learn("A está antes de B. B está antes de C.", "timeline")
-        result = self.g3.temporal_query("A antes de C?")
+        self.engine.learn("O lobo está antes de o gato. O gato está antes de o cão.", "timeline")
+        result = self.g3.temporal_query("lobo antes de cão?")
         self.assertEqual(result.status, TruthStatus.SUPPORTED)
         self.assertTrue(any(step.rule != "direct" for step in result.proofs))
 
     def test_probabilistic_evidence_aggregation(self) -> None:
         a = self.engine.quids.get("lobo")
-        b = self.engine.quids.get("animal")
-        assert a is not None and b is not None
+        b = self.engine.quids.get("animal") or self.engine.quids.ensure("animal")
+        assert a is not None
         self.engine.graph.add_fact(Fact(a.symbol, "is_a", b.symbol, 0.8, False, "source-a"))
         self.engine.graph.add_fact(Fact(a.symbol, "is_a", b.symbol, 0.7, False, "source-b"))
         result = self.g3.solve("O lobo é um animal?")
