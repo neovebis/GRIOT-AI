@@ -49,6 +49,17 @@ class ExecutionResult:
     source_result: IntegratedReasoningResult
 
 
+@dataclass(frozen=True, slots=True)
+class ExecutionCycleResult:
+    """Bounded control loop over the canonical G1 -> G3 runtime path."""
+
+    query: str
+    steps: tuple[ExecutionResult, ...]
+    final_result: ExecutionResult | None
+    stopped_reason: str
+    cycles: int
+
+
 class ExecutionControlPlane:
     """Executes the deterministic next action exposed by G3 metacognition.
 
@@ -79,6 +90,84 @@ class ExecutionControlPlane:
             context_source=context_source,
         )
         return self.execute(source)
+
+    def run_cycle(
+        self,
+        query: str,
+        *,
+        max_cycles: int = 4,
+        decompose: bool = True,
+        hypothesis_limit: int = 8,
+        max_hops: int = 8,
+        context_source: str = "query-cycle",
+    ) -> ExecutionCycleResult:
+        """Run bounded execution-control cycles with deterministic loop detection.
+
+        A cycle may only advance when the current operation completes. If the
+        same observable G1/G3 control state appears again, execution stops
+        instead of spinning. WAITING and STOP are terminal for the cycle.
+        """
+
+        if not isinstance(max_cycles, int) or isinstance(max_cycles, bool) or max_cycles <= 0:
+            raise ValueError("max_cycles must be a positive integer")
+
+        steps: list[ExecutionResult] = []
+        seen: set[tuple[object, ...]] = set()
+
+        for _ in range(max_cycles):
+            source = self.pipeline.run(
+                query,
+                decompose=decompose,
+                hypothesis_limit=hypothesis_limit,
+                max_hops=max_hops,
+                context_source=context_source,
+            )
+            state_key = (
+                source.gir.fingerprint(),
+                source.epistemic_status.value,
+                round(source.confidence, 12),
+                source.next_operation,
+                source.working_graph.evidence_count,
+            )
+            if state_key in seen:
+                final = steps[-1] if steps else None
+                return ExecutionCycleResult(
+                    query,
+                    tuple(steps),
+                    final,
+                    "repeated_control_state",
+                    len(steps),
+                )
+            seen.add(state_key)
+
+            result = self.execute(source)
+            steps.append(result)
+
+            if result.status is ExecutionStatus.WAITING:
+                return ExecutionCycleResult(
+                    query,
+                    tuple(steps),
+                    result,
+                    "waiting",
+                    len(steps),
+                )
+            if result.operation is ExecutionOperation.STOP:
+                return ExecutionCycleResult(
+                    query,
+                    tuple(steps),
+                    result,
+                    "stop",
+                    len(steps),
+                )
+
+        final = steps[-1] if steps else None
+        return ExecutionCycleResult(
+            query,
+            tuple(steps),
+            final,
+            "max_cycles_reached",
+            len(steps),
+        )
 
     def execute(self, source: IntegratedReasoningResult) -> ExecutionResult:
         operation = self._operation(source.next_operation)
@@ -217,6 +306,7 @@ class ExecutionControlPlane:
 
 __all__ = [
     "ExecutionControlPlane",
+    "ExecutionCycleResult",
     "ExecutionOperation",
     "ExecutionResult",
     "ExecutionStatus",
