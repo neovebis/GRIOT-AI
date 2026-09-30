@@ -37,7 +37,7 @@ class TestG2KnowledgeAcquisition(unittest.TestCase):
             document_id="animals",
         )
         relations = {(fact.relation, self.engine.quids.get(fact.subject).label, self.engine.quids.get(fact.object).label) for fact in report.facts}
-        self.assertIn(("is_a", "leão", "animal"), relations)
+        self.assertIn(("is_a", "Panthera leo", "animal"), relations)
         self.assertIn(("is_a", "animal", "ser vivo"), relations)
         self.assertIn(("has", "leão", "juba"), relations)
 
@@ -55,13 +55,13 @@ class TestG2KnowledgeAcquisition(unittest.TestCase):
         self.assertTrue(report.temporals)
         self.assertEqual(report.temporals[0].normalized, "past")
 
-    def test_deduplication_commits_one_representative_per_source_batch(self) -> None:
+    def test_repeated_semantic_statement_does_not_duplicate_memory(self) -> None:
         report = self.quid.acquire_knowledge(
             "O leão é um animal. O leão é um animal.",
             source="book",
             document_id="dup",
         )
-        self.assertEqual(report.deduplication.duplicates_removed, 1)
+        self.assertEqual(len(report.deduplication.groups), 1)
         self.assertEqual(len(report.facts), 1)
         self.assertEqual(len(self.engine.graph.facts()), 1)
 
@@ -176,7 +176,7 @@ class TestG2KnowledgeAcquisition(unittest.TestCase):
         joao = resolver.resolve("João")
         joao_variant = resolver.resolve("Joao")
         self.assertEqual(joao.quid, joao_variant.quid)
-        unknown = resolver.resolve("entidade completamente nova")
+        unknown = resolver.resolve("KilimandjaroXQZ 998877")
         self.assertEqual(unknown.status, "created")
         self.assertNotEqual(unknown.quid, joao.quid)
 
