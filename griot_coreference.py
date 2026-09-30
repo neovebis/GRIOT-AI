@@ -160,7 +160,7 @@ class CoreferenceResolver:
             mention.gender, mention.number, agreement
         ):
             return 0.0
-        role_bonus = 0.45 if mention.role == "subject" else 0.0
+        role_bonus = 1.0 if mention.role == "subject" else 0.0
         recency_bonus = 1.60 / (rank + 1)
         return 2.0 + role_bonus + recency_bonus
 
