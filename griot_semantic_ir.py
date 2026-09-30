@@ -19,6 +19,7 @@ from griot_intent import SemanticIntentDetector, SemanticIntent
 from griot_metaphor import MetaphorResolver
 from griot_polysemy import PolysemyAnalysis, PolysemyResolver
 from griot_language import LanguageAnalysis, LanguageIntelligence
+from griot_lexical_semantics import SemanticLexicon
 from griot_semantic_grammar import SemanticGrammar
 
 
@@ -81,7 +82,7 @@ class MeaningCompiler:
     @staticmethod
     def normalize(text: str) -> str:
         value = unicodedata.normalize("NFKC", text).casefold().strip()
-        return re.sub(r"\s+", " ", re.sub(r"[!?;:]+", " ", value))
+        return re.sub(r"\s+", " ", re.sub(r"[.!?;:]+", " ", value))
 
     @staticmethod
     def clean(value: str) -> str:
@@ -295,6 +296,16 @@ class MeaningCompiler:
             for family in (self._polysemy_analysis.families if self._polysemy_analysis else ())
         )
         constraints["language"] = self._language_constraints(language_analysis)
+        constraints["lexical"] = tuple(
+            {
+                "surface": item.surface,
+                "lemma": item.lemma,
+                "relation": item.relation,
+                "source": item.source,
+                "confidence": item.confidence,
+            }
+            for item in SemanticLexicon.analyze(normalized)
+        )
         grammar_analysis = self.grammar.analyze(text, language_analysis)
         constraints["grammar"] = grammar_analysis.to_dict()
 
@@ -406,6 +417,23 @@ class MeaningCompiler:
             match = re.match(pattern, candidate, re.I)
             if match:
                 return match.group(1), relation, match.group(2)
+
+        # H9 lexical fallback: curated synonyms and their inflected forms must
+        # reach the same canonical relation even when the legacy regex table
+        # has no surface form for the verb.
+        words = candidate.split()
+        for index, word in enumerate(words):
+            relation = SemanticLexicon.relation_for_verb(word.strip(" ,;:.!?"))
+            if relation is None:
+                continue
+            subject_words = words[:index]
+            while subject_words and subject_words[-1].casefold() in {
+                "vai", "vão", "vao", "está", "esta", "estava",
+            }:
+                subject_words.pop()
+            object_words = words[index + 1:]
+            if subject_words and object_words:
+                return " ".join(subject_words), relation, " ".join(object_words)
         return None
 
     @staticmethod
