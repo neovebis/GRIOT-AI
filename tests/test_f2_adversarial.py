@@ -48,28 +48,28 @@ class AdversarialTests(unittest.TestCase):
         self.assertIsNone(result.result.answer)
         self.assertTrue(result.result.abstained)
 
-    def test_invalid_gir_does_not_pass_validation(self) -> None:
+    def test_invalid_gir_is_rejected_at_construction(self) -> None:
         semantic = SemanticGRIOT(self.engine)
         valid = semantic.understand("leão é um animal")
         with self.assertRaises(ValueError):
             GIR(
                 text=valid.text,
-            frame=valid.frame,
-            nodes=valid.nodes,
-            edges=tuple(
-                edge.__class__(
-                    edge.source,
-                    edge.relation,
-                    "q:does-not-exist",
-                    edge.family_id,
-                    edge.confidence,
-                    edge.negated,
-                    edge.evidence,
-                )
-                for edge in valid.edges
-            ),
-            vector=valid.vector,
-            constraints=valid.constraints,
+                frame=valid.frame,
+                nodes=valid.nodes,
+                edges=tuple(
+                    edge.__class__(
+                        edge.source,
+                        edge.relation,
+                        "q:does-not-exist",
+                        edge.family_id,
+                        edge.confidence,
+                        edge.negated,
+                        edge.evidence,
+                    )
+                    for edge in valid.edges
+                ),
+                vector=valid.vector,
+                constraints=valid.constraints,
                 provenance=valid.provenance,
             )
 
@@ -80,20 +80,26 @@ class AdversarialTests(unittest.TestCase):
         self.assertTrue(result.result.working_graph.evidence_count <= 256)
 
     def test_unicode_q_uid_invariant_remains_enforced(self) -> None:
+        from griot_extraction import ExtractionCandidate, ExtractionBatch
+        from griot_validation import KnowledgeValidator, ValidationStatus
+
         bad = Fact("xx", "is_a", "yy", 1.0, False, "bad")
-        with self.assertRaises((ValueError, TypeError)):
-            from griot_validation import KnowledgeValidator
-            validator = KnowledgeValidator(self.engine)
-            gir = __import__("griot_gir", fromlist=["GIR"])
-            # The malformed fact is rejected by the same QUID-reference
-            # validation contract used by staged knowledge ingestion.
-            class Candidate:
-                fact = bad
-                gir_fingerprint = "invalid"
-            validator.validate(type("Batch", (), {
-                "candidates": (Candidate(),),
-                "gir": type("GIRStub", (), {"fingerprint": lambda self: "invalid"})(),
-            })())
+        semantic = SemanticGRIOT(self.engine)
+        valid = semantic.understand("leão é um animal")
+        candidate = ExtractionCandidate(
+            bad,
+            "xx é yy",
+            valid.fingerprint(),
+            1.0,
+        )
+        batch = ExtractionBatch("xx é yy", valid, (candidate,))
+        report = KnowledgeValidator(self.engine).validate(batch)
+
+        self.assertEqual(report.candidates[0].status, ValidationStatus.INVALID)
+        self.assertTrue(
+            any(issue.code == "quid-reference-invalid"
+                for issue in report.candidates[0].issues)
+        )
 
 
 if __name__ == "__main__":
