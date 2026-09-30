@@ -39,7 +39,7 @@ class TestG2KnowledgeAcquisition(unittest.TestCase):
         relations = {(fact.relation, self.engine.quids.get(fact.subject).label, self.engine.quids.get(fact.object).label) for fact in report.facts}
         self.assertIn(("is_a", "Panthera leo", "animal"), relations)
         self.assertIn(("is_a", "animal", "ser vivo"), relations)
-        self.assertIn(("has", "leão", "juba"), relations)
+        self.assertIn(("has", "Panthera leo", "juba"), relations)
 
     def test_event_and_temporal_extraction(self) -> None:
         report = self.quid.acquire_knowledge(
@@ -177,7 +177,7 @@ class TestG2KnowledgeAcquisition(unittest.TestCase):
         joao_variant = resolver.resolve("Joao")
         self.assertEqual(joao.quid, joao_variant.quid)
         unknown = resolver.resolve("KilimandjaroXQZ 998877")
-        self.assertEqual(unknown.status, "created")
+        self.assertEqual(unknown.status, "created", repr(unknown))
         self.assertNotEqual(unknown.quid, joao.quid)
 
     def test_json_document_ingestion(self) -> None:
