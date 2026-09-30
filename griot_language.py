@@ -179,7 +179,7 @@ class LanguageIntelligence:
     )
 
     VERB_LEMMAS = {
-        "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar",
+        "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar", "ruge": "rugir", "rugiu": "rugir", "rugir": "rugir", "rugem": "rugir", "habita": "habitar", "habitou": "habitar", "habitar": "habitar", "habitam": "habitar", "vive": "viver", "viveu": "viver", "viver": "viver", "vivem": "viver",
         "come": "comer", "comeu": "comer", "comer": "comer", "comem": "comer",
         "vê": "ver", "ve": "ver", "viu": "ver", "ver": "ver", "veem": "ver",
         "usa": "usar", "usou": "usar", "usar": "usar", "usam": "usar",
