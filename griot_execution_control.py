@@ -211,6 +211,7 @@ class ExecutionControlPlane:
                     result,
                     "stop",
                     len(steps),
+                    tuple(transitions),
                 )
 
         final = steps[-1] if steps else None
