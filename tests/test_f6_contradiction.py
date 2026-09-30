@@ -35,8 +35,8 @@ class ContradictionTests(unittest.TestCase):
         self.assertFalse(report.can_commit)
 
     def test_deduplication_keeps_conflict_group(self) -> None:
-        lion = self.engine.quids.get("leão").symbol
-        animal = self.engine.quids.get("animal").symbol
+        lion = self.engine.quids.ensure("leão", family_id=1).symbol
+        animal = self.engine.quids.ensure("animal", family_id=1).symbol
         candidates = self.quid.extract_knowledge("O leão é um animal.")
         positive = candidates.candidates[0]
         negative_fact = Fact(
@@ -60,8 +60,8 @@ class ContradictionTests(unittest.TestCase):
         self.assertEqual(len(report.conflict_groups), 1)
 
     def test_consolidation_never_commits_conflicting_group(self) -> None:
-        lion = self.engine.quids.get("leão").symbol
-        animal = self.engine.quids.get("animal").symbol
+        lion = self.engine.quids.ensure("leão", family_id=1).symbol
+        animal = self.engine.quids.ensure("animal", family_id=1).symbol
         self.engine.graph.add_fact(Fact(lion, "is_a", animal, 0.9, False, "a"))
 
         batch = self.quid.extract_knowledge("O leão não é um animal.", source="b")
@@ -75,8 +75,8 @@ class ContradictionTests(unittest.TestCase):
         self.assertEqual(len(self.engine.graph.facts()), 1)
 
     def test_promotion_is_demoted_by_conflict(self) -> None:
-        lion = self.engine.quids.get("leão").symbol
-        animal = self.engine.quids.get("animal").symbol
+        lion = self.engine.quids.ensure("leão", family_id=1).symbol
+        animal = self.engine.quids.ensure("animal", family_id=1).symbol
         positive = (
             Fact(lion, "is_a", animal, 0.95, False, "a"),
             Fact(lion, "is_a", animal, 0.95, False, "b"),
@@ -93,8 +93,8 @@ class ContradictionTests(unittest.TestCase):
         self.assertTrue(all(item.level == KnowledgeLevel.DEMOTED for item in result))
 
     def test_storage_preserves_both_polarities(self) -> None:
-        lion = self.engine.quids.get("leão").symbol
-        animal = self.engine.quids.get("animal").symbol
+        lion = self.engine.quids.ensure("leão", family_id=1).symbol
+        animal = self.engine.quids.ensure("animal", family_id=1).symbol
         facts = (
             Fact(lion, "is_a", animal, 0.9, False, "a"),
             Fact(lion, "is_a", animal, 0.9, True, "b"),
