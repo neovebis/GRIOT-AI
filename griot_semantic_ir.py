@@ -18,6 +18,7 @@ from griot_gir import GIR, GIR_RELATION_FAMILIES, MeaningEdge, MeaningNode
 from griot_intent import SemanticIntentDetector, SemanticIntent
 from griot_metaphor import MetaphorResolver
 from griot_polysemy import PolysemyAnalysis, PolysemyResolver
+from griot_language import LanguageAnalysis, LanguageIntelligence
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +68,7 @@ class MeaningCompiler:
         self.coreference = CoreferenceResolver(griot)
         self.metaphor = MetaphorResolver()
         self.intent = SemanticIntentDetector()
+        self.language = LanguageIntelligence()
         self._ambiguity_analysis: AmbiguityAnalysis | None = None
         self._polysemy_analysis: PolysemyAnalysis | None = None
 
@@ -83,6 +85,7 @@ class MeaningCompiler:
     def compile(self, text: str) -> MeaningRepresentation:
         if not isinstance(text, str):
             raise TypeError("text must be a string")
+        language_analysis = self.language.analyze(text)
         normalized = self.normalize(text)
         if not normalized:
             raise ValueError("text must not be empty")
@@ -123,7 +126,26 @@ class MeaningCompiler:
                 coreference_links.append(link)
                 if link.resolved and link.antecedent:
                     sentence_clean = f"{link.antecedent} {pronoun.group(2)}"
-            parsed = self._parse(sentence_clean)
+            language_clause = next(
+                (
+                    clause for clause in language_analysis.clauses
+                    if self.normalize(clause.text) == self.normalize(sentence_clean)
+                ),
+                None,
+            )
+            if (
+                language_clause is not None
+                and language_clause.subject
+                and language_clause.relation
+                and language_clause.object
+            ):
+                parsed = (
+                    language_clause.subject,
+                    language_clause.relation,
+                    language_clause.object,
+                )
+            else:
+                parsed = self._parse(sentence_clean)
             if not parsed:
                 continue
             subject, relation, object_ = parsed
@@ -263,6 +285,7 @@ class MeaningCompiler:
             }
             for family in (self._polysemy_analysis.families if self._polysemy_analysis else ())
         )
+        constraints["language"] = self._language_constraints(language_analysis)
 
         return MeaningRepresentation(
             text,
@@ -273,6 +296,97 @@ class MeaningCompiler:
             constraints,
             provenance=("semantic-compiler",),
         )
+
+    @staticmethod
+    def _language_constraints(analysis: LanguageAnalysis) -> Mapping[str, object]:
+        return {
+            "tokens": tuple(
+                {
+                    "text": token.text,
+                    "lemma": token.lemma,
+                    "position": token.position,
+                    "pos": token.pos,
+                    "tense": token.tense,
+                    "aspect": token.aspect,
+                    "person": token.person,
+                    "number": token.number,
+                    "gender": token.gender,
+                }
+                for token in analysis.tokens
+            ),
+            "clauses": tuple(
+                {
+                    "text": clause.text,
+                    "subject": clause.subject,
+                    "predicate": clause.predicate,
+                    "verb": clause.verb,
+                    "relation": clause.relation,
+                    "object": clause.object,
+                    "roles": tuple(
+                        {
+                            "role": role.role,
+                            "text": role.text,
+                            "confidence": role.confidence,
+                        }
+                        for role in clause.roles
+                    ),
+                    "negated": clause.negated,
+                    "tense": clause.tense,
+                    "aspect": clause.aspect,
+                    "modality": clause.modality,
+                    "temporal": clause.temporal,
+                    "quantifiers": tuple(
+                        {
+                            "surface": item.surface,
+                            "kind": item.kind,
+                            "scope": item.scope,
+                            "confidence": item.confidence,
+                        }
+                        for item in clause.quantifiers
+                    ),
+                    "comparison": (
+                        {
+                            "subject": clause.comparison.subject,
+                            "operator": clause.comparison.operator,
+                            "reference": clause.comparison.reference,
+                            "property_text": clause.comparison.property_text,
+                            "confidence": clause.comparison.confidence,
+                        }
+                        if clause.comparison
+                        else None
+                    ),
+                }
+                for clause in analysis.clauses
+            ),
+            "quantifiers": tuple(
+                {
+                    "surface": item.surface,
+                    "kind": item.kind,
+                    "scope": item.scope,
+                    "confidence": item.confidence,
+                }
+                for item in analysis.quantifiers
+            ),
+            "comparisons": tuple(
+                {
+                    "subject": item.subject,
+                    "operator": item.operator,
+                    "reference": item.reference,
+                    "property_text": item.property_text,
+                    "confidence": item.confidence,
+                }
+                for item in analysis.comparisons
+            ),
+            "conditionals": tuple(
+                {
+                    "condition": item.condition,
+                    "consequent": item.consequent,
+                    "confidence": item.confidence,
+                }
+                for item in analysis.conditionals
+            ),
+            "markers": analysis.markers,
+        }
 
     def _parse(self, sentence: str) -> tuple[str, str, str] | None:
         modal = re.match(r"^(.*?)\s+(?:pode|deve|precisa)\s+(.+)$", sentence, re.I)
