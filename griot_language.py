@@ -492,7 +492,7 @@ class LanguageIntelligence:
             ("iu", "past_perfect", 3, "sing"), ("amos", "present", 1, "plur"),
             ("ais", "present", 2, "plur"), ("am", "present", 3, "plur"),
             ("as", "present", 2, "sing"), ("es", "present", 2, "sing"),
-            ("is", "present", 2, "sing"), ("a", "present", 3, "sing"),
+            ("is", "present", 2, "sing"), ("em", "present", 3, "plur"), ("a", "present", 3, "sing"),
             ("e", "present", 3, "sing"), ("o", "present", 1, "sing"),
         )
         for ending, tense, person, number in endings:
