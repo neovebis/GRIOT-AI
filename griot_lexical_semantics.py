@@ -95,11 +95,18 @@ class SemanticLexicon:
         key = cls.normalize(value)
         if key in cls.CANONICAL_RELATIONS:
             return key
-        return cls.ALIASES.get(key, key)
+        if key in cls.ALIASES:
+            return cls.ALIASES[key]
+        return cls._generated_forms().get(key, key)
 
     @classmethod
     def relation_for_verb(cls, value: str) -> str | None:
-        lemma = cls.canonical_lemma(value)
+        key = cls.normalize(value)
+        if key in cls.CANONICAL_RELATIONS:
+            return cls.CANONICAL_RELATIONS[key]
+        if key in cls.ALIASES:
+            return cls.CANONICAL_RELATIONS[cls.ALIASES[key]]
+        lemma = cls._generated_forms().get(key)
         return cls.CANONICAL_RELATIONS.get(lemma)
 
     @classmethod
