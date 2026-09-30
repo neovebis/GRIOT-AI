@@ -95,11 +95,15 @@ class KnowledgeInducer:
                 continue
             subject = self.semantic.compiler.clean(match.group(1))
             kind = self.semantic.compiler.clean(match.group(2))
+            tail = match.group(3)
+            if not tail and " que " in kind:
+                kind, tail = kind.split(" que ", 1)
+                kind = self.semantic.compiler.clean(kind)
+                tail = self.semantic.compiler.clean(tail)
             if subject and kind:
                 s = self._quid(subject)
                 k = self._quid(kind)
                 facts.append(Fact(s.symbol, "is_a", k.symbol, 0.94, False, "induction", sentence))
-            tail = match.group(3)
             if tail and subject:
                 for property_fact in self._simple_property(tail, subject):
                     facts.append(property_fact)
