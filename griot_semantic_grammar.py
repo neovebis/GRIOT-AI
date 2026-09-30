@@ -79,8 +79,11 @@ class GrammarAnalysis:
 
     @property
     def valid(self) -> bool:
-        return not any(item.status == "invalid" for item in self.selectional) and not self.agreement and not any(
-            item.status == "invalid" for item in self.governance
+        return (
+            not any(item.status == "invalid" for item in self.selectional)
+            and not self.agreement
+            and not any(item.status == "invalid" for item in self.governance)
+            and not any(item.status == "invalid" for item in self.coordination)
         )
 
     def to_dict(self) -> dict[str, object]:
@@ -290,7 +293,7 @@ class SemanticGrammar:
             selection = self._selection(frame, clause)
             selections.append(selection)
             governance.append(self._governance(frame, clause))
-            coordinations.extend(self._coordination(clause))
+            coordinations.extend(self._coordination(clause, frame))
             if selection.status == "invalid":
                 abstain.append("selectional-restriction")
             if selection.status == "unknown":
@@ -303,8 +306,8 @@ class SemanticGrammar:
         if agreement:
             abstain.append("agreement-error")
 
-        if any(item.status == "ambiguous" for item in coordinations):
-            abstain.append("ambiguous-coordination")
+        if any(item.status in {"unknown", "invalid"} for item in coordinations):
+            abstain.append("coordination-boundary")
 
         return GrammarAnalysis(
             text,
@@ -360,14 +363,13 @@ class SemanticGrammar:
             return True
         if any(item in kinds for item in required):
             return True
-        if required and not any(kind in {"entity", "unknown"} for kind in kinds):
-            return False
-        return None
+        return False
 
     def _kinds(self, surface: str | None) -> frozenset[str]:
         if not surface:
             return frozenset()
         normalized = self._norm(surface)
+        normalized = self._strip_determiner(normalized) or normalized
         base = set(self.LEXICAL_KINDS.get(normalized, ()))
         quid = self.engine.quids.get(surface) if self.engine is not None else None
         if quid is not None and hasattr(self.engine, "graph"):
@@ -382,7 +384,7 @@ class SemanticGrammar:
                 base.add("entity")
         return frozenset(base)
 
-    def _coordination(self, clause: LanguageClause) -> tuple[Coordination, ...]:
+    def _coordination(self, clause: LanguageClause, frame: VerbFrame) -> tuple[Coordination, ...]:
         raw = clause.text
         found: list[Coordination] = []
         for operator in ("e", "ou"):
@@ -411,9 +413,16 @@ class SemanticGrammar:
             )
             if len(pieces) < 2:
                 continue
-            status = "resolved"
-            if operator == "e" and any(not self._kinds(part) for part in pieces):
-                status = "ambiguous"
+            required = frame.subject_kinds if side == "subject" else frame.object_kinds
+            statuses = [self._matches_any(self._kinds(part), required) for part in pieces]
+            if operator == "e":
+                status = "valid" if statuses and all(value is True for value in statuses) else (
+                    "invalid" if any(value is False for value in statuses) else "unknown"
+                )
+            else:
+                status = "valid" if any(value is True for value in statuses) else (
+                    "unknown" if any(value is None for value in statuses) else "invalid"
+                )
             found.append(Coordination(operator, side, pieces, semantics, status))
         return tuple(found)
 
@@ -499,7 +508,9 @@ class SemanticGrammar:
             (r"^quem\s+tem\s+(?:o|a|os|as)\s+(.+)$", "subject", "has", "has", "forward"),
             (r"^onde\s+(?:esta|está|fica|vive)\s+(.+)$", "location", "located_in", "located_in", "forward"),
             (r"^quem\s+(ataca|atacou|come|comeu|viu|usa|usou|ajuda|ajudou|fere|feriu)\s+(.+)$", "subject", None, None, "forward"),
+            (r"^o que\s+(.+?)\s+(ataca|atacou|come|comeu|viu|usou|usa|ajuda|ajudou|fere|feriu)$", "object", None, None, "forward"),
             (r"^o que\s+(.+?)\s+(ataca|atacou|come|comeu|viu|usou|usa|ajuda|ajudou|fere|feriu)\s+(.+)$", "object", None, None, "forward"),
+            (r"^o que\s+(.+?)\s+tem$", "object", "has", "has", "forward"),
         )
         out: list[QuerySpec] = []
         for pattern, kind, fixed_relation, _label, direction in patterns:
