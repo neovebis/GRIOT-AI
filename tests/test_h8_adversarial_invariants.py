@@ -80,6 +80,13 @@ class H8InvariantTests(unittest.TestCase):
         report = self.invariants.check(result, durable_facts=self.engine.graph.facts())
         self.assertTrue(report.ok, report.issues)
 
+    def test_transitive_invariant_is_accepted(self) -> None:
+        self._learn("O leão é um animal.", "O animal é um ser vivo.")
+        result = self._solve("O leão é um ser vivo?")
+        report = self.invariants.check(result, durable_facts=self.engine.graph.facts())
+        self.assertEqual(result.status, TruthStatus.SUPPORTED)
+        self.assertTrue(report.ok, report.issues)
+
     def test_unknown_invariant(self) -> None:
         result = self._solve("O dragão é um animal?")
         report = self.invariants.check(result, durable_facts=self.engine.graph.facts())
