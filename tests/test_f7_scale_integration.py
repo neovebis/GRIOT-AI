@@ -40,7 +40,7 @@ class ScaleIntegrationTests(unittest.TestCase):
 
     def test_sharded_10000_fact_round_trip(self) -> None:
         engine = GRIOT.create()
-        animal = engine.quids.get("animal").symbol
+        animal = engine.quids.ensure("animal", family_id=1).symbol
         for index in range(10000):
             subject = engine.quids.ensure(f"entity-{index}", family_id=1).symbol
             engine.graph.add_fact(
@@ -59,7 +59,7 @@ class ScaleIntegrationTests(unittest.TestCase):
 
     def test_retrieval_budget_is_monotonic(self) -> None:
         engine = GRIOT.create()
-        animal = engine.quids.get("animal").symbol
+        animal = engine.quids.ensure("animal", family_id=1).symbol
         for index in range(100):
             subject = engine.quids.ensure(f"small-{index}", family_id=1).symbol
             engine.graph.add_fact(
@@ -75,7 +75,7 @@ class ScaleIntegrationTests(unittest.TestCase):
     def test_indices_and_storage_preserve_provenance_diversity(self) -> None:
         engine = GRIOT.create()
         lion = engine.quids.get("leão").symbol
-        animal = engine.quids.get("animal").symbol
+        animal = engine.quids.ensure("animal", family_id=1).symbol
         facts = tuple(
             Fact(lion, "is_a", animal, 0.9, False, f"source-{index}")
             for index in range(10)
