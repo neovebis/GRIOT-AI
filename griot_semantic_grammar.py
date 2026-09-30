@@ -263,10 +263,33 @@ class SemanticGrammar:
     def __init__(self, engine: GRIOT | None = None) -> None:
         self.engine = engine
 
-    def frame_for_clause(self, clause: LanguageClause) -> VerbFrame | None:
+    def frame_for_clause(
+        self,
+        clause: LanguageClause,
+        language: LanguageAnalysis | None = None,
+    ) -> VerbFrame | None:
         verb = self._norm(clause.verb or "")
         lemma = LanguageIntelligence.VERB_LEMMAS.get(verb, verb)
-        return self.VERB_FRAMES.get(lemma)
+        frame = self.VERB_FRAMES.get(lemma)
+        if frame is not None:
+            return frame
+        if language is not None and verb:
+            token = next(
+                (
+                    item for item in language.tokens
+                    if self._norm(item.text) == verb and item.lemma
+                ),
+                None,
+            )
+            if token is not None:
+                return self.VERB_FRAMES.get(self._norm(token.lemma))
+        if verb.endswith("ando"):
+            return self.VERB_FRAMES.get(f"{verb[:-4]}ar")
+        if verb.endswith("endo"):
+            return self.VERB_FRAMES.get(f"{verb[:-4]}er")
+        if verb.endswith("indo"):
+            return self.VERB_FRAMES.get(f"{verb[:-4]}ir")
+        return None
 
     def analyze(self, text: str, language: LanguageAnalysis | None = None) -> GrammarAnalysis:
         if not isinstance(text, str):
@@ -284,7 +307,7 @@ class SemanticGrammar:
         abstain: list[str] = []
 
         for clause in language.clauses:
-            frame = self.frame_for_clause(clause)
+            frame = self.frame_for_clause(clause, language)
             if frame is None:
                 if clause.verb:
                     abstain.append(f"unsupported-verb:{self._norm(clause.verb)}")
