@@ -37,6 +37,10 @@ class MeaningCompiler:
         (r"^(.*?)\s+pertence a\s+(.*?)$", "member_of"),
         (r"^(.*?)\s+é um\s+(.*?)$", "is_a"),
         (r"^(.*?)\s+é uma\s+(.*?)$", "is_a"),
+        (
+            r"^(?:seria possível que|seria possivel que|é possível que|e possível que)\s+(.*?)\s+tenha\s+(.*?)$",
+            "has",
+        ),
         (r"^(.*?)\s+tem\s+(.*?)$", "has"),
         (r"^(.*?)\s+possui\s+(.*?)$", "has"),
         (r"^(.*?)\s+causa\s+(.*?)$", "causes"),
