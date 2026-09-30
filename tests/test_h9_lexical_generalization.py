@@ -113,7 +113,7 @@ class H9LexicalGeneralizationTests(unittest.TestCase):
         self.assertTrue(result.proofs)
 
     def test_morphological_learning_supports_lemma_query(self) -> None:
-        self.semantic.learn("Os lobos agrediram o cão.", "h9")
+        self.semantic.learn("O lobo agrediu o cão.", "h9")
         result = self.reasoning.reason("O lobo ataca o cão?")
         self.assertEqual(result.status, TruthStatus.SUPPORTED)
 
