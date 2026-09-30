@@ -12,8 +12,8 @@ class PromotionTests(unittest.TestCase):
         self.promotion = KnowledgePromotionEngine(PromotionPolicy(min_sources=2, min_confidence=0.8))
 
     def _fact(self, source: str, confidence: float = 0.9) -> Fact:
-        lion = self.engine.quids.get("leão").symbol
-        animal = self.engine.quids.get("animal").symbol
+        lion = self.engine.quids.ensure("leão", family_id=1).symbol
+        animal = self.engine.quids.ensure("animal", family_id=1).symbol
         return Fact(lion, "is_a", animal, confidence, False, source)
 
     def test_single_source_stays_candidate(self) -> None:
