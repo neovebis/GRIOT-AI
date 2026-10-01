@@ -272,11 +272,13 @@ class LanguageIntelligence:
             # treated as a fronted adjunct/argument, not as two clauses. Keep
             # the comma as a marker so the structural parser can still recover
             # the argument boundary after clause splitting.
+            prefix_probe = prefix.strip(" ,;:.!?")
+            remainder_probe = remainder.strip(" ,;:.!?")
             if (
-                self._main_verb_index(prefix.strip()) is None
-                and self._main_verb_index(remainder.strip()) is not None
+                self._main_verb_index(prefix_probe) is None
+                and self._main_verb_index(remainder_probe) is not None
             ):
-                normalized = f"{prefix.strip()}{fronted_marker}{remainder.strip()}"
+                normalized = f"{prefix_probe}{fronted_marker}{remainder_probe}"
 
         chunks = re.split(r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+", normalized, flags=re.I)
         return tuple(
