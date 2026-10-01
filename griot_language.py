@@ -245,30 +245,11 @@ class LanguageIntelligence:
 
         tokens = self.tokenize(text)
         clauses_text = self._split_clauses(text)
-        clauses_list: list[LanguageClause] = []
-        for value in clauses_text:
-            if not value.strip():
-                continue
-            if value.startswith("__COORD__"):
-                header, body = value.split("__", 2)[1:], ""
-                # encoded form: __COORD__connector__left\\nright
-                match = re.match(r"^__COORD__(e|ou|nem)__(.+)\|\|\|(.+)$", value, flags=re.I | re.S)
-                if match:
-                    connector, left, right = match.groups()
-                    left_clause = self._parse_clause(left)
-                    right_clause = self._parse_clause(right)
-                    if left_clause.relation is not None and right_clause.relation is not None:
-                        clauses_list.append(
-                            replace(
-                                left_clause,
-                                text=value.replace("__COORD__" + connector + "__", "").replace("|||", " "),
-                                coordinator=self.normalize_token(connector),
-                                coordinated=(right_clause,),
-                            )
-                        )
-                        continue
-            clauses_list.append(self._parse_clause(value))
-        clauses = tuple(clauses_list)
+        clauses = tuple(
+            self._parse_clause(value)
+            for value in clauses_text
+            if value.strip()
+        )
         quantifiers = self._all_quantifiers(text)
         comparisons = tuple(
             clause.comparison for clause in clauses if clause.comparison is not None
@@ -307,23 +288,6 @@ class LanguageIntelligence:
             ):
                 normalized = f"{prefix_probe}{fronted_marker}{remainder_probe}"
 
-        # Coordination is represented structurally, so the comma itself is
-        # not enough to erase sibling-clause boundaries. Preserve every
-        # coordinated proposition as a sibling while keeping the existing
-        # punctuation/fronting behavior for non-coordinated clauses.
-        coordination = re.search(
-            r"^(.+?)\s+(e|ou|nem)\s+(.+)$",
-            normalized,
-            flags=re.I,
-        )
-        if coordination:
-            left, connector, right = coordination.groups()
-            if (
-                self._main_verb_index(left.strip()) is not None
-                and self._main_verb_index(right.strip()) is not None
-            ):
-                return (f"__COORD__{self.normalize_token(connector)}__{left.strip()}|||{right.strip()}",)
-
         chunks = re.split(
             r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+",
             normalized,
@@ -336,6 +300,30 @@ class LanguageIntelligence:
         )
 
     def _parse_clause(self, clause: str) -> LanguageClause:
+        # H16: coordination is parsed before subordination so each conjunct
+        # becomes an explicit sibling. Recursion handles multiple conjuncts
+        # and mixed coordination/subordination structures.
+        coordination = re.search(
+            r"^(.+?)\s+(e|ou|nem)\s+(.+)$",
+            clause.strip(),
+            flags=re.I,
+        )
+        if coordination:
+            left, connector, right = coordination.groups()
+            if (
+                self._main_verb_index(left.strip()) is not None
+                and self._main_verb_index(right.strip()) is not None
+            ):
+                left_clause = self._parse_clause(left.strip())
+                right_clause = self._parse_clause(right.strip())
+                if left_clause.relation is not None:
+                    return replace(
+                        left_clause,
+                        text=clause.strip(),
+                        coordinator=self.normalize_token(connector),
+                        coordinated=(right_clause,),
+                    )
+
         lower = clause.casefold()
         main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
         if subordinate_text is not None:
