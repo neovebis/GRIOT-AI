@@ -23,6 +23,14 @@ class H12ArgumentOrderTests(unittest.TestCase):
             if edge.relation == "attacks"
         }
 
+    def test_fronted_object_remains_one_clause(self) -> None:
+        clauses = self.language.analyze("O cão, o lobo atacou.").clauses
+        self.assertEqual(len(clauses), 1)
+
+    def test_fronted_prepositional_argument_remains_one_clause(self) -> None:
+        clauses = self.language.analyze("De água, o lobo precisa.").clauses
+        self.assertEqual(len(clauses), 1)
+
     def test_object_topicalization_maps_to_same_semantics(self) -> None:
         active = self.language.analyze("O lobo atacou o cão.").clauses[0]
         fronted = self.language.analyze("O cão, o lobo atacou.").clauses[0]
