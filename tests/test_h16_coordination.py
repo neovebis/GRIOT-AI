@@ -93,6 +93,27 @@ class H16CoordinationTests(unittest.TestCase):
         self.assertEqual(len(middle.coordinated), 1)
         self.assertEqual(middle.coordinated[0].relation, "eats")
 
+    def test_coordination_inside_embedded_clause_keeps_both_sides(self) -> None:
+        root = self.language.analyze(
+            "O lobo atacou o cão porque o cão viu a floresta e o lobo comeu a carne."
+        ).clauses[0]
+        self.assertEqual(root.subordinator, "porque")
+        embedded = root.embedded[0]
+        self.assertEqual(embedded.relation, "sees")
+        self.assertEqual(embedded.coordinator, "e")
+        self.assertEqual(embedded.coordinated[0].relation, "eats")
+
+        meaning = self.semantic.understand(
+            "O lobo atacou o cão porque o cão viu a floresta e o lobo comeu a carne."
+        )
+        relation_edges = {(edge.relation, edge.negated) for edge in meaning.edges}
+        self.assertIn(("attacks", False), relation_edges)
+        self.assertIn(("sees", False), relation_edges)
+        self.assertIn(("eats", False), relation_edges)
+        self.assertTrue(
+            any(edge.provenance == "coordinated:2:porque>e" for edge in meaning.edges)
+        )
+
     def test_subordination_inside_coordinated_branch_is_nested_under_that_branch(self) -> None:
         root = self.language.analyze(
             "O lobo atacou o cão e o cão viu a floresta porque o lobo comeu a carne."
