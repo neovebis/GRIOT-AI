@@ -1085,8 +1085,6 @@ class LanguageIntelligence:
         if not main_text or not nested_text:
             return None
 
-        # The left side must already describe the outer relative's predicate
-        # and expose the noun to which the nested relative attaches.
         if self._main_verb_index(main_text) is None:
             return None
         outer_probe = self._parse_clause("__ANTE__ " + main_text)
@@ -1096,7 +1094,50 @@ class LanguageIntelligence:
         antecedent = self._strip_det(outer_probe.object)
         if not antecedent:
             return None
-        return main_text, marker, nested_text, antecedent
+
+        # Find the earliest split where the nested clause is a complete
+        # proposition and the remaining suffix is the real outer main clause.
+        words = nested_text.split()
+        for split in range(1, len(words)):
+            nested_relative_text = " ".join(words[:split]).strip(" ,.;:!?")
+            main_tail = " ".join(words[split:]).strip(" ,.;:!?")
+            if not nested_relative_text or not main_tail:
+                continue
+            main_candidate = self._parse_clause(
+                f"__ROOT__ {main_text} "
+                f" " if False else f"__ROOT__ {main_text}"
+            )
+            del main_candidate
+            nested_candidate = (
+                self._build_possessive_modifier(
+                    antecedent,
+                    marker,
+                    nested_relative_text,
+                )
+                if marker.startswith("cujo")
+                else self._bind_relative_clause(
+                    nested_relative_text,
+                    antecedent,
+                    marker,
+                )
+            )
+            if (
+                nested_candidate is None
+                or nested_candidate.relation is None
+                or nested_candidate.subject is None
+                or nested_candidate.object is None
+            ):
+                continue
+            outer_candidate = self._parse_clause(
+                f"{'__ROOT__' if False else ''}{main_text} {''}".strip()
+            )
+            del outer_candidate
+            return main_text, marker, nested_relative_text, antecedent
+
+        # Keep the old fallback for unknown nested predicates; the generic
+        # parser can still preserve the outer relation without fabricating the
+        # unsupported inner relation.
+        return None
 
     def _build_possessive_modifier(
         self,
