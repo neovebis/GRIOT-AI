@@ -362,6 +362,51 @@ class LanguageIntelligence:
             flags=re.I,
         )
 
+        # Argument-order normalization: a topicalized direct/governed
+        # complement remains the semantic object of the following predicate.
+        fronted = re.match(r"^(.+?),\s+(.+)$", working, flags=re.I)
+        if fronted:
+            fronted_argument = fronted.group(1).strip()
+            remainder = fronted.group(2).strip()
+            temporal_marker = self.normalize_token(
+                fronted_argument.strip(" ,;:.!?")
+            )
+            if temporal_marker not in self.TEMPORAL:
+                parsed_remainder = self._parse_clause(remainder)
+                if (
+                    parsed_remainder.subject
+                    and parsed_remainder.relation
+                    and parsed_remainder.object is None
+                    and parsed_remainder.relation in {
+                        "attacks", "eats", "sees", "uses", "builds",
+                        "creates", "gives", "helps", "hurts", "wants",
+                        "needs", "knows",
+                    }
+                ):
+                    argument = self._strip_argument_marker(fronted_argument)
+                    if argument:
+                        return LanguageClause(
+                            clause,
+                            parsed_remainder.subject,
+                            f"{parsed_remainder.relation}:{argument}",
+                            parsed_remainder.verb,
+                            parsed_remainder.relation,
+                            argument,
+                            self._roles(
+                                parsed_remainder.subject,
+                                argument,
+                                parsed_remainder.relation,
+                                clause,
+                            ),
+                            parsed_remainder.negated,
+                            parsed_remainder.tense,
+                            parsed_remainder.aspect,
+                            parsed_remainder.modality,
+                            parsed_remainder.temporal,
+                            parsed_remainder.quantifiers,
+                            parsed_remainder.comparison,
+                        )
+
         # Passive voice: surface patient becomes semantic object and the
         # "por/pelo/pela/..." complement becomes semantic agent.
         passive = re.match(
@@ -460,6 +505,16 @@ class LanguageIntelligence:
                     )
 
         return None
+
+    @staticmethod
+    def _strip_argument_marker(value: str) -> str:
+        value = re.sub(
+            r"^(?:a|ao|à|aos|às|de|do|da|dos|das|para|por|pelo|pela|pelos|pelas)\s+",
+            "",
+            value.strip(),
+            flags=re.I,
+        )
+        return LanguageIntelligence._strip_det(value)
 
     def _roles(self, subject: str | None, object_: str | None, relation: str | None, clause: str) -> tuple[SemanticRole, ...]:
         roles: list[SemanticRole] = []
