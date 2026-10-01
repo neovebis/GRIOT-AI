@@ -118,6 +118,7 @@ class MeaningCompiler:
         coreference_links: list[CoreferenceLink] = []
         embedding_records: list[dict[str, object]] = []
         coordination_records: list[dict[str, object]] = []
+        relative_records: list[dict[str, object]] = []
 
         for sentence in (x.strip() for x in re.split(r"[.!?]+", text) if x.strip()):
             sentence = self.normalize(sentence)
@@ -214,6 +215,20 @@ class MeaningCompiler:
             # predicates are represented only in hierarchy metadata and never
             # become invented semantic relations.
             if language_clause is not None:
+                for index, relative in enumerate(language_clause.relative):
+                    self._compile_relative_tree(
+                        relative,
+                        nodes,
+                        edges,
+                        ambiguity_map,
+                        depth=1,
+                        path=(index,),
+                        relativizers=(language_clause.relativizer or "relative",),
+                        antecedent=language_clause.relative_antecedent,
+                        records=relative_records,
+                        embedding_records=embedding_records,
+                        coordination_records=coordination_records,
+                    )
                 for index, coordinated in enumerate(language_clause.coordinated):
                     self._compile_coordinated_tree(
                         coordinated,
@@ -265,6 +280,7 @@ class MeaningCompiler:
 
         constraints["embedding"] = tuple(embedding_records)
         constraints["coordination"] = tuple(coordination_records)
+        constraints["relative"] = tuple(relative_records)
         constraints["ambiguity"] = ambiguity_constraints
         metaphor_resolution = self.metaphor.analyze(normalized)
         constraints["intent"] = {
@@ -366,6 +382,116 @@ class MeaningCompiler:
             constraints,
             provenance=("semantic-compiler",),
         )
+
+    def _compile_relative_tree(
+        self,
+        clause,
+        nodes: dict[str, MeaningNode],
+        edges: list[MeaningEdge],
+        ambiguity_map: Mapping[str, object],
+        *,
+        depth: int,
+        path: tuple[int, ...],
+        relativizers: tuple[str, ...],
+        antecedent: str | None,
+        records: list[dict[str, object]],
+        embedding_records: list[dict[str, object]] | None = None,
+        coordination_records: list[dict[str, object]] | None = None,
+        relative_records: list[dict[str, object]] | None = None,
+    ) -> None:
+        """Ground a noun-attached relative clause into GIR."""
+        relation = clause.relation
+        subject = self.clean(clause.subject) if clause.subject else None
+        object_ = self.clean(self._clean_object(clause.object)) if clause.object else None
+        provenance = f"relative:{depth}:{'>'.join(relativizers)}"
+        records.append(
+            {
+                "depth": depth,
+                "path": ".".join(str(item) for item in path),
+                "relativizers": relativizers,
+                "relativizer": relativizers[-1] if relativizers else clause.relativizer,
+                "antecedent": antecedent or clause.relative_antecedent,
+                "subject": subject,
+                "relation": relation,
+                "object": object_,
+                "negated": clause.negated,
+            }
+        )
+        if subject and relation and object_:
+            source = self._node(nodes, subject, "entity", 1, ambiguity_map)
+            target = self._node(nodes, object_, "entity", 1, ambiguity_map)
+            if relation in {
+                "attacks", "eats", "sees", "uses", "builds", "creates", "gives",
+                "helps", "hurts", "wants", "needs", "knows",
+            }:
+                scene = self._event(nodes, relation, subject, object_)
+                edges.extend(
+                    (
+                        MeaningEdge(
+                            scene.node_id, "has_agent", source.node_id, 9, 0.94,
+                            clause.negated, clause.text, provenance,
+                        ),
+                        MeaningEdge(
+                            scene.node_id, "has_patient", target.node_id, 4, 0.94,
+                            clause.negated, clause.text, provenance,
+                        ),
+                    )
+                )
+            edges.append(
+                MeaningEdge(
+                    source.node_id,
+                    relation,
+                    target.node_id,
+                    self.RELATION_FAMILY.get(relation, 2),
+                    0.92,
+                    clause.negated,
+                    clause.text,
+                    provenance,
+                )
+            )
+            self._constraints(nodes, edges, source, clause.text)
+
+        for index, child in enumerate(clause.embedded):
+            self._compile_embedded_tree(
+                child,
+                nodes,
+                edges,
+                ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                subordinators=(*relativizers, clause.relativizer or "relative"),
+                records=embedding_records if embedding_records is not None else [],
+                coordination_records=coordination_records,
+            )
+
+        for index, sibling in enumerate(clause.coordinated):
+            self._compile_coordinated_tree(
+                sibling,
+                nodes,
+                edges,
+                ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                coordinators=(*relativizers, clause.relativizer or "relative", clause.coordinator or "coord"),
+                records=coordination_records if coordination_records is not None else [],
+                embedding_records=embedding_records,
+            )
+
+        for index, relative in enumerate(clause.relative):
+            self._compile_relative_tree(
+                relative,
+                nodes,
+                edges,
+                ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                relativizers=(*relativizers, clause.relativizer or "relative"),
+                antecedent=clause.relative_antecedent,
+                records=relative_records if relative_records is not None else records,
+                embedding_records=embedding_records,
+                coordination_records=coordination_records,
+                relative_records=relative_records,
+            )
 
     def _compile_embedded_tree(
         self,
@@ -592,8 +718,11 @@ class MeaningCompiler:
                 ),
                 "subordinator": clause.subordinator,
                 "coordinator": clause.coordinator,
+                "relativizer": clause.relativizer,
+                "relative_antecedent": clause.relative_antecedent,
                 "embedded": tuple(clause_to_dict(child) for child in clause.embedded),
                 "coordinated": tuple(clause_to_dict(child) for child in clause.coordinated),
+                "relative": tuple(clause_to_dict(child) for child in clause.relative),
             }
 
         return {
