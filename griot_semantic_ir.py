@@ -215,23 +215,24 @@ class MeaningCompiler:
             mentions.append(
                 Mention(object_, "object", len(mentions) + 1, object_gender, object_number, o.quid)
             )
-            if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts", "wants", "needs", "knows"}:
-                scene = self._event(nodes, relation, subject, object_)
-                edges += [
-                    MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, main_negated, sentence),
-                    MeaningEdge(scene.node_id, "has_patient", o.node_id, 4, 0.94, main_negated, sentence),
-                ]
-            edges.append(
-                MeaningEdge(
-                    s.node_id,
-                    relation,
-                    o.node_id,
-                    self.RELATION_FAMILY.get(relation, 2),
-                    0.92,
-                    main_negated,
-                    sentence,
+            if not getattr(language_clause, "coreference_blocked", False):
+                if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts", "wants", "needs", "knows"}:
+                    scene = self._event(nodes, relation, subject, object_)
+                    edges += [
+                        MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, main_negated, sentence),
+                        MeaningEdge(scene.node_id, "has_patient", o.node_id, 4, 0.94, main_negated, sentence),
+                    ]
+                edges.append(
+                    MeaningEdge(
+                        s.node_id,
+                        relation,
+                        o.node_id,
+                        self.RELATION_FAMILY.get(relation, 2),
+                        0.92,
+                        main_negated,
+                        sentence,
+                    )
                 )
-            )
             self._constraints(nodes, edges, s, sentence)
 
             # H15: recursively compile the entire embedded-clause tree.
