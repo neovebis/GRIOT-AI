@@ -95,12 +95,12 @@ class H24DiscourseCoreferenceTests(unittest.TestCase):
 
     def test_plural_agreement_is_respected(self) -> None:
         result = self.engine.analisar(
-            "Os lobos viram a floresta. Eles comeram a carne."
+            "Os animais agridem o lobo. Eles agridem a floresta."
         )
         coref = result.gir.constraints["coreference"]
         self.assertEqual(coref[-1]["anaphor"], "eles")
         self.assertEqual(coref[-1]["status"], "resolved")
-        self.assertEqual(coref[-1]["antecedent"], "lobos")
+        self.assertEqual(coref[-1]["antecedent"], "animais")
 
     def test_disourse_coreference_keeps_quids_atomic(self) -> None:
         result = self.engine.analisar(
