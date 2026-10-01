@@ -786,6 +786,8 @@ class MeaningCompiler:
                 "possessive_antecedent": clause.possessive_antecedent,
                 "possessed": clause.possessed,
                 "coreference_blocked": clause.coreference_blocked,
+                "clitic_marker": clause.clitic_marker,
+                "clitic_role": clause.clitic_role,
                 "embedded": tuple(clause_to_dict(child) for child in clause.embedded),
                 "coordinated": tuple(clause_to_dict(child) for child in clause.coordinated),
                 "relative": tuple(clause_to_dict(child) for child in clause.relative),
@@ -840,6 +842,46 @@ class MeaningCompiler:
             "markers": analysis.markers,
         }
 
+    CLITIC_PROXY = {
+        "o": "ele",
+        "a": "ela",
+        "os": "eles",
+        "as": "elas",
+        "lo": "ele",
+        "la": "ela",
+        "los": "eles",
+        "las": "elas",
+    }
+
+    def _resolve_clitic_link(
+        self,
+        surface: str,
+        mentions: list[Mention],
+    ) -> CoreferenceLink:
+        proxy = self.CLITIC_PROXY.get(surface.casefold().strip())
+        if proxy is None:
+            return CoreferenceLink(
+                surface,
+                None,
+                0.0,
+                "unresolved",
+                "unsupported-clitic",
+                (),
+            )
+        proxy_link = self.coreference.resolve(
+            proxy,
+            mentions,
+            context_records=self.griot.context.records(),
+        )
+        return CoreferenceLink(
+            surface,
+            proxy_link.antecedent if proxy_link.resolved else None,
+            proxy_link.confidence,
+            proxy_link.status,
+            f"clitic:{proxy_link.strategy}",
+            proxy_link.candidates,
+        )
+
     @staticmethod
     def _object_coreference_link(
         link: CoreferenceLink,
@@ -880,7 +922,11 @@ class MeaningCompiler:
             return None
 
         subject, relation, object_ = parsed
-        if not self._is_coreference_pronoun(object_):
+        is_clitic = (
+            isinstance(object_, str)
+            and object_.casefold().strip() in self.CLITIC_PROXY
+        )
+        if not self._is_coreference_pronoun(object_) and not is_clitic:
             return parsed
 
         candidates = list(mentions)
@@ -897,11 +943,17 @@ class MeaningCompiler:
                 )
             )
 
-        link = self._object_coreference_link(
-            self.coreference.resolve(
-                object_,
-                candidates,
-                context_records=self.griot.context.records(),
+        link = (
+            self._object_coreference_link(
+                self.coreference.resolve(
+                    object_,
+                    candidates,
+                    context_records=self.griot.context.records(),
+                )
+            )
+            if not is_clitic
+            else self._object_coreference_link(
+                self._resolve_clitic_link(object_, candidates)
             )
         )
         links.append(link)
@@ -946,12 +998,21 @@ class MeaningCompiler:
                 )
 
         def resolve_argument(node, surface, role):
-            if not is_pronoun(surface):
+            clitic_surface = (
+                isinstance(surface, str)
+                and getattr(node, "clitic_marker", None) == surface
+                and surface.casefold().strip() in self.CLITIC_PROXY
+            )
+            if not is_pronoun(surface) and not clitic_surface:
                 return node, False
-            link = self.coreference.resolve(
-                surface,
-                local_mentions,
-                context_records=self.griot.context.records(),
+            link = (
+                self._resolve_clitic_link(surface, local_mentions)
+                if clitic_surface
+                else self.coreference.resolve(
+                    surface,
+                    local_mentions,
+                    context_records=self.griot.context.records(),
+                )
             )
             if role == "object":
                 link = self._object_coreference_link(link)
@@ -1053,6 +1114,9 @@ class MeaningCompiler:
         )
 
     def _parse(self, sentence: str) -> tuple[str, str, str] | None:
+        clitic = self.language._detect_clitic_form(sentence)
+        if clitic is not None:
+            sentence = clitic[0]
         modal = re.match(r"^(.*?)\s+(?:pode|deve|precisa)\s+(.+)$", sentence, re.I)
         candidate = f"{modal.group(1)} {modal.group(2)}" if modal else sentence
         for pattern, relation in self.STATEMENTS + self.VERBS:
