@@ -173,7 +173,7 @@ class MeaningCompiler:
             mentions.append(
                 Mention(object_, "object", len(mentions) + 1, object_gender, object_number, o.quid)
             )
-            if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "helps", "hurts", "wants", "needs", "knows"}:
+            if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts", "wants", "needs", "knows"}:
                 scene = self._event(nodes, relation, subject, object_)
                 edges += [
                     MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, negated, sentence),

@@ -344,10 +344,14 @@ class LanguageIntelligence:
             subject_words.pop()
         subject = self._strip_det(" ".join(subject_words).strip()) or None
         tail = " ".join(words[verb_index + 1:]).strip()
-        object_ = self._extract_object(tail)
         lemma = self._lemma(verb_word)
         relation = self._relation_for_verb(parse_clause, lemma)
+        object_, recipient = self._extract_complements(tail, relation)
         roles = self._roles(subject, object_, relation, clause)
+        if recipient:
+            roles = self._dedupe_roles(
+                (*roles, SemanticRole("recipient", recipient, 0.90))
+            )
         return LanguageClause(
             clause,
             subject,
@@ -384,6 +388,45 @@ class LanguageIntelligence:
             )
             if temporal_marker not in self.TEMPORAL:
                 parsed_remainder = self._parse_clause(remainder)
+
+                # Dative/recipient fronting is distinct from object fronting:
+                # preserve the direct object from the remainder and attach the
+                # topicalized constituent as a recipient role.
+                if (
+                    parsed_remainder.subject
+                    and parsed_remainder.relation == "gives"
+                    and parsed_remainder.object
+                    and re.match(
+                        r"^(?:a|ao|à|aos|às|para)\s+.+$",
+                        fronted_argument,
+                        flags=re.I,
+                    )
+                ):
+                    recipient = self._strip_argument_marker(fronted_argument)
+                    if recipient:
+                        roles = self._dedupe_roles(
+                            (
+                                *parsed_remainder.roles,
+                                SemanticRole("recipient", recipient, 0.90),
+                            )
+                        )
+                        return LanguageClause(
+                            clause,
+                            parsed_remainder.subject,
+                            f"gives:{parsed_remainder.object}",
+                            parsed_remainder.verb,
+                            "gives",
+                            parsed_remainder.object,
+                            roles,
+                            parsed_remainder.negated,
+                            parsed_remainder.tense,
+                            parsed_remainder.aspect,
+                            parsed_remainder.modality,
+                            parsed_remainder.temporal,
+                            parsed_remainder.quantifiers,
+                            parsed_remainder.comparison,
+                        )
+
                 if (
                     parsed_remainder.subject
                     and parsed_remainder.relation
@@ -520,7 +563,7 @@ class LanguageIntelligence:
     @staticmethod
     def _strip_argument_marker(value: str) -> str:
         value = re.sub(
-            r"^(?:a|ao|à|aos|às|de|do|da|dos|das|para|por|pelo|pela|pelos|pelas)\s+",
+            r"^(?:a|ao|à|aos|às|de|do|da|dos|das|em|no|na|nos|nas|para|por|pelo|pela|pelos|pelas)\s+",
             "",
             value.strip(),
             flags=re.I,
@@ -617,6 +660,49 @@ class LanguageIntelligence:
         if re.search(r"\b(?:causa|causou|provoca|provocou)\b", clause, re.I):
             return "causes"
         return None
+
+    def _extract_complements(
+        self,
+        tail: str,
+        relation: str | None,
+    ) -> tuple[str, str | None]:
+        if not tail:
+            return "", None
+
+        if relation == "gives":
+            # Direct object + recipient: "deu o osso ao cão".
+            direct_then_recipient = re.match(
+                r"^(.+?)\s+(?:a|ao|à|aos|às|para)\s+(.+)$",
+                tail,
+                flags=re.I,
+            )
+            if direct_then_recipient:
+                object_ = self._strip_det(direct_then_recipient.group(1))
+                recipient = self._strip_argument_marker(
+                    direct_then_recipient.group(2)
+                )
+                return object_, recipient or None
+
+            # Recipient + direct object: "deu ao cão o osso".
+            recipient_then_direct = re.match(
+                r"^(?:a|ao|à|aos|às|para)\s+(.+?)\s+"
+                r"((?:o|a|os|as|um|uma|uns|umas)\s+.+)$",
+                tail,
+                flags=re.I,
+            )
+            if recipient_then_direct:
+                recipient = self._strip_argument_marker(
+                    recipient_then_direct.group(1)
+                )
+                object_ = self._strip_det(recipient_then_direct.group(2))
+                return object_, recipient or None
+
+        if relation in {"needs", "located_in"}:
+            normalized_tail = tail.strip(" ,;:.!?")
+            object_ = self._strip_argument_marker(normalized_tail)
+            return object_, None
+
+        return self._extract_object(tail), None
 
     def _extract_object(self, tail: str) -> str:
         if not tail:

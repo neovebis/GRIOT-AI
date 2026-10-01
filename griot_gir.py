@@ -28,6 +28,7 @@ GIR_RELATION_FAMILIES: dict[str, int] = {
     "located_in": 8,
     "attacks": 4,
     "eats": 4,
+    "gives": 4,
     "sees": 4,
     "uses": 4,
     "builds": 4,
