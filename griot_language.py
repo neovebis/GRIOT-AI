@@ -318,6 +318,36 @@ class LanguageIntelligence:
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
+        multiple_relative_parts = self._split_multiple_relatives(clause)
+        if multiple_relative_parts is not None:
+            main_text, relatives_data, antecedent = multiple_relative_parts
+            main_clause = self._parse_clause(main_text)
+            if main_clause.relation is not None:
+                bound_relatives = []
+                for marker, relative_text in relatives_data:
+                    relative_clause = self._bind_relative_clause(
+                        relative_text,
+                        antecedent,
+                        marker,
+                    )
+                    if relative_clause.relation is None:
+                        continue
+                    bound_relatives.append(
+                        replace(
+                            relative_clause,
+                            relativizer=marker,
+                            relativizer_kind=self._relative_kind(marker),
+                            relative_antecedent=antecedent,
+                        )
+                    )
+                return replace(
+                    main_clause,
+                    text=clause,
+                    relative=tuple(bound_relatives),
+                    relativizer=relatives_data[0][0],
+                    relative_antecedent=antecedent,
+                )
+
         possessive_parts = self._split_possessive_relative(clause)
         if possessive_parts is not None:
             main_text, marker, relative_text, antecedent, possessed = possessive_parts
@@ -562,6 +592,89 @@ class LanguageIntelligence:
             )
         return result
 
+    def _split_multiple_relatives(
+        self,
+        clause: str,
+    ) -> tuple[str, tuple[tuple[str, str], ...], str] | None:
+        text = re.sub(r"\s+", " ", clause.strip()).strip(" .;!?")
+        marker_pattern = r"(que|o qual|a qual|os quais|as quais)"
+        first = re.match(
+            r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
+            text,
+            flags=re.I,
+        )
+        if not first:
+            return None
+
+        prefix, marker, remainder = first.groups()
+        prefix = prefix.strip()
+        marker = self.normalize_token(marker)
+
+        split_marker = re.search(
+            r"\s+e\s+(" + marker_pattern + r")\s+",
+            remainder,
+            flags=re.I,
+        )
+        if not split_marker:
+            return None
+
+        first_relative = remainder[:split_marker.start()].strip()
+        marker2 = self.normalize_token(split_marker.group(1))
+        if marker2 != marker:
+            return None
+        tail = remainder[split_marker.end():].strip()
+
+        # Object-attached: the main clause precedes both relatives.
+        object_main = self._parse_clause(prefix)
+        if object_main.relation is not None and object_main.object:
+            first_clause = self._parse_clause(first_relative)
+            second_clause = self._parse_clause(tail)
+            if first_clause.relation is not None or second_clause.relation is not None:
+                return (
+                    prefix,
+                    (
+                        (marker, first_relative),
+                        (marker2, tail),
+                    ),
+                    self._strip_det(object_main.object),
+                )
+
+        # Subject-attached: the main clause follows both relatives.
+        if self._main_verb_index(prefix) is None:
+            antecedent = self._strip_det(prefix)
+            if not antecedent:
+                return None
+
+            first_clause = self._parse_clause(first_relative)
+            tail_words = tail.split()
+            second_verb = self._main_verb_index(tail)
+            if second_verb is None:
+                return None
+
+            for main_split in range(second_verb + 1, len(tail_words)):
+                relative2_text = " ".join(tail_words[:main_split]).strip()
+                main_tail = " ".join(tail_words[main_split:]).strip()
+                if not self._main_verb_index(main_tail):
+                    # A verb at position zero is valid; only reject a missing verb.
+                    if self._main_verb_index(main_tail) is None:
+                        continue
+                main_candidate = self._parse_clause(f"{antecedent} {main_tail}")
+                if (
+                    main_candidate.relation is not None
+                    and main_candidate.subject == antecedent
+                ):
+                    if first_clause.relation is None and self._main_verb_index(first_relative) is None:
+                        return None
+                    return (
+                        f"{antecedent} {main_tail}",
+                        (
+                            (marker, first_relative),
+                            (marker2, relative2_text),
+                        ),
+                        antecedent,
+                    )
+        return None
+
     def _split_possessive_relative(
         self,
         clause: str,
@@ -796,6 +909,7 @@ class LanguageIntelligence:
             return replace(
                 parsed,
                 relative_antecedent=antecedent,
+                relativizer=relativizer,
                 relativizer_kind=self._relative_kind(relativizer),
                 relative_binding="unknown",
                 relative_preposition=self._relative_preposition(relativizer),
