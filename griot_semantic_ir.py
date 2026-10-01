@@ -192,6 +192,91 @@ class MeaningCompiler:
             )
             self._constraints(nodes, edges, s, sentence)
 
+            # H14: compile recognized embedded clauses into the same GIR.
+            # The top-level relation remains the main proposition; embedded
+            # events become additional grounded edges without inventing a
+            # relation for an unknown subordinate predicate.
+            if language_clause is not None:
+                for embedded in language_clause.embedded:
+                    if not (
+                        embedded.subject
+                        and embedded.relation
+                        and embedded.object
+                    ):
+                        continue
+                    embedded_subject = self.clean(embedded.subject)
+                    embedded_object = self.clean(
+                        self._clean_object(embedded.object)
+                    )
+                    if not embedded_subject or not embedded_object:
+                        continue
+                    embedded_s = self._node(
+                        nodes,
+                        embedded_subject,
+                        "entity",
+                        1,
+                        ambiguity_map,
+                    )
+                    embedded_o = self._node(
+                        nodes,
+                        embedded_object,
+                        "entity",
+                        1,
+                        ambiguity_map,
+                    )
+                    embedded_negated = embedded.negated
+                    if embedded.relation in {
+                        "attacks", "eats", "sees", "uses", "builds",
+                        "creates", "gives", "helps", "hurts", "wants",
+                        "needs", "knows",
+                    }:
+                        embedded_scene = self._event(
+                            nodes,
+                            embedded.relation,
+                            embedded_subject,
+                            embedded_object,
+                        )
+                        edges += [
+                            MeaningEdge(
+                                embedded_scene.node_id,
+                                "has_agent",
+                                embedded_s.node_id,
+                                9,
+                                0.94,
+                                embedded_negated,
+                                embedded.text,
+                            ),
+                            MeaningEdge(
+                                embedded_scene.node_id,
+                                "has_patient",
+                                embedded_o.node_id,
+                                4,
+                                0.94,
+                                embedded_negated,
+                                embedded.text,
+                            ),
+                        ]
+                    edges.append(
+                        MeaningEdge(
+                            embedded_s.node_id,
+                            embedded.relation,
+                            embedded_o.node_id,
+                            self.RELATION_FAMILY.get(
+                                embedded.relation,
+                                2,
+                            ),
+                            0.92,
+                            embedded_negated,
+                            embedded.text,
+                        )
+                    )
+                    self._constraints(
+                        nodes,
+                        edges,
+                        embedded_s,
+                        embedded.text,
+                    )
+
         vector = self._compose_vector(nodes, edges)
         constraints = {
             "numbers": tuple(float(x.replace(",", ".")) for x in re.findall(r"-?\d+(?:[\.,]\d+)?", normalized)),

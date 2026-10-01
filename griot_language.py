@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import re
 import unicodedata
 from typing import Iterable
@@ -68,6 +68,8 @@ class LanguageClause:
     temporal: tuple[str, ...]
     quantifiers: tuple[Quantifier, ...]
     comparison: Comparison | None
+    subordinator: str | None = None
+    embedded: tuple["LanguageClause", ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +291,17 @@ class LanguageIntelligence:
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
+        main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
+        if subordinate_text is not None:
+            main_clause = self._parse_clause(main_text)
+            if main_clause.relation is not None:
+                embedded_clause = self._parse_clause(subordinate_text)
+                return replace(
+                    main_clause,
+                    text=clause,
+                    subordinator=subordinator,
+                    embedded=(embedded_clause,),
+                )
         structural = self._parse_structural_clause(clause)
         if structural is not None:
             return structural
@@ -368,6 +381,32 @@ class LanguageIntelligence:
             quantifiers,
             self._comparison(clause),
         )
+
+    def _split_embedded_clause(
+        self,
+        clause: str,
+    ) -> tuple[str, str | None, str | None]:
+        text = clause.strip()
+        # Split only on subordinators with a non-empty proposition on both
+        # sides. The split is deterministic and preserves the main clause as
+        # the canonical top-level proposition.
+        pattern = re.compile(
+            r"^(.+?)\s+(porque|pois|já que|ja que|quando|enquanto|se|embora|que)\s+(.+)$",
+            re.I,
+        )
+        match = pattern.match(text)
+        if not match:
+            return text, None, None
+
+        main_text, subordinator, subordinate_text = match.groups()
+        # "se" and "que" are only treated as subordinators when the right side
+        # contains a recognizable predicate; this avoids stealing ordinary
+        # lexical material from the object span.
+        if self._main_verb_index(main_text.strip()) is None:
+            return text, None, None
+        if self._main_verb_index(subordinate_text.strip()) is None:
+            return text, None, None
+        return main_text.strip(), self.normalize_token(subordinator), subordinate_text.strip()
 
     def _parse_structural_clause(self, clause: str) -> LanguageClause | None:
         working = re.sub(

@@ -132,5 +132,7 @@ jobs:
         run: python -m unittest tests.test_h12_argument_order -v
       - name: H13 complement structure tests
         run: python -m unittest tests.test_h13_complement_structure -v
+      - name: H14 embedded clause tests
+        run: python -m unittest tests.test_h14_embedded_clauses -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
