@@ -134,7 +134,7 @@ class H16CoordinationTests(unittest.TestCase):
 
     def test_coordination_with_nested_embedding_preserves_both_branches(self) -> None:
         analysis = self.language.analyze(
-            "O lobo atacou o cão e o cão viu a floresta porque o lobo fugiu."
+            "O lobo atacou o cão e o cão viu a floresta porque o lobo comeu a carne."
         )
         root = analysis.clauses[0]
         self.assertEqual(root.coordinator, "e")
