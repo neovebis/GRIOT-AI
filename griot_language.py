@@ -326,6 +326,16 @@ class LanguageIntelligence:
                         relativizer=relativizer,
                         relative_antecedent=antecedent,
                     )
+                # The relative structure is still recognized even when its
+                # predicate is unsupported. Preserve the main proposition and
+                # abstain from inventing a relative relation.
+                return replace(
+                    main_clause,
+                    text=clause,
+                    relative=(),
+                    relativizer=relativizer,
+                    relative_antecedent=antecedent,
+                )
 
         main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
         if subordinate_text is not None:
