@@ -1095,19 +1095,13 @@ class LanguageIntelligence:
         if not antecedent:
             return None
 
-        # Find the earliest split where the nested clause is a complete
-        # proposition and the remaining suffix is the real outer main clause.
         words = nested_text.split()
         for split in range(1, len(words)):
             nested_relative_text = " ".join(words[:split]).strip(" ,.;:!?")
             main_tail = " ".join(words[split:]).strip(" ,.;:!?")
             if not nested_relative_text or not main_tail:
                 continue
-            main_candidate = self._parse_clause(
-                f"__ROOT__ {main_text} "
-                f" " if False else f"__ROOT__ {main_text}"
-            )
-            del main_candidate
+
             nested_candidate = (
                 self._build_possessive_modifier(
                     antecedent,
@@ -1128,15 +1122,20 @@ class LanguageIntelligence:
                 or nested_candidate.object is None
             ):
                 continue
+
             outer_candidate = self._parse_clause(
-                f"{'__ROOT__' if False else ''}{main_text} {''}".strip()
+                f"__ANTE__ {main_text} {main_tail}"
             )
-            del outer_candidate
+            if (
+                outer_candidate.relation is None
+                or outer_candidate.subject != "__ANTE__"
+            ):
+                continue
+
             return main_text, marker, nested_relative_text, antecedent
 
-        # Keep the old fallback for unknown nested predicates; the generic
-        # parser can still preserve the outer relation without fabricating the
-        # unsupported inner relation.
+        # Unknown nested predicates are left for the normal H17/H18 parser,
+        # which preserves the outer proposition without inventing semantics.
         return None
 
     def _build_possessive_modifier(
