@@ -48,7 +48,11 @@ class H26ObjectCoreferenceTests(unittest.TestCase):
             "O cão viu o lobo. A casa viu ele."
         )
         links = [x for x in result.gir.constraints["coreference"] if x["anaphor"] == "ele"]
-        self.assertEqual(links[-1]["status"], "ambiguous")
+        self.assertEqual(
+            links[-1]["status"],
+            "ambiguous",
+            msg=f"coreference link={links[-1]!r}",
+        )
         self.assertIsNone(links[-1]["antecedent"])
 
     def test_unresolved_object_pronoun_blocks_clause(self) -> None:
