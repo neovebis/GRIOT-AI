@@ -589,16 +589,14 @@ class LanguageIntelligence:
             )
             possessed_tokens = preverb
             if parsed_subject:
-                subject_tokens = self._strip_det(" ".join(preverb[-3:]))
-                if subject_tokens == parsed_subject:
-                    possessed_tokens = preverb[:-3]
-                else:
-                    for width in (2, 1):
-                        if len(preverb) >= width:
-                            candidate = self._strip_det(" ".join(preverb[-width:]))
-                            if candidate == parsed_subject:
-                                possessed_tokens = preverb[:-width]
-                                break
+                subject_words = parsed_subject.split()
+                for width in range(len(subject_words), 0, -1):
+                    if len(preverb) < width:
+                        continue
+                    candidate = self._strip_det(" ".join(preverb[-width:]))
+                    if candidate == parsed_subject:
+                        possessed_tokens = preverb[:-width]
+                        break
 
             possessed = self._strip_det(" ".join(possessed_tokens))
             if not possessed:
