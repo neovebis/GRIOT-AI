@@ -95,8 +95,14 @@ class H20PrepositionalRelativeTests(unittest.TestCase):
         meaning = self.semantic.understand(
             "O cão viu a pessoa a quem o lobo ajuda."
         )
+        provenances = sorted(
+            edge.provenance
+            for edge in meaning.edges
+            if edge.provenance
+        )
         self.assertTrue(
-            any(edge.provenance == "relative:1:a quem" for edge in meaning.edges)
+            any(value == "relative:1:a quem" for value in provenances),
+            msg=f"relative provenances: {provenances!r}",
         )
 
     def test_atomic_quids_and_determinism_are_preserved(self) -> None:
