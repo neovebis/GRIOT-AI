@@ -81,6 +81,7 @@ class LanguageClause:
     possessive_marker: str | None = None
     possessive_antecedent: str | None = None
     possessed: str | None = None
+    coreference_blocked: bool = False
 
 
 @dataclass(frozen=True, slots=True)
