@@ -566,10 +566,7 @@ class LanguageIntelligence:
 
         words = remainder.split()
         first_verb = self._main_verb_index(remainder)
-        if first_verb is None or first_verb <= 0:
-            return None
-        possessed = self._strip_det(" ".join(words[:first_verb]))
-        if not possessed:
+        if first_verb is None:
             return None
 
         for split in range(first_verb + 1, len(words)):
@@ -577,10 +574,38 @@ class LanguageIntelligence:
             main_tail = " ".join(words[split:]).strip(" ,.;:!?")
             if self._main_verb_index(main_tail) is None:
                 continue
+
             relative_clause = self._parse_clause(relative_text)
             main_candidate = self._parse_clause(f"{antecedent} {main_tail}")
             if main_candidate.relation is None or main_candidate.subject != antecedent:
                 continue
+
+            # Separate the possessed NP from an explicit relative subject.
+            preverb = words[:first_verb]
+            parsed_subject = (
+                self._strip_det(relative_clause.subject)
+                if relative_clause.subject
+                else None
+            )
+            possessed_tokens = preverb
+            if parsed_subject:
+                subject_tokens = self._strip_det(" ".join(preverb[-3:]))
+                if subject_tokens == parsed_subject:
+                    possessed_tokens = preverb[:-3]
+                else:
+                    for width in (2, 1):
+                        if len(preverb) >= width:
+                            candidate = self._strip_det(" ".join(preverb[-width:]))
+                            if candidate == parsed_subject:
+                                possessed_tokens = preverb[:-width]
+                                break
+
+            possessed = self._strip_det(" ".join(possessed_tokens))
+            if not possessed:
+                possessed = parsed_subject
+            if not possessed:
+                continue
+
             return (
                 f"{antecedent} {main_tail}",
                 self.normalize_token(marker),
