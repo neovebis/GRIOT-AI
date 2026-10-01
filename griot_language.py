@@ -324,6 +324,25 @@ class LanguageIntelligence:
             main_clause = self._parse_clause(main_text)
             if main_clause.relation is not None and main_clause.subject == antecedent:
                 relative_clause = self._parse_clause(relative_text)
+                if (
+                    relative_clause.relation is not None
+                    and relative_clause.object is None
+                    and self._strip_det(relative_clause.subject or "") != possessed
+                ):
+                    relative_roles = self._roles(
+                        relative_clause.subject,
+                        possessed,
+                        relative_clause.relation,
+                        relative_clause.text,
+                    )
+                    relative_clause = replace(
+                        relative_clause,
+                        object=possessed,
+                        predicate=f"{relative_clause.relation}:{possessed}",
+                        roles=relative_roles,
+                        relative_antecedent=possessed,
+                        relative_binding="object",
+                    )
                 return replace(
                     main_clause,
                     text=clause,
