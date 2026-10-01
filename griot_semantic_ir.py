@@ -503,7 +503,7 @@ class MeaningCompiler:
             "depth": depth,
             "path": ".".join(str(item) for item in path),
             "coordinators": coordinators,
-            "coordinator": clause.coordinator,
+            "coordinator": coordinators[-1] if coordinators else clause.coordinator,
             "subject": subject,
             "relation": relation,
             "object": object_,
