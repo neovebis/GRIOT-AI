@@ -339,6 +339,8 @@ class LanguageIntelligence:
                     relative=(),
                     relativizer=relativizer,
                     relative_antecedent=antecedent,
+                    relativizer_kind=self._relative_kind(relativizer),
+                    relative_binding=relative_clause.relative_binding,
                 )
 
         main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
@@ -502,6 +504,8 @@ class LanguageIntelligence:
                 relative=(relative_clause,),
                 relativizer=relativizer,
                 relative_antecedent=relative_antecedent,
+                relativizer_kind=self._relative_kind(relativizer),
+                relative_binding=relative_clause.relative_binding,
             )
         return result
 
