@@ -224,6 +224,7 @@ class MeaningCompiler:
                         path=(index,),
                         coordinators=(language_clause.coordinator or "coord",),
                         records=coordination_records,
+                        embedding_records=embedding_records,
                     )
                 for index, embedded in enumerate(language_clause.embedded):
                     self._compile_embedded_tree(
@@ -377,6 +378,7 @@ class MeaningCompiler:
         path: tuple[int, ...],
         subordinators: tuple[str, ...],
         records: list[dict[str, object]],
+        coordination_records: list[dict[str, object]] | None = None,
     ) -> None:
         """Recursively ground a LanguageClause embedding tree into GIR."""
         relation = clause.relation
@@ -463,6 +465,20 @@ class MeaningCompiler:
                 path=(*path, index),
                 subordinators=next_subordinators,
                 records=records,
+                coordination_records=coordination_records,
+            )
+
+        for index, sibling in enumerate(clause.coordinated):
+            self._compile_coordinated_tree(
+                sibling,
+                nodes,
+                edges,
+                ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                coordinators=(*subordinators, clause.subordinator or "embedded", clause.coordinator or "coord"),
+                records=coordination_records if coordination_records is not None else [],
+                embedding_records=records,
             )
 
     def _compile_coordinated_tree(
@@ -476,6 +492,7 @@ class MeaningCompiler:
         path: tuple[int, ...],
         coordinators: tuple[str, ...],
         records: list[dict[str, object]],
+        embedding_records: list[dict[str, object]] | None = None,
     ) -> None:
         """Ground one coordinated sibling and recursively preserve its children."""
         relation = clause.relation
@@ -517,7 +534,8 @@ class MeaningCompiler:
                 depth=depth + 1,
                 path=(*path, index),
                 subordinators=(*coordinators, clause.subordinator or "embedded"),
-                records=child_records,
+                records=embedding_records if embedding_records is not None else child_records,
+                coordination_records=records,
             )
         for index, sibling in enumerate(clause.coordinated):
             self._compile_coordinated_tree(
@@ -526,6 +544,7 @@ class MeaningCompiler:
                 path=(*path, index),
                 coordinators=(*coordinators, clause.coordinator or "coord"),
                 records=records,
+                embedding_records=embedding_records,
             )
 
     @staticmethod
