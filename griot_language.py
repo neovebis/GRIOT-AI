@@ -988,6 +988,43 @@ class LanguageIntelligence:
         antecedent: str,
         relativizer: str | None = None,
     ) -> "LanguageClause":
+        # H23: before parsing a relative as a flat clause, look for another
+        # relative marker attached to its object. This preserves structures
+        # such as "que viu o lobo que atacou a floresta".
+        nested = self._split_nested_relative_argument(relative_text)
+        if nested is not None:
+            main_text, nested_marker, nested_text, nested_antecedent = nested
+            outer = self._parse_clause(
+                f"{antecedent} {main_text}"
+            )
+            if (
+                outer.relation is not None
+                and outer.subject == antecedent
+                and outer.object == nested_antecedent
+            ):
+                if nested_marker.startswith("cujo"):
+                    nested_clause = self._build_possessive_modifier(
+                        nested_antecedent,
+                        nested_marker,
+                        nested_text,
+                    )
+                else:
+                    nested_clause = self._bind_relative_clause(
+                        nested_text,
+                        nested_antecedent,
+                        nested_marker,
+                    )
+                if nested_clause is not None and nested_clause.relation is not None:
+                    return replace(
+                        outer,
+                        relative=(nested_clause,),
+                        relativizer=relativizer,
+                        relativizer_kind=self._relative_kind(relativizer),
+                        relative_antecedent=antecedent,
+                        relative_binding="subject",
+                        relative_preposition=self._relative_preposition(relativizer),
+                    )
+
         parsed = self._parse_clause(relative_text)
         if parsed.relation is None:
             return replace(
@@ -1026,6 +1063,62 @@ class LanguageIntelligence:
             relativizer_kind=self._relative_kind(relativizer),
             relative_binding=binding,
             relative_preposition=self._relative_preposition(relativizer),
+        )
+
+    def _split_nested_relative_argument(
+        self,
+        relative_text: str,
+    ) -> tuple[str, str, str, str] | None:
+        text = re.sub(r"\s+", " ", relative_text.strip()).strip(" .;!?")
+        marker_pattern = r"(" + "|".join(re.escape(x) for x in self.RELATIVE_MARKERS) + r")"
+        match = re.search(
+            r"\s+" + marker_pattern + r"\s+",
+            text,
+            flags=re.I,
+        )
+        if not match:
+            return None
+
+        main_text = text[:match.start()].strip(" ,.;:!?")
+        marker = self.normalize_token(match.group(1))
+        nested_text = text[match.end():].strip(" ,.;:!?")
+        if not main_text or not nested_text:
+            return None
+
+        # The left side must already describe the outer relative's predicate
+        # and expose the noun to which the nested relative attaches.
+        if self._main_verb_index(main_text) is None:
+            return None
+        outer_probe = self._parse_clause("__ANTE__ " + main_text)
+        if outer_probe.relation is None or not outer_probe.object:
+            return None
+
+        antecedent = self._strip_det(outer_probe.object)
+        if not antecedent:
+            return None
+        return main_text, marker, nested_text, antecedent
+
+    def _build_possessive_modifier(
+        self,
+        antecedent: str,
+        marker: str,
+        relative_text: str,
+    ) -> "LanguageClause | None":
+        parsed = self._parse_clause(relative_text)
+        if parsed.relation is None:
+            return None
+        possessed = parsed.subject or ""
+        if not possessed:
+            return None
+        return replace(
+            parsed,
+            relative_antecedent=antecedent,
+            relativizer=marker,
+            relativizer_kind="possessive",
+            relative_binding="possessor",
+            possessive_marker=marker,
+            possessive_antecedent=antecedent,
+            possessed=possessed,
         )
 
     def _split_embedded_clause(
