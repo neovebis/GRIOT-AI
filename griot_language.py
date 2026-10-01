@@ -281,13 +281,22 @@ class LanguageIntelligence:
         structural = self._parse_structural_clause(clause)
         if structural is not None:
             return structural
+
+        # Fronted temporal adjuncts belong to the clause semantically, but
+        # must not become part of the grammatical subject/predicate span.
+        parse_clause = re.sub(
+            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,?\s*",
+            "",
+            clause.strip(),
+            flags=re.I,
+        )
         negated = bool(re.search(r"(?<!\w)(?:não|nao|nunca|jamais)(?!\w)", lower))
         modality = self._find_modality(lower)
         temporal = tuple(value for word, value in self.TEMPORAL.items() if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", lower))
         quantifiers = self._quantifiers(clause)
 
         for pattern, relation in self.RELATION_PATTERNS:
-            match = pattern.match(clause.strip())
+            match = pattern.match(parse_clause.strip())
             if match:
                 subject = self._strip_det(match.group(1))
                 object_ = self._strip_det(match.group(2))
@@ -295,7 +304,7 @@ class LanguageIntelligence:
                     clause,
                     subject,
                     f"{relation}:{match.group(2)}",
-                    self._find_main_verb(clause),
+                    self._find_main_verb(parse_clause),
                     relation,
                     object_,
                     self._roles(subject, match.group(2), relation, clause),
@@ -308,14 +317,14 @@ class LanguageIntelligence:
                     self._comparison(clause),
                 )
 
-        verb_index = self._main_verb_index(clause)
+        verb_index = self._main_verb_index(parse_clause)
         if verb_index is None:
             return LanguageClause(
                 clause, None, None, None, None, None, (),
                 negated, None, None, modality, temporal, quantifiers, self._comparison(clause),
             )
 
-        words = clause.split()
+        words = parse_clause.split()
         verb_word = words[verb_index]
         subject_text = " ".join(words[:verb_index]).strip()
         subject_text = re.sub(r"\b(?:não|nao|nunca|jamais)\b", "", subject_text, flags=re.I)
@@ -326,7 +335,7 @@ class LanguageIntelligence:
         tail = " ".join(words[verb_index + 1:]).strip()
         object_ = self._extract_object(tail)
         lemma = self._lemma(verb_word)
-        relation = self._relation_for_verb(clause, lemma)
+        relation = self._relation_for_verb(parse_clause, lemma)
         roles = self._roles(subject, object_, relation, clause)
         return LanguageClause(
             clause,
