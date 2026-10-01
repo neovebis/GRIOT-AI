@@ -497,55 +497,54 @@ class LanguageIntelligence:
     ) -> tuple[str, str, str, str] | None:
         text = re.sub(r"\s+", " ", clause.strip())
         marker_pattern = r"(o qual|a qual|os quais|as quais|cujo|cuja|cujos|cujas|quem|onde|que)"
-        matches = list(
-            re.finditer(
-                r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
-                text,
-                flags=re.I,
-            )
+        match = re.search(
+            r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
+            text,
+            flags=re.I,
         )
-        if not matches:
+        if not match:
             return None
 
-        for match in matches:
-            prefix, marker, remainder = match.groups()
-            # For a subject-attached relative, the antecedent NP is before the
-            # relativizer and contains no finite/lexical predicate.
-            if self._main_verb_index(prefix.strip()) is not None:
-                continue
-            antecedent = self._strip_det(prefix.strip())
-            if not antecedent:
-                continue
-            words = remainder.strip().split()
-            if len(words) < 2:
-                continue
+        prefix, marker, remainder = match.groups()
+        if self._main_verb_index(prefix.strip()) is not None:
+            return None
 
-            # Try deterministic clause boundaries after the first relative
-            # predicate until the remainder itself forms a valid main clause
-            # with the same antecedent as subject.
-            for split in range(1, len(words)):
-                relative_text = " ".join(words[:split]).strip()
-                main_tail = " ".join(words[split:]).strip()
-                if self._main_verb_index(relative_text) is None:
-                    continue
-                relative_clause = self._parse_clause(relative_text)
-                if relative_clause.relation is None:
-                    continue
-                main_candidate = self._parse_clause(
-                    f"{antecedent} {main_tail}"
-                )
-                if (
-                    main_candidate.relation is None
-                    or main_candidate.subject != antecedent
-                ):
-                    continue
-                return (
-                    f"{antecedent} {main_tail}",
-                    self.normalize_token(marker),
-                    relative_text,
-                    antecedent,
-                )
-        return None
+        antecedent = self._strip_det(prefix.strip())
+        if not antecedent:
+            return None
+
+        words = remainder.strip().split()
+        relation_positions = [
+            index
+            for index, word in enumerate(words)
+            if self._relation_for_verb(word, self._lemma(word)) is not None
+        ]
+        if len(relation_positions) < 2:
+            return None
+
+        relative_end = relation_positions[1]
+        relative_text = " ".join(words[:relative_end]).strip()
+        main_tail = " ".join(words[relative_end:]).strip()
+        if not relative_text or not main_tail:
+            return None
+
+        relative_clause = self._parse_clause(relative_text)
+        if relative_clause.relation is None:
+            return None
+
+        main_candidate = self._parse_clause(f"{antecedent} {main_tail}")
+        if (
+            main_candidate.relation is None
+            or main_candidate.subject != antecedent
+        ):
+            return None
+
+        return (
+            f"{antecedent} {main_tail}",
+            self.normalize_token(marker),
+            relative_text,
+            antecedent,
+        )
 
     def _split_relative_clause(
         self,
