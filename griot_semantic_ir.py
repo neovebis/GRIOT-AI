@@ -123,7 +123,16 @@ class MeaningCompiler:
             if not sentence:
                 continue
             negated = bool(re.search(r"\b(?:não|nunca|jamais)\b", sentence))
-            sentence_clean = re.sub(r"\b(?:não|nunca|jamais)\b\s*", "", sentence, count=1).strip()
+            # Strip negation only when it is clause-initial. A negation inside
+            # an embedded clause must remain in the text used for language
+            # clause matching and recursive semantic compilation.
+            sentence_clean = re.sub(
+                r"^(?:não|nao|nunca|jamais)\s*",
+                "",
+                sentence,
+                count=1,
+                flags=re.I,
+            ).strip()
             pronoun = re.match(
                 r"^(ele|ela|eles|elas|isso|isto|este|esta|esse|essa|aquilo)\s+(.*)$",
                 sentence_clean,
@@ -157,6 +166,11 @@ class MeaningCompiler:
                 )
             else:
                 parsed = self._parse(sentence_clean)
+            main_negated = (
+                language_clause.negated
+                if language_clause is not None
+                else negated
+            )
             if not parsed:
                 continue
             subject, relation, object_ = parsed
@@ -177,8 +191,8 @@ class MeaningCompiler:
             if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts", "wants", "needs", "knows"}:
                 scene = self._event(nodes, relation, subject, object_)
                 edges += [
-                    MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, negated, sentence),
-                    MeaningEdge(scene.node_id, "has_patient", o.node_id, 4, 0.94, negated, sentence),
+                    MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, main_negated, sentence),
+                    MeaningEdge(scene.node_id, "has_patient", o.node_id, 4, 0.94, main_negated, sentence),
                 ]
             edges.append(
                 MeaningEdge(
@@ -187,7 +201,7 @@ class MeaningCompiler:
                     o.node_id,
                     self.RELATION_FAMILY.get(relation, 2),
                     0.92,
-                    negated,
+                    main_negated,
                     sentence,
                 )
             )
