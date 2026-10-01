@@ -72,6 +72,9 @@ class LanguageClause:
     embedded: tuple["LanguageClause", ...] = ()
     coordinated: tuple["LanguageClause", ...] = ()
     coordinator: str | None = None
+    relative: tuple["LanguageClause", ...] = ()
+    relativizer: str | None = None
+    relative_antecedent: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -417,12 +420,30 @@ class LanguageIntelligence:
         lemma = self._lemma(verb_word)
         relation = self._relation_for_verb(parse_clause, lemma)
         object_, recipient = self._extract_complements(tail, relation)
+        relative_clause = None
+        relativizer = None
+        relative_antecedent = None
+        if object_:
+            relative_parts = self._split_relative_argument(object_)
+            if relative_parts is not None:
+                base_object, relativizer, relative_text = relative_parts
+                relative_clause = self._bind_relative_clause(
+                    relative_text,
+                    base_object,
+                )
+                if relative_clause.relation is not None:
+                    object_ = base_object
+                    relative_antecedent = base_object
+                else:
+                    relative_clause = None
+                    relativizer = None
+
         roles = self._roles(subject, object_, relation, clause)
         if recipient:
             roles = self._dedupe_roles(
                 (*roles, SemanticRole("recipient", recipient, 0.90))
             )
-        return LanguageClause(
+        result = LanguageClause(
             clause,
             subject,
             tail or None,
@@ -437,6 +458,64 @@ class LanguageIntelligence:
             temporal,
             quantifiers,
             self._comparison(clause),
+        )
+        if relative_clause is not None:
+            result = replace(
+                result,
+                relative=(relative_clause,),
+                relativizer=relativizer,
+                relative_antecedent=relative_antecedent,
+            )
+        return result
+
+    def _split_relative_argument(
+        self,
+        argument: str,
+    ) -> tuple[str, str, str] | None:
+        markers = (
+            "o qual", "a qual", "os quais", "as quais",
+            "cujo", "cuja", "cujos", "cujas",
+            "quem", "onde", "que",
+        )
+        pattern = re.compile(
+            r"^(.+?)\s+(" + "|".join(re.escape(x) for x in markers) + r")\s+(.+)$",
+            re.I,
+        )
+        match = pattern.match(argument.strip())
+        if not match:
+            return None
+        antecedent, marker, relative_text = match.groups()
+        if self._main_verb_index(relative_text.strip()) is None:
+            return None
+        antecedent = self._strip_det(antecedent.strip())
+        if not antecedent:
+            return None
+        return antecedent, self.normalize_token(marker), relative_text.strip()
+
+    def _bind_relative_clause(
+        self,
+        relative_text: str,
+        antecedent: str,
+    ) -> "LanguageClause":
+        parsed = self._parse_clause(relative_text)
+        if parsed.relation is None:
+            return parsed
+        subject = parsed.subject
+        object_ = parsed.object
+        if subject is None and object_:
+            subject = antecedent
+        elif object_ is None and subject:
+            object_ = antecedent
+        else:
+            return parsed
+        roles = self._roles(subject, object_, parsed.relation, parsed.text)
+        return replace(
+            parsed,
+            subject=subject,
+            object=object_,
+            predicate=f"{parsed.relation}:{object_ or ''}",
+            roles=roles,
+            relative_antecedent=antecedent,
         )
 
     def _split_embedded_clause(
