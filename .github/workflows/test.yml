@@ -128,5 +128,7 @@ jobs:
         run: python -m unittest tests.test_h10_semantic_frame_generalization -v
       - name: H11 structural paraphrase tests
         run: python -m unittest tests.test_h11_structural_paraphrase -v
+      - name: H12 argument order tests
+        run: python -m unittest tests.test_h12_argument_order -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
