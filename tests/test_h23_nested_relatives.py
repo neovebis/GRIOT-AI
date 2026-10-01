@@ -49,7 +49,7 @@ class H23NestedRelativeTests(unittest.TestCase):
             if edge.relation in {"sees", "attacks"}
         }
         self.assertIn("relative:1:que", provenances)
-        self.assertIn("relative:2:que.0", provenances)
+        self.assertIn("relative:2:que>que.0.0", provenances)
 
     def test_nested_relative_metadata_is_recursive(self) -> None:
         meaning = self.semantic.understand(
