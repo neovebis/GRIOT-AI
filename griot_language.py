@@ -581,7 +581,7 @@ class LanguageIntelligence:
         clause: str,
     ) -> tuple[str, str, str, str] | None:
         text = re.sub(r"\s+", " ", clause.strip())
-        marker_pattern = r"(o qual|a qual|os quais|as quais|cujo|cuja|cujos|cujas|quem|onde|que)"
+        marker_pattern = r"(" + "|".join(re.escape(x) for x in self.RELATIVE_MARKERS) + r")"
         match = re.search(
             r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
             text,
