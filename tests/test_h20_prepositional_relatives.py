@@ -56,7 +56,7 @@ class H20PrepositionalRelativeTests(unittest.TestCase):
 
     def test_de_que_is_prepositional_not_plain_nominal(self) -> None:
         clause = self.language.analyze(
-            "O projeto de que o lobo precisa venceu."
+            "O projeto de que o lobo precisa é uma obra."
         ).clauses[0]
         self.assertEqual(clause.relativizer, "de que")
         self.assertEqual(clause.relativizer_kind, "prepositional")
