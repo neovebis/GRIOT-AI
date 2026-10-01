@@ -31,7 +31,7 @@ class H14EmbeddedClauseTests(unittest.TestCase):
                 clause.embedded[0].relation,
                 clause.embedded[0].object,
             ),
-            ("cão", "located_in", "floresta"),
+            ("cão", "sees", "floresta"),
         )
 
     def test_embedded_predicate_is_composed_independently(self) -> None:
@@ -46,11 +46,11 @@ class H14EmbeddedClauseTests(unittest.TestCase):
 
     def test_when_clause_is_embedded(self) -> None:
         clause = self.language.analyze(
-            "O lobo fugiu quando o cão chegou."
+            "O lobo atacou o cão quando o cão viu a floresta."
         ).clauses[0]
         self.assertEqual(clause.subordinator, "quando")
         self.assertEqual(len(clause.embedded), 1)
-        self.assertIsNotNone(clause.embedded[0].relation)
+        self.assertEqual(clause.embedded[0].relation, "sees")
 
     def test_embedded_negation_is_preserved(self) -> None:
         clause = self.language.analyze(
