@@ -13,6 +13,17 @@ class H18SubjectRelativeTests(unittest.TestCase):
         self.language = LanguageIntelligence()
         self.semantic = SemanticGRIOT(self.engine)
 
+    def test_subject_relative_boundary_detector_returns_exact_attachment(self) -> None:
+        parts = self.language._split_subject_relative_clause(
+            "O lobo que atacou o cão viu a floresta."
+        )
+        self.assertIsNotNone(parts)
+        main_text, relativizer, relative_text, antecedent = parts
+        self.assertEqual(main_text, "lobo viu a floresta")
+        self.assertEqual(relativizer, "que")
+        self.assertEqual(relative_text, "atacou o cão")
+        self.assertEqual(antecedent, "lobo")
+
     def test_subject_relative_binds_missing_subject(self) -> None:
         clause = self.language.analyze(
             "O lobo que atacou o cão viu a floresta."
