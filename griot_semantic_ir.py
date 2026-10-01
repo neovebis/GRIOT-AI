@@ -160,6 +160,12 @@ class MeaningCompiler:
                 ),
                 None,
             )
+            if language_clause is not None:
+                language_clause = self._resolve_intrasentence_coreference(
+                    language_clause,
+                    mentions,
+                    coreference_links,
+                )
             if (
                 language_clause is not None
                 and language_clause.subject
@@ -816,6 +822,93 @@ class MeaningCompiler:
             ),
             "markers": analysis.markers,
         }
+
+    def _resolve_intrasentence_coreference(
+        self,
+        clause,
+        mentions: list[Mention],
+        links: list[CoreferenceLink],
+    ):
+        local_mentions = list(mentions)
+
+        def add_mentions(node) -> None:
+            if node is None:
+                return
+            for surface, role in (
+                (getattr(node, "subject", None), "subject"),
+                (getattr(node, "object", None), "object"),
+            ):
+                if not surface:
+                    continue
+                gender, number = self.coreference.guess_agreement(surface)
+                local_mentions.append(
+                    Mention(
+                        surface,
+                        role,
+                        len(local_mentions) + 1,
+                        gender,
+                        number,
+                        None,
+                    )
+                )
+
+        add_mentions(clause)
+
+        def visit(child):
+            child_out = child
+            pronoun = getattr(child, "subject", None)
+            if (
+                isinstance(pronoun, str)
+                and pronoun.casefold().strip() in self.coreference.PRONOUNS
+            ):
+                link = self.coreference.resolve(
+                    pronoun,
+                    local_mentions,
+                    context_records=self.griot.context.records(),
+                )
+                links.append(link)
+                if link.resolved and link.antecedent and child.object:
+                    roles = self.language._roles(
+                        link.antecedent,
+                        child.object,
+                        child.relation,
+                        child.text,
+                    )
+                    child_out = replace(
+                        child,
+                        subject=link.antecedent,
+                        predicate=f"{child.relation}:{child.object}",
+                        roles=roles,
+                    )
+                elif not link.resolved:
+                    # Preserve the clause structurally but do not invent a
+                    # semantic antecedent. It will be abstained during GIR
+                    # compilation rather than silently using the pronoun.
+                    return child_out, True
+
+            add_mentions(child_out)
+
+            coordinated = tuple(visit(item)[0] for item in getattr(child_out, "coordinated", ()))
+            embedded = tuple(visit(item)[0] for item in getattr(child_out, "embedded", ()))
+            relatives = tuple(visit(item)[0] for item in getattr(child_out, "relative", ()))
+            if coordinated or embedded or relatives:
+                child_out = replace(
+                    child_out,
+                    coordinated=coordinated,
+                    embedded=embedded,
+                    relative=relatives,
+                )
+            return child_out, False
+
+        coordinated = tuple(visit(item)[0] for item in getattr(clause, "coordinated", ()))
+        embedded = tuple(visit(item)[0] for item in getattr(clause, "embedded", ()))
+        relatives = tuple(visit(item)[0] for item in getattr(clause, "relative", ()))
+        return replace(
+            clause,
+            coordinated=coordinated,
+            embedded=embedded,
+            relative=relatives,
+        )
 
     def _parse(self, sentence: str) -> tuple[str, str, str] | None:
         modal = re.match(r"^(.*?)\s+(?:pode|deve|precisa)\s+(.+)$", sentence, re.I)
