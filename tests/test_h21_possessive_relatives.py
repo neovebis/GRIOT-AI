@@ -48,7 +48,7 @@ class H21PossessiveRelativeTests(unittest.TestCase):
                 "donos",
             ),
             (
-                "As casas cujas portas o lobo atacou estão na floresta.",
+                "As casas cujas portas o lobo atacou usam madeira.",
                 "cujas",
                 "portas",
             ),
