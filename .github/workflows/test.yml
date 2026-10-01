@@ -142,5 +142,7 @@ jobs:
         run: python -m unittest tests.test_h17_relative_clauses -v
       - name: H18 subject relative tests
         run: python -m unittest tests.test_h18_subject_relatives -v
+      - name: H19 relative pronoun tests
+        run: python -m unittest tests.test_h19_relative_pronouns -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
