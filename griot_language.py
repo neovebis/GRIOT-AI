@@ -563,7 +563,7 @@ class LanguageIntelligence:
     @staticmethod
     def _strip_argument_marker(value: str) -> str:
         value = re.sub(
-            r"^(?:a|ao|à|aos|às|de|do|da|dos|das|para|por|pelo|pela|pelos|pelas)\s+",
+            r"^(?:a|ao|à|aos|às|de|do|da|dos|das|em|no|na|nos|nas|para|por|pelo|pela|pelos|pelas)\s+",
             "",
             value.strip(),
             flags=re.I,
