@@ -264,18 +264,39 @@ class LanguageIntelligence:
         normalized = re.sub(r"\s+", " ", text.strip())
         if not normalized:
             return ()
+        # A fronted temporal adjunct followed by a comma is still part of
+        # the same clause. Normalize that punctuation before generic splitting
+        # so structural parsing receives the complete proposition.
+        normalized = re.sub(
+            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,?\s*",
+            lambda match: match.group(0).replace(",", " "),
+            normalized,
+            flags=re.I,
+        )
         chunks = re.split(r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+", normalized, flags=re.I)
         return tuple(chunk.strip(" ,;") for chunk in chunks if chunk.strip(" ,;"))
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
+        structural = self._parse_structural_clause(clause)
+        if structural is not None:
+            return structural
+
+        # Fronted temporal adjuncts belong to the clause semantically, but
+        # must not become part of the grammatical subject/predicate span.
+        parse_clause = re.sub(
+            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,?\s*",
+            "",
+            clause.strip(),
+            flags=re.I,
+        )
         negated = bool(re.search(r"(?<!\w)(?:não|nao|nunca|jamais)(?!\w)", lower))
         modality = self._find_modality(lower)
         temporal = tuple(value for word, value in self.TEMPORAL.items() if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", lower))
         quantifiers = self._quantifiers(clause)
 
         for pattern, relation in self.RELATION_PATTERNS:
-            match = pattern.match(clause.strip())
+            match = pattern.match(parse_clause.strip())
             if match:
                 subject = self._strip_det(match.group(1))
                 object_ = self._strip_det(match.group(2))
@@ -283,7 +304,7 @@ class LanguageIntelligence:
                     clause,
                     subject,
                     f"{relation}:{match.group(2)}",
-                    self._find_main_verb(clause),
+                    self._find_main_verb(parse_clause),
                     relation,
                     object_,
                     self._roles(subject, match.group(2), relation, clause),
@@ -296,14 +317,14 @@ class LanguageIntelligence:
                     self._comparison(clause),
                 )
 
-        verb_index = self._main_verb_index(clause)
+        verb_index = self._main_verb_index(parse_clause)
         if verb_index is None:
             return LanguageClause(
                 clause, None, None, None, None, None, (),
                 negated, None, None, modality, temporal, quantifiers, self._comparison(clause),
             )
 
-        words = clause.split()
+        words = parse_clause.split()
         verb_word = words[verb_index]
         subject_text = " ".join(words[:verb_index]).strip()
         subject_text = re.sub(r"\b(?:não|nao|nunca|jamais)\b", "", subject_text, flags=re.I)
@@ -314,7 +335,7 @@ class LanguageIntelligence:
         tail = " ".join(words[verb_index + 1:]).strip()
         object_ = self._extract_object(tail)
         lemma = self._lemma(verb_word)
-        relation = self._relation_for_verb(clause, lemma)
+        relation = self._relation_for_verb(parse_clause, lemma)
         roles = self._roles(subject, object_, relation, clause)
         return LanguageClause(
             clause,
@@ -332,6 +353,113 @@ class LanguageIntelligence:
             quantifiers,
             self._comparison(clause),
         )
+
+    def _parse_structural_clause(self, clause: str) -> LanguageClause | None:
+        working = re.sub(
+            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,\s*",
+            "",
+            clause.strip(),
+            flags=re.I,
+        )
+
+        # Passive voice: surface patient becomes semantic object and the
+        # "por/pelo/pela/..." complement becomes semantic agent.
+        passive = re.match(
+            r"^(.+?)\s+(?:é|foi|era|erá|está|estava|são|foram|eram|será)\s+([^\s]+)\s+(?:por|pelo|pela|pelos|pelas)\s+(.+)$",
+            working,
+            flags=re.I,
+        )
+        if passive:
+            patient = self._strip_det(passive.group(1).strip())
+            participle = passive.group(2).strip(" ,;:.!?")
+            agent = self._strip_det(passive.group(3).strip())
+            relation = SemanticLexicon.passive_relation(participle)
+            if relation and patient and agent:
+                return LanguageClause(
+                    clause,
+                    agent,
+                    f"{relation}:{patient}",
+                    participle,
+                    relation,
+                    patient,
+                    (
+                        SemanticRole("agent", agent, 0.93),
+                        SemanticRole("patient", patient, 0.94),
+                    ),
+                    bool(re.search(r"\b(?:não|nao|nunca|jamais)\b", clause, re.I)),
+                    self._clause_tense(clause),
+                    self._clause_aspect(clause),
+                    self._find_modality(clause.casefold()),
+                    tuple(value for word, value in self.TEMPORAL.items() if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", clause.casefold())),
+                    self._quantifiers(clause),
+                    self._comparison(clause),
+                )
+
+        # Nominalized relation: "o ataque do lobo ao cão" and
+        # "a construção da casa pelo arquiteto".
+        nominal = re.match(
+            r"^(?:o|a|os|as)\s+([^\s]+)\s+(?:de|do|da|dos|das)\s+(.+?)\s+(?:a|ao|à|aos|às)\s+(.+)$",
+            working,
+            flags=re.I,
+        )
+        if nominal:
+            relation = SemanticLexicon.nominalization_relation(nominal.group(1))
+            if relation:
+                agent = self._strip_det(nominal.group(2).strip())
+                patient = self._strip_det(nominal.group(3).strip())
+                if agent and patient:
+                    return LanguageClause(
+                        clause,
+                        agent,
+                        f"{relation}:{patient}",
+                        nominal.group(1),
+                        relation,
+                        patient,
+                        (
+                            SemanticRole("agent", agent, 0.90),
+                            SemanticRole("patient", patient, 0.90),
+                        ),
+                        False,
+                        None,
+                        None,
+                        None,
+                        (),
+                        self._quantifiers(clause),
+                        self._comparison(clause),
+                    )
+
+        nominal_by = re.match(
+            r"^(?:o|a|os|as)\s+([^\s]+)\s+(?:de|do|da|dos|das)\s+(.+?)\s+(?:por|pelo|pela|pelos|pelas)\s+(.+)$",
+            working,
+            flags=re.I,
+        )
+        if nominal_by:
+            relation = SemanticLexicon.nominalization_relation(nominal_by.group(1))
+            if relation:
+                patient = self._strip_det(nominal_by.group(2).strip())
+                agent = self._strip_det(nominal_by.group(3).strip())
+                if patient and agent:
+                    return LanguageClause(
+                        clause,
+                        agent,
+                        f"{relation}:{patient}",
+                        nominal_by.group(1),
+                        relation,
+                        patient,
+                        (
+                            SemanticRole("agent", agent, 0.90),
+                            SemanticRole("patient", patient, 0.90),
+                        ),
+                        False,
+                        None,
+                        None,
+                        None,
+                        (),
+                        self._quantifiers(clause),
+                        self._comparison(clause),
+                    )
+
+        return None
 
     def _roles(self, subject: str | None, object_: str | None, relation: str | None, clause: str) -> tuple[SemanticRole, ...]:
         roles: list[SemanticRole] = []
