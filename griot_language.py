@@ -318,6 +318,24 @@ class LanguageIntelligence:
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
+        nested_relative_parts = self._split_nested_subject_relative_clause(clause)
+        if nested_relative_parts is not None:
+            main_text, marker, relative_text, antecedent = nested_relative_parts
+            main_clause = self._parse_clause(main_text)
+            if main_clause.relation is not None and main_clause.subject == antecedent:
+                relative_clause = self._bind_relative_clause(
+                    relative_text,
+                    antecedent,
+                    marker,
+                )
+                return replace(
+                    main_clause,
+                    text=clause,
+                    relative=(relative_clause,) if relative_clause.relation is not None else (),
+                    relativizer=marker,
+                    relative_antecedent=antecedent,
+                )
+
         multiple_relative_parts = self._split_multiple_relatives(clause)
         if multiple_relative_parts is not None:
             main_text, relatives_data, antecedent = multiple_relative_parts
@@ -591,6 +609,78 @@ class LanguageIntelligence:
                 relative_preposition=self._relative_preposition(relativizer),
             )
         return result
+
+    def _split_nested_subject_relative_clause(
+        self,
+        clause: str,
+    ) -> tuple[str, str, str, str] | None:
+        text = re.sub(r"\s+", " ", clause.strip()).strip(" .;!?")
+        marker_pattern = r"(" + "|".join(re.escape(x) for x in self.RELATIVE_MARKERS) + r")"
+        first = re.match(
+            r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
+            text,
+            flags=re.I,
+        )
+        if not first:
+            return None
+
+        prefix, marker, remainder = first.groups()
+        if self._main_verb_index(prefix.strip()) is not None:
+            return None
+        antecedent = self._strip_det(prefix.strip())
+        if not antecedent:
+            return None
+
+        nested = re.search(
+            r"\s+" + marker_pattern + r"\s+",
+            remainder,
+            flags=re.I,
+        )
+        if not nested:
+            return None
+
+        outer_relative_prefix = remainder[:nested.start()].strip()
+        nested_marker = self.normalize_token(nested.group(1))
+        nested_tail = remainder[nested.end():].strip()
+        if self._main_verb_index(outer_relative_prefix) is None:
+            return None
+
+        tail_words = nested_tail.split()
+        verb_positions = [
+            index
+            for index, word in enumerate(tail_words)
+            if self._pos(word) in {"VERB", "AUX"}
+        ]
+        if len(verb_positions) < 2:
+            return None
+
+        main_verb = verb_positions[-1]
+        main_tail = " ".join(tail_words[main_verb:]).strip()
+        if not main_tail:
+            return None
+
+        main_candidate = self._parse_clause(
+            f"{antecedent} {main_tail}"
+        )
+        if (
+            main_candidate.relation is None
+            or main_candidate.subject != antecedent
+        ):
+            return None
+
+        relative_text = (
+            f"{outer_relative_prefix} {nested_marker} "
+            f"{' '.join(tail_words[:main_verb])}"
+        ).strip()
+        if self._main_verb_index(relative_text) is None:
+            return None
+
+        return (
+            f"{antecedent} {main_tail}",
+            self.normalize_token(marker),
+            relative_text,
+            antecedent,
+        )
 
     def _split_multiple_relatives(
         self,
