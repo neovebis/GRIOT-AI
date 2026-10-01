@@ -476,7 +476,7 @@ class MeaningCompiler:
                 ambiguity_map,
                 depth=depth + 1,
                 path=(*path, index),
-                coordinators=(*subordinators, clause.subordinator or "embedded", clause.coordinator or "coord"),
+                coordinators=(*subordinators, *((clause.subordinator,) if clause.subordinator else ()), clause.coordinator or "coord"),
                 records=coordination_records if coordination_records is not None else [],
                 embedding_records=records,
             )
