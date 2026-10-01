@@ -300,12 +300,6 @@ class LanguageIntelligence:
         )
 
     def _parse_clause(self, clause: str) -> LanguageClause:
-        # H14/H15/H16 structural precedence: first resolve an explicit
-        # subordinate clause at this level; coordination inside its right-hand
-        # branch is then parsed recursively. This preserves:
-        #   A porque B e C
-        #   A e B porque C
-        # as different trees.
         lower = clause.casefold()
         main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
         if subordinate_text is not None:
@@ -318,7 +312,10 @@ class LanguageIntelligence:
                     subordinator=subordinator,
                     embedded=(embedded_clause,),
                 )
-
+        # H16: resolve coordination after an explicit subordinate split so
+        # mixed structures retain their natural hierarchy:
+        #   A porque B e C  -> A -> (B e C)
+        #   A e B porque C  -> (A e B) -> C
         coordination = re.search(
             r"^(.+?)\s+(e|ou|nem|mas|porém|porem|contudo|entretanto|portanto|logo)\s+(.+)$",
             clause.strip(),
@@ -343,6 +340,89 @@ class LanguageIntelligence:
         structural = self._parse_structural_clause(clause)
         if structural is not None:
             return structural
+
+        # Fronted temporal adjuncts belong to the clause semantically, but
+        # must not become part of the grammatical subject/predicate span.
+        parse_clause = re.sub(
+            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,?\s*",
+            "",
+            clause.strip(),
+            flags=re.I,
+        )
+        negated = bool(re.search(r"(?<!\w)(?:não|nao|nunca|jamais)(?!\w)", lower))
+        modality = self._find_modality(lower)
+        temporal = tuple(value for word, value in self.TEMPORAL.items() if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", lower))
+        quantifiers = self._quantifiers(clause)
+
+        for pattern, relation in self.RELATION_PATTERNS:
+            match = pattern.match(parse_clause.strip())
+            if match:
+                subject = self._strip_det(
+                    re.sub(
+                        r"\b(?:não|nao|nunca|jamais|nem)\b",
+                        "",
+                        match.group(1),
+                        flags=re.I,
+                    ).strip()
+                )
+                object_ = self._strip_det(match.group(2))
+                return LanguageClause(
+                    clause,
+                    subject,
+                    f"{relation}:{match.group(2)}",
+                    self._find_main_verb(parse_clause),
+                    relation,
+                    object_,
+                    self._roles(subject, match.group(2), relation, clause),
+                    negated,
+                    self._clause_tense(clause),
+                    self._clause_aspect(clause),
+                    modality,
+                    temporal,
+                    quantifiers,
+                    self._comparison(clause),
+                )
+
+        verb_index = self._main_verb_index(parse_clause)
+        if verb_index is None:
+            return LanguageClause(
+                clause, None, None, None, None, None, (),
+                negated, None, None, modality, temporal, quantifiers, self._comparison(clause),
+            )
+
+        words = parse_clause.split()
+        verb_word = words[verb_index]
+        subject_text = " ".join(words[:verb_index]).strip()
+        subject_text = re.sub(r"\b(?:não|nao|nunca|jamais)\b", "", subject_text, flags=re.I)
+        subject_words = subject_text.split()
+        while subject_words and self._lemma(subject_words[-1]) in self.AUXILIARIES:
+            subject_words.pop()
+        subject = self._strip_det(" ".join(subject_words).strip()) or None
+        tail = " ".join(words[verb_index + 1:]).strip()
+        lemma = self._lemma(verb_word)
+        relation = self._relation_for_verb(parse_clause, lemma)
+        object_, recipient = self._extract_complements(tail, relation)
+        roles = self._roles(subject, object_, relation, clause)
+        if recipient:
+            roles = self._dedupe_roles(
+                (*roles, SemanticRole("recipient", recipient, 0.90))
+            )
+        return LanguageClause(
+            clause,
+            subject,
+            tail or None,
+            verb_word,
+            relation,
+            object_ or None,
+            roles,
+            negated,
+            self._clause_tense(clause),
+            self._clause_aspect(clause),
+            modality,
+            temporal,
+            quantifiers,
+            self._comparison(clause),
+        )
 
     def _split_embedded_clause(
         self,
