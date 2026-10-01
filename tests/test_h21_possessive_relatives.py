@@ -26,6 +26,15 @@ class H21PossessiveRelativeTests(unittest.TestCase):
         self.assertEqual(clause.possessed, "dono")
         self.assertEqual(clause.relative[0].relation, "attacks")
 
+    def test_explicit_relative_subject_is_not_included_in_possessed_np(self) -> None:
+        clause = self.language.analyze(
+            "A casa cuja porta o lobo atacou viu a floresta."
+        ).clauses[0]
+        self.assertEqual(clause.possessed, "porta")
+        self.assertEqual(clause.relative[0].subject, "lobo")
+        self.assertEqual(clause.relative[0].relation, "attacks")
+        self.assertEqual(clause.relative[0].object, "porta")
+
     def test_cuja_and_plural_forms_preserve_ownership(self) -> None:
         for sentence, marker, possessed in (
             (
