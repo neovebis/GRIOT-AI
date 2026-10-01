@@ -23,6 +23,10 @@ class H18SubjectRelativeTests(unittest.TestCase):
         self.assertEqual(relativizer, "que")
         self.assertEqual(relative_text, "atacou o cão")
         self.assertEqual(antecedent, "lobo")
+        self.assertEqual(
+            self.language._parse_clause(main_text).relation,
+            "sees",
+        )
 
     def test_subject_relative_binds_missing_subject(self) -> None:
         clause = self.language.analyze(
