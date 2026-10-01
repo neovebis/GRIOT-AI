@@ -77,6 +77,7 @@ class LanguageClause:
     relative_antecedent: str | None = None
     relativizer_kind: str | None = None
     relative_binding: str | None = None
+    relative_preposition: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +127,14 @@ class LanguageIntelligence:
     })
 
     NEGATIONS = frozenset({"não", "nao", "nunca", "jamais", "nem"})
+
+    RELATIVE_MARKERS = (
+        "o qual", "a qual", "os quais", "as quais",
+        "no qual", "na qual", "nos quais", "nas quais",
+        "em que", "a que", "de que", "do qual", "da qual",
+        "dos quais", "das quais", "a quem", "de quem", "em quem",
+        "cujo", "cuja", "cujos", "cujas", "quem", "onde", "que",
+    )
 
     QUANTIFIER_KINDS = {
         "todo": "universal",
@@ -329,6 +338,7 @@ class LanguageIntelligence:
                         relative_antecedent=antecedent,
                         relativizer_kind=self._relative_kind(relativizer),
                         relative_binding=relative_clause.relative_binding,
+                        relative_preposition=self._relative_preposition(relativizer),
                     )
                 # The relative structure is still recognized even when its
                 # predicate is unsupported. Preserve the main proposition and
@@ -341,6 +351,7 @@ class LanguageIntelligence:
                     relative_antecedent=antecedent,
                     relativizer_kind=self._relative_kind(relativizer),
                     relative_binding=relative_clause.relative_binding,
+                    relative_preposition=self._relative_preposition(relativizer),
                 )
 
         main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
@@ -506,6 +517,7 @@ class LanguageIntelligence:
                 relative_antecedent=relative_antecedent,
                 relativizer_kind=self._relative_kind(relativizer),
                 relative_binding=relative_clause.relative_binding,
+                relative_preposition=self._relative_preposition(relativizer),
             )
         return result
 
@@ -514,7 +526,7 @@ class LanguageIntelligence:
         clause: str,
     ) -> tuple[str, str, str, str] | None:
         text = re.sub(r"\s+", " ", clause.strip()).strip(" .;!?")
-        marker_pattern = r"(o qual|a qual|os quais|as quais|cujo|cuja|cujos|cujas|quem|onde|que)"
+        marker_pattern = r"(" + "|".join(re.escape(x) for x in self.RELATIVE_MARKERS) + r")"
         match = re.search(
             r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
             text,
@@ -594,11 +606,7 @@ class LanguageIntelligence:
         self,
         argument: str,
     ) -> tuple[str, str, str] | None:
-        markers = (
-            "o qual", "a qual", "os quais", "as quais",
-            "cujo", "cuja", "cujos", "cujas",
-            "quem", "onde", "que",
-        )
+        markers = self.RELATIVE_MARKERS
         pattern = re.compile(
             r"^(.+?)\s+(" + "|".join(re.escape(x) for x in markers) + r")\s+(.+)$",
             re.I,
@@ -613,6 +621,19 @@ class LanguageIntelligence:
         if not antecedent:
             return None
         return antecedent, self.normalize_token(marker), relative_text.strip()
+
+    @staticmethod
+    def _relative_preposition(relativizer: str | None) -> str | None:
+        if not relativizer:
+            return None
+        normalized = relativizer.casefold()
+        if normalized in {"em que", "no qual", "na qual", "nos quais", "nas quais", "em quem"}:
+            return "em"
+        if normalized in {"a quem", "a que", "ao qual", "à qual", "a qual"}:
+            return "a"
+        if normalized in {"de que", "do qual", "da qual", "dos quais", "das quais", "de quem"}:
+            return "de"
+        return None
 
     @staticmethod
     def _relative_kind(relativizer: str | None) -> str | None:
