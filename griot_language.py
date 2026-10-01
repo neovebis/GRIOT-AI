@@ -264,19 +264,26 @@ class LanguageIntelligence:
         normalized = re.sub(r"\s+", " ", text.strip())
         if not normalized:
             return ()
+        fronted_marker = "\\ue000"
         fronted_prefix = re.match(r"^([^,;]+),\s*(.+)$", normalized)
         if fronted_prefix:
             prefix, remainder = fronted_prefix.groups()
             # A leading non-verbal constituent followed by a verbal clause is
-            # treated as a fronted adjunct/argument, not as two clauses.
+            # treated as a fronted adjunct/argument, not as two clauses. Keep
+            # the comma as a marker so the structural parser can still recover
+            # the argument boundary after clause splitting.
             if (
                 self._main_verb_index(prefix.strip()) is None
                 and self._main_verb_index(remainder.strip()) is not None
             ):
-                normalized = f"{prefix.strip()} {remainder.strip()}"
+                normalized = f"{prefix.strip()}{fronted_marker}{remainder.strip()}"
 
         chunks = re.split(r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+", normalized, flags=re.I)
-        return tuple(chunk.strip(" ,;") for chunk in chunks if chunk.strip(" ,;"))
+        return tuple(
+            chunk.replace(fronted_marker, ",").strip(" ,;")
+            for chunk in chunks
+            if chunk.replace(fronted_marker, ",").strip(" ,;")
+        )
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
