@@ -304,6 +304,21 @@ class LanguageIntelligence:
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
+        relative_parts = self._split_relative_clause(clause)
+        if relative_parts is not None:
+            main_text, relativizer, relative_text, antecedent = relative_parts
+            main_clause = self._parse_clause(main_text)
+            if main_clause.relation is not None and main_clause.object == antecedent:
+                relative_clause = self._bind_relative_clause(relative_text, antecedent)
+                if relative_clause.relation is not None:
+                    return replace(
+                        main_clause,
+                        text=clause,
+                        relative=(relative_clause,),
+                        relativizer=relativizer,
+                        relative_antecedent=antecedent,
+                    )
+
         main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
         if subordinate_text is not None:
             main_clause = self._parse_clause(main_text)
@@ -467,6 +482,32 @@ class LanguageIntelligence:
                 relative_antecedent=relative_antecedent,
             )
         return result
+
+    def _split_relative_clause(
+        self,
+        clause: str,
+    ) -> tuple[str, str, str, str] | None:
+        text = re.sub(r"\s+", " ", clause.strip())
+        marker_pattern = r"(o qual|a qual|os quais|as quais|cujo|cuja|cujos|cujas|quem|onde|que)"
+        match = re.search(
+            r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
+            text,
+            flags=re.I,
+        )
+        if not match:
+            return None
+        main_text, marker, relative_text = match.groups()
+        parsed_main = self._parse_clause(main_text)
+        if (
+            parsed_main.relation is None
+            or parsed_main.object is None
+            or self._main_verb_index(relative_text.strip()) is None
+        ):
+            return None
+        antecedent = self._strip_det(parsed_main.object.strip())
+        if not antecedent:
+            return None
+        return main_text.strip(), self.normalize_token(marker), relative_text.strip(), antecedent
 
     def _split_relative_argument(
         self,
