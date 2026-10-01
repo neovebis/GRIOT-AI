@@ -644,6 +644,11 @@ class LanguageIntelligence:
             return "locative"
         if normalized in {"quem", "a quem", "de quem", "em quem"}:
             return "personal"
+        if normalized in {
+            "o qual", "a qual", "os quais", "as quais",
+            "cujo", "cuja", "cujos", "cujas", "onde", "que",
+        }:
+            return "nominal"
         if normalized.split(" ", 1)[0] in {"a", "ao", "à", "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas"}:
             return "prepositional"
         if normalized.startswith("cujo"):
