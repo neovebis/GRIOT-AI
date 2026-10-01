@@ -115,12 +115,12 @@ class LanguageIntelligence:
     })
 
     CONJUNCTIONS = frozenset({
-        "e", "ou", "mas", "porém", "porem", "contudo", "entretanto",
+        "e", "ou", "nem", "mas", "porém", "porem", "contudo", "entretanto",
         "porque", "pois", "se", "embora", "quando", "enquanto", "portanto",
         "logo", "assim", "que",
     })
 
-    NEGATIONS = frozenset({"não", "nao", "nunca", "jamais", "nem"})
+    NEGATIONS = frozenset({"não", "nao", "nunca", "jamais"})
 
     QUANTIFIER_KINDS = {
         "todo": "universal",
@@ -289,7 +289,7 @@ class LanguageIntelligence:
                 normalized = f"{prefix_probe}{fronted_marker}{remainder_probe}"
 
         chunks = re.split(
-            r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+",
+            r"(?<=[;])\s*",
             normalized,
             flags=re.I,
         )
@@ -304,7 +304,7 @@ class LanguageIntelligence:
         # becomes an explicit sibling. Recursion handles multiple conjuncts
         # and mixed coordination/subordination structures.
         coordination = re.search(
-            r"^(.+?)\s+(e|ou|nem)\s+(.+)$",
+            r"^(.+?)\s+(e|ou|nem|mas|porém|porem|contudo|entretanto|portanto|logo)\s+(.+)$",
             clause.strip(),
             flags=re.I,
         )
