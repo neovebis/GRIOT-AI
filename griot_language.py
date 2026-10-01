@@ -348,6 +348,24 @@ class LanguageIntelligence:
                     relative_antecedent=antecedent,
                 )
 
+
+        nested_relative_parts = self._split_nested_subject_relative_clause(clause)
+        if nested_relative_parts is not None:
+            main_text, marker, relative_text, antecedent = nested_relative_parts
+            main_clause = self._parse_clause(main_text)
+            if main_clause.relation is not None and main_clause.subject == antecedent:
+                relative_clause = self._bind_relative_clause(
+                    relative_text,
+                    antecedent,
+                    marker,
+                )
+                return replace(
+                    main_clause,
+                    text=clause,
+                    relative=(relative_clause,) if relative_clause.relation is not None else (),
+                    relativizer=marker,
+                    relative_antecedent=antecedent,
+                )
         possessive_parts = self._split_possessive_relative(clause)
         if possessive_parts is not None:
             main_text, marker, relative_text, antecedent, possessed = possessive_parts
@@ -591,6 +609,91 @@ class LanguageIntelligence:
                 relative_preposition=self._relative_preposition(relativizer),
             )
         return result
+
+    def _split_nested_subject_relative_clause(
+        self,
+        clause: str,
+    ) -> tuple[str, str, str, str] | None:
+        text = re.sub(r"\s+", " ", clause.strip()).strip(" .;!?")
+        marker_pattern = r"(" + "|".join(re.escape(x) for x in self.RELATIVE_MARKERS) + r")"
+        first = re.match(
+            r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
+            text,
+            flags=re.I,
+        )
+        if not first:
+            return None
+
+        prefix, marker, remainder = first.groups()
+        if self._main_verb_index(prefix.strip()) is not None:
+            return None
+        antecedent = self._strip_det(prefix.strip())
+        if not antecedent:
+            return None
+
+        nested = re.search(
+            r"\s+" + marker_pattern + r"\s+",
+            remainder,
+            flags=re.I,
+        )
+        if not nested:
+            return None
+
+        outer_relative_prefix = remainder[:nested.start()].strip()
+        nested_marker = self.normalize_token(nested.group(1))
+        nested_tail = remainder[nested.end():].strip()
+        if self._main_verb_index(outer_relative_prefix) is None:
+            return None
+
+        tail_words = nested_tail.split()
+        for split in range(1, len(tail_words)):
+            nested_relative_text = " ".join(tail_words[:split]).strip(" ,.;:!?")
+            main_tail = " ".join(tail_words[split:]).strip(" ,.;:!?")
+            if not nested_relative_text or not main_tail:
+                continue
+
+            nested_candidate = (
+                self._build_possessive_modifier(
+                    antecedent=antecedent,
+                    marker=nested_marker,
+                    relative_text=nested_relative_text,
+                )
+                if nested_marker.startswith("cujo")
+                else self._bind_relative_clause(
+                    nested_relative_text,
+                    antecedent,
+                    nested_marker,
+                )
+            )
+            if (
+                nested_candidate is None
+                or nested_candidate.relation is None
+                or nested_candidate.subject is None
+                or nested_candidate.object is None
+                or self.normalize_token(nested_candidate.object) in self.DETERMINERS
+            ):
+                continue
+
+            main_candidate = self._parse_clause(
+                f"{antecedent} {main_tail}"
+            )
+            if (
+                main_candidate.relation is None
+                or main_candidate.subject != antecedent
+            ):
+                continue
+
+            relative_text = (
+                f"{outer_relative_prefix} {nested_marker} "
+                f"{nested_relative_text}"
+            ).strip()
+            return (
+                f"{antecedent} {main_tail}",
+                self.normalize_token(marker),
+                relative_text,
+                antecedent,
+            )
+        return None
 
     def _split_multiple_relatives(
         self,
@@ -904,6 +1007,54 @@ class LanguageIntelligence:
         antecedent: str,
         relativizer: str | None = None,
     ) -> "LanguageClause":
+        # H23: before parsing a relative as a flat clause, look for another
+        # relative marker attached to its object. This preserves structures
+        # such as "que viu o lobo que atacou a floresta".
+        nested = self._split_nested_relative_argument(relative_text)
+        if nested is not None:
+            main_text, nested_marker, nested_text, nested_antecedent = nested
+            outer = self._parse_clause(
+                f"{antecedent} {main_text}"
+            )
+            if (
+                outer.relation is not None
+                and outer.subject == antecedent
+                and outer.object == nested_antecedent
+            ):
+                if nested_marker.startswith("cujo"):
+                    nested_clause = self._build_possessive_modifier(
+                        nested_antecedent,
+                        nested_marker,
+                        nested_text,
+                    )
+                    if nested_clause is not None:
+                        nested_clause = replace(
+                            nested_clause,
+                            relativizer=nested_marker,
+                            relativizer_kind="possessive",
+                            relative_antecedent=nested_antecedent,
+                            relative_binding="possessor",
+                            possessive_marker=nested_marker,
+                            possessive_antecedent=nested_antecedent,
+                            possessed=nested_clause.possessed or nested_clause.subject,
+                        )
+                else:
+                    nested_clause = self._bind_relative_clause(
+                        nested_text,
+                        nested_antecedent,
+                        nested_marker,
+                    )
+                if nested_clause is not None and nested_clause.relation is not None:
+                    return replace(
+                        outer,
+                        relative=(nested_clause,),
+                        relativizer=relativizer,
+                        relativizer_kind=self._relative_kind(relativizer),
+                        relative_antecedent=antecedent,
+                        relative_binding="subject",
+                        relative_preposition=self._relative_preposition(relativizer),
+                    )
+
         parsed = self._parse_clause(relative_text)
         if parsed.relation is None:
             return replace(
@@ -942,6 +1093,128 @@ class LanguageIntelligence:
             relativizer_kind=self._relative_kind(relativizer),
             relative_binding=binding,
             relative_preposition=self._relative_preposition(relativizer),
+        )
+
+    def _split_nested_relative_argument(
+        self,
+        relative_text: str,
+    ) -> tuple[str, str, str, str] | None:
+        text = re.sub(r"\s+", " ", relative_text.strip()).strip(" .;!?")
+        marker_pattern = r"(" + "|".join(re.escape(x) for x in self.RELATIVE_MARKERS) + r")"
+        match = re.search(
+            r"\s+" + marker_pattern + r"\s+",
+            text,
+            flags=re.I,
+        )
+        if not match:
+            return None
+
+        main_text = text[:match.start()].strip(" ,.;:!?")
+        marker = self.normalize_token(match.group(1))
+        nested_text = text[match.end():].strip(" ,.;:!?")
+        if not main_text or not nested_text:
+            return None
+
+        if self._main_verb_index(main_text) is None:
+            return None
+        outer_probe = self._parse_clause("__ANTE__ " + main_text)
+        if outer_probe.relation is None or not outer_probe.object:
+            return None
+
+        antecedent = self._strip_det(outer_probe.object)
+        if not antecedent:
+            return None
+
+        direct_candidate = (
+            self._build_possessive_modifier(
+                antecedent,
+                marker,
+                nested_text,
+            )
+            if marker.startswith("cujo")
+            else self._bind_relative_clause(
+                nested_text,
+                antecedent,
+                marker,
+            )
+        )
+        if (
+            direct_candidate is not None
+            and direct_candidate.relation is not None
+            and direct_candidate.subject is not None
+            and direct_candidate.object is not None
+            and self.normalize_token(direct_candidate.object) not in self.DETERMINERS
+        ):
+            return main_text, marker, nested_text, antecedent
+
+        words = nested_text.split()
+        for split in range(1, len(words)):
+            nested_relative_text = " ".join(words[:split]).strip(" ,.;:!?")
+            main_tail = " ".join(words[split:]).strip(" ,.;:!?")
+            if not nested_relative_text or not main_tail:
+                continue
+
+            nested_candidate = (
+                self._build_possessive_modifier(
+                    antecedent,
+                    marker,
+                    nested_relative_text,
+                )
+                if marker.startswith("cujo")
+                else self._bind_relative_clause(
+                    nested_relative_text,
+                    antecedent,
+                    marker,
+                )
+            )
+            if (
+                nested_candidate is None
+                or nested_candidate.relation is None
+                or nested_candidate.subject is None
+                or nested_candidate.object is None
+                or self.normalize_token(nested_candidate.object) in self.DETERMINERS
+            ):
+                continue
+
+            outer_candidate = self._parse_clause(
+                f"__ANTE__ {main_text} {main_tail}"
+            )
+            if (
+                outer_candidate.relation is None
+                or outer_candidate.subject != "__ANTE__"
+            ):
+                continue
+
+            return main_text, marker, nested_relative_text, antecedent
+
+        # Unknown nested predicates are left for the normal H17/H18 parser,
+        # which preserves the outer proposition without inventing semantics.
+        return None
+
+    def _build_possessive_modifier(
+        self,
+        antecedent: str,
+        marker: str,
+        relative_text: str,
+    ) -> "LanguageClause | None":
+        parsed = self._parse_clause(relative_text)
+        if (
+            parsed.relation is None
+            or parsed.subject is None
+            or parsed.object is None
+            or self.normalize_token(parsed.object) in self.DETERMINERS
+        ):
+            return None
+        possessed = parsed.subject
+        return replace(
+            parsed,
+            relative_antecedent=antecedent,
+            relativizer=marker,
+            relativizer_kind="possessive",
+            relative_binding="possessor",
+            possessive_marker=marker,
+            possessive_antecedent=antecedent,
+            possessed=possessed,
         )
 
     def _split_embedded_clause(
