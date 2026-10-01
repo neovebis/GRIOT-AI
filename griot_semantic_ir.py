@@ -149,7 +149,9 @@ class MeaningCompiler:
                     context_records=self.griot.context.records(),
                 )
                 coreference_links.append(link)
-                if link.resolved and link.antecedent:
+                if not link.resolved:
+                    continue
+                if link.antecedent:
                     sentence_clean = f"{link.antecedent} {pronoun_tail}"
             language_clause = next(
                 (
