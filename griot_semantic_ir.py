@@ -897,10 +897,12 @@ class MeaningCompiler:
                 )
             )
 
-        link = self.coreference.resolve(
-            object_,
-            candidates,
-            context_records=self.griot.context.records(),
+        link = self._object_coreference_link(
+            self.coreference.resolve(
+                object_,
+                candidates,
+                context_records=self.griot.context.records(),
+            )
         )
         links.append(link)
         if not link.resolved or not link.antecedent:
@@ -951,6 +953,8 @@ class MeaningCompiler:
                 local_mentions,
                 context_records=self.griot.context.records(),
             )
+            if role == "object":
+                link = self._object_coreference_link(link)
             links.append(link)
             if not link.resolved or not link.antecedent:
                 return replace(node, coreference_blocked=True), True
