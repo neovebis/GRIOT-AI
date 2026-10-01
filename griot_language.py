@@ -646,7 +646,7 @@ class LanguageIntelligence:
             return None
 
         tail_words = nested_tail.split()
-        for split in range(1, len(tail_words)):
+        for split in range(len(tail_words) - 1, 0, -1):
             nested_relative_text = " ".join(tail_words[:split]).strip(" ,.;:!?")
             main_tail = " ".join(tail_words[split:]).strip(" ,.;:!?")
             if not nested_relative_text or not main_tail:
