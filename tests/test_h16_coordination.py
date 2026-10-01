@@ -24,6 +24,14 @@ class H16CoordinationTests(unittest.TestCase):
         sibling = root.coordinated[0]
         self.assertEqual((sibling.subject, sibling.relation, sibling.object), ("cão", "sees", "floresta"))
 
+    def test_adversative_coordination_is_structural(self) -> None:
+        clause = self.language.analyze(
+            "O lobo atacou o cão mas o cão viu a floresta."
+        ).clauses[0]
+        self.assertEqual(clause.coordinator, "mas")
+        self.assertEqual(clause.relation, "attacks")
+        self.assertEqual(clause.coordinated[0].relation, "sees")
+
     def test_or_is_preserved_without_collapsing_semantics(self) -> None:
         clause = self.language.analyze(
             "O lobo atacou o cão ou o lobo viu a floresta."
@@ -80,9 +88,53 @@ class H16CoordinationTests(unittest.TestCase):
         self.assertIn("attacks", relations)
         self.assertNotIn("acaricia", relations)
 
+    def test_multiple_coordination_levels_are_preserved(self) -> None:
+        root = self.language.analyze(
+            "O lobo atacou o cão e o cão viu a floresta e o lobo comeu a carne."
+        ).clauses[0]
+        self.assertEqual(root.coordinator, "e")
+        self.assertEqual(root.relation, "attacks")
+        self.assertEqual(len(root.coordinated), 1)
+        middle = root.coordinated[0]
+        self.assertEqual(middle.relation, "sees")
+        self.assertEqual(middle.coordinator, "e")
+        self.assertEqual(len(middle.coordinated), 1)
+        self.assertEqual(middle.coordinated[0].relation, "eats")
+
+    def test_coordination_inside_embedded_clause_keeps_both_sides(self) -> None:
+        root = self.language.analyze(
+            "O lobo atacou o cão porque o cão viu a floresta e o lobo comeu a carne."
+        ).clauses[0]
+        self.assertEqual(root.subordinator, "porque")
+        embedded = root.embedded[0]
+        self.assertEqual(embedded.relation, "sees")
+        self.assertEqual(embedded.coordinator, "e")
+        self.assertEqual(embedded.coordinated[0].relation, "eats")
+
+        meaning = self.semantic.understand(
+            "O lobo atacou o cão porque o cão viu a floresta e o lobo comeu a carne."
+        )
+        relation_edges = {(edge.relation, edge.negated) for edge in meaning.edges}
+        self.assertIn(("attacks", False), relation_edges)
+        self.assertIn(("sees", False), relation_edges)
+        self.assertIn(("eats", False), relation_edges)
+        self.assertTrue(
+            any(edge.provenance == "coordinated:2:porque>e" for edge in meaning.edges)
+        )
+
+    def test_subordination_inside_coordinated_branch_is_nested_under_that_branch(self) -> None:
+        root = self.language.analyze(
+            "O lobo atacou o cão e o cão viu a floresta porque o lobo comeu a carne."
+        ).clauses[0]
+        self.assertEqual(root.coordinator, "e")
+        sibling = root.coordinated[0]
+        self.assertEqual(sibling.relation, "sees")
+        self.assertEqual(sibling.subordinator, "porque")
+        self.assertEqual(sibling.embedded[0].relation, "eats")
+
     def test_coordination_with_nested_embedding_preserves_both_branches(self) -> None:
         analysis = self.language.analyze(
-            "O lobo atacou o cão e o cão viu a floresta porque o lobo fugiu."
+            "O lobo atacou o cão e o cão viu a floresta porque o lobo comeu a carne."
         )
         root = analysis.clauses[0]
         self.assertEqual(root.coordinator, "e")

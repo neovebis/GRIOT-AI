@@ -224,6 +224,7 @@ class MeaningCompiler:
                         path=(index,),
                         coordinators=(language_clause.coordinator or "coord",),
                         records=coordination_records,
+                        embedding_records=embedding_records,
                     )
                 for index, embedded in enumerate(language_clause.embedded):
                     self._compile_embedded_tree(
@@ -377,6 +378,7 @@ class MeaningCompiler:
         path: tuple[int, ...],
         subordinators: tuple[str, ...],
         records: list[dict[str, object]],
+        coordination_records: list[dict[str, object]] | None = None,
     ) -> None:
         """Recursively ground a LanguageClause embedding tree into GIR."""
         relation = clause.relation
@@ -463,6 +465,20 @@ class MeaningCompiler:
                 path=(*path, index),
                 subordinators=next_subordinators,
                 records=records,
+                coordination_records=coordination_records,
+            )
+
+        for index, sibling in enumerate(clause.coordinated):
+            self._compile_coordinated_tree(
+                sibling,
+                nodes,
+                edges,
+                ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                coordinators=(*subordinators, *((clause.subordinator,) if clause.subordinator else ()), clause.coordinator or "coord"),
+                records=coordination_records if coordination_records is not None else [],
+                embedding_records=records,
             )
 
     def _compile_coordinated_tree(
@@ -476,6 +492,7 @@ class MeaningCompiler:
         path: tuple[int, ...],
         coordinators: tuple[str, ...],
         records: list[dict[str, object]],
+        embedding_records: list[dict[str, object]] | None = None,
     ) -> None:
         """Ground one coordinated sibling and recursively preserve its children."""
         relation = clause.relation
@@ -486,7 +503,7 @@ class MeaningCompiler:
             "depth": depth,
             "path": ".".join(str(item) for item in path),
             "coordinators": coordinators,
-            "coordinator": clause.coordinator,
+            "coordinator": coordinators[-1] if coordinators else clause.coordinator,
             "subject": subject,
             "relation": relation,
             "object": object_,
@@ -517,7 +534,8 @@ class MeaningCompiler:
                 depth=depth + 1,
                 path=(*path, index),
                 subordinators=(*coordinators, clause.subordinator or "embedded"),
-                records=child_records,
+                records=embedding_records if embedding_records is not None else child_records,
+                coordination_records=records,
             )
         for index, sibling in enumerate(clause.coordinated):
             self._compile_coordinated_tree(
@@ -526,10 +544,58 @@ class MeaningCompiler:
                 path=(*path, index),
                 coordinators=(*coordinators, clause.coordinator or "coord"),
                 records=records,
+                embedding_records=embedding_records,
             )
 
     @staticmethod
     def _language_constraints(analysis: LanguageAnalysis) -> Mapping[str, object]:
+        def clause_to_dict(clause) -> dict[str, object]:
+            return {
+                "text": clause.text,
+                "subject": clause.subject,
+                "predicate": clause.predicate,
+                "verb": clause.verb,
+                "relation": clause.relation,
+                "object": clause.object,
+                "roles": tuple(
+                    {
+                        "role": role.role,
+                        "text": role.text,
+                        "confidence": role.confidence,
+                    }
+                    for role in clause.roles
+                ),
+                "negated": clause.negated,
+                "tense": clause.tense,
+                "aspect": clause.aspect,
+                "modality": clause.modality,
+                "temporal": clause.temporal,
+                "quantifiers": tuple(
+                    {
+                        "surface": item.surface,
+                        "kind": item.kind,
+                        "scope": item.scope,
+                        "confidence": item.confidence,
+                    }
+                    for item in clause.quantifiers
+                ),
+                "comparison": (
+                    {
+                        "subject": clause.comparison.subject,
+                        "operator": clause.comparison.operator,
+                        "reference": clause.comparison.reference,
+                        "property_text": clause.comparison.property_text,
+                        "confidence": clause.comparison.confidence,
+                    }
+                    if clause.comparison
+                    else None
+                ),
+                "subordinator": clause.subordinator,
+                "coordinator": clause.coordinator,
+                "embedded": tuple(clause_to_dict(child) for child in clause.embedded),
+                "coordinated": tuple(clause_to_dict(child) for child in clause.coordinated),
+            }
+
         return {
             "tokens": tuple(
                 {
@@ -546,47 +612,7 @@ class MeaningCompiler:
                 for token in analysis.tokens
             ),
             "clauses": tuple(
-                {
-                    "text": clause.text,
-                    "subject": clause.subject,
-                    "predicate": clause.predicate,
-                    "verb": clause.verb,
-                    "relation": clause.relation,
-                    "object": clause.object,
-                    "roles": tuple(
-                        {
-                            "role": role.role,
-                            "text": role.text,
-                            "confidence": role.confidence,
-                        }
-                        for role in clause.roles
-                    ),
-                    "negated": clause.negated,
-                    "tense": clause.tense,
-                    "aspect": clause.aspect,
-                    "modality": clause.modality,
-                    "temporal": clause.temporal,
-                    "quantifiers": tuple(
-                        {
-                            "surface": item.surface,
-                            "kind": item.kind,
-                            "scope": item.scope,
-                            "confidence": item.confidence,
-                        }
-                        for item in clause.quantifiers
-                    ),
-                    "comparison": (
-                        {
-                            "subject": clause.comparison.subject,
-                            "operator": clause.comparison.operator,
-                            "reference": clause.comparison.reference,
-                            "property_text": clause.comparison.property_text,
-                            "confidence": clause.comparison.confidence,
-                        }
-                        if clause.comparison
-                        else None
-                    ),
-                }
+                clause_to_dict(clause)
                 for clause in analysis.clauses
             ),
             "quantifiers": tuple(

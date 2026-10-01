@@ -115,7 +115,7 @@ class LanguageIntelligence:
     })
 
     CONJUNCTIONS = frozenset({
-        "e", "ou", "mas", "porém", "porem", "contudo", "entretanto",
+        "e", "ou", "nem", "mas", "porém", "porem", "contudo", "entretanto",
         "porque", "pois", "se", "embora", "quando", "enquanto", "portanto",
         "logo", "assim", "que",
     })
@@ -245,29 +245,11 @@ class LanguageIntelligence:
 
         tokens = self.tokenize(text)
         clauses_text = self._split_clauses(text)
-        clauses_list: list[LanguageClause] = []
-        for value in clauses_text:
-            if not value.strip():
-                continue
-            if value.startswith("__COORD__"):
-                header, body = value.split("__", 2)[1:], ""
-                # encoded form: __COORD__connector__left\\nright
-                match = re.match(r"^__COORD__(e|ou|nem)__(.+)\\n(.+)$", value, flags=re.I | re.S)
-                if match:
-                    connector, left, right = match.groups()
-                    left_clause = self._parse_clause(left)
-                    right_clause = self._parse_clause(right)
-                    if left_clause.relation is not None and right_clause.relation is not None:
-                        clauses_list.append(
-                            replace(
-                                left_clause,
-                                coordinator=self.normalize_token(connector),
-                                coordinated=(right_clause,),
-                            )
-                        )
-                        continue
-            clauses_list.append(self._parse_clause(value))
-        clauses = tuple(clauses_list)
+        clauses = tuple(
+            self._parse_clause(value)
+            for value in clauses_text
+            if value.strip()
+        )
         quantifiers = self._all_quantifiers(text)
         comparisons = tuple(
             clause.comparison for clause in clauses if clause.comparison is not None
@@ -306,25 +288,8 @@ class LanguageIntelligence:
             ):
                 normalized = f"{prefix_probe}{fronted_marker}{remainder_probe}"
 
-        # Coordination is represented structurally, so the comma itself is
-        # not enough to erase sibling-clause boundaries. Preserve every
-        # coordinated proposition as a sibling while keeping the existing
-        # punctuation/fronting behavior for non-coordinated clauses.
-        coordination = re.search(
-            r"^(.+?)\\s+(e|ou|nem)\\s+(.+)$",
-            normalized,
-            flags=re.I,
-        )
-        if coordination:
-            left, connector, right = coordination.groups()
-            if (
-                self._main_verb_index(left.strip()) is not None
-                and self._main_verb_index(right.strip()) is not None
-            ):
-                return (f"__COORD__{self.normalize_token(connector)}__{left.strip()}\\n{right.strip()}",)
-
         chunks = re.split(
-            r"(?<=[,;])\\s*|\\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\\s+",
+            r"(?<=[;])\s*",
             normalized,
             flags=re.I,
         )
@@ -341,12 +306,52 @@ class LanguageIntelligence:
             main_clause = self._parse_clause(main_text)
             if main_clause.relation is not None:
                 embedded_clause = self._parse_clause(subordinate_text)
+                if main_clause.coordinator and main_clause.coordinated:
+                    # A trailing subordinate marker after coordination binds
+                    # deterministically to the final conjunct in this shallow
+                    # grammar, preserving branch-local scope.
+                    siblings = list(main_clause.coordinated)
+                    siblings[-1] = replace(
+                        siblings[-1],
+                        subordinator=subordinator,
+                        embedded=(embedded_clause,),
+                    )
+                    return replace(
+                        main_clause,
+                        text=clause,
+                        coordinated=tuple(siblings),
+                    )
                 return replace(
                     main_clause,
                     text=clause,
                     subordinator=subordinator,
                     embedded=(embedded_clause,),
                 )
+        # H16: resolve coordination after an explicit subordinate split so
+        # mixed structures retain their natural hierarchy:
+        #   A porque B e C  -> A -> (B e C)
+        #   A e B porque C  -> (A e B) -> C
+        coordination = re.search(
+            r"^(.+?)\s+(e|ou|nem|mas|porém|porem|contudo|entretanto|portanto|logo)\s+(.+)$",
+            clause.strip(),
+            flags=re.I,
+        )
+        if coordination:
+            left, connector, right = coordination.groups()
+            if (
+                self._main_verb_index(left.strip()) is not None
+                and self._main_verb_index(right.strip()) is not None
+            ):
+                left_clause = self._parse_clause(left.strip())
+                right_clause = self._parse_clause(right.strip())
+                if left_clause.relation is not None:
+                    return replace(
+                        left_clause,
+                        text=clause.strip(),
+                        coordinator=self.normalize_token(connector),
+                        coordinated=(right_clause,),
+                    )
+
         structural = self._parse_structural_clause(clause)
         if structural is not None:
             return structural
