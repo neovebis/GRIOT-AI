@@ -646,41 +646,35 @@ class LanguageIntelligence:
             return None
 
         tail_words = nested_tail.split()
-        verb_positions = [
-            index
-            for index, word in enumerate(tail_words)
-            if self._pos(word) in {"VERB", "AUX"}
-        ]
-        if len(verb_positions) < 2:
-            return None
+        for split in range(1, len(tail_words)):
+            nested_relative_text = " ".join(tail_words[:split]).strip(" ,.;:!?")
+            main_tail = " ".join(tail_words[split:]).strip(" ,.;:!?")
+            if not nested_relative_text or not main_tail:
+                continue
 
-        main_verb = verb_positions[-1]
-        main_tail = " ".join(tail_words[main_verb:]).strip()
-        if not main_tail:
-            return None
+            main_candidate = self._parse_clause(
+                f"{antecedent} {main_tail}"
+            )
+            if (
+                main_candidate.relation is None
+                or main_candidate.subject != antecedent
+            ):
+                continue
 
-        main_candidate = self._parse_clause(
-            f"{antecedent} {main_tail}"
-        )
-        if (
-            main_candidate.relation is None
-            or main_candidate.subject != antecedent
-        ):
-            return None
+            relative_text = (
+                f"{outer_relative_prefix} {nested_marker} "
+                f"{nested_relative_text}"
+            ).strip()
+            if self._main_verb_index(relative_text) is None:
+                continue
 
-        relative_text = (
-            f"{outer_relative_prefix} {nested_marker} "
-            f"{' '.join(tail_words[:main_verb])}"
-        ).strip()
-        if self._main_verb_index(relative_text) is None:
-            return None
-
-        return (
-            f"{antecedent} {main_tail}",
-            self.normalize_token(marker),
-            relative_text,
-            antecedent,
-        )
+            return (
+                f"{antecedent} {main_tail}",
+                self.normalize_token(marker),
+                relative_text,
+                antecedent,
+            )
+        return None
 
     def _split_multiple_relatives(
         self,
