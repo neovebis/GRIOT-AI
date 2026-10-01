@@ -174,6 +174,8 @@ class MeaningCompiler:
                 )
                 if language_clause_index is not None:
                     resolved_language_clauses[language_clause_index] = language_clause
+            if language_clause is not None and language_clause.coreference_blocked:
+                continue
             if (
                 language_clause is not None
                 and language_clause.subject
@@ -842,6 +844,12 @@ class MeaningCompiler:
     ):
         local_mentions = list(mentions)
 
+        def is_pronoun(value) -> bool:
+            return (
+                isinstance(value, str)
+                and value.casefold().strip() in self.coreference.PRONOUNS
+            )
+
         def add_mentions(node) -> None:
             if node is None:
                 return
@@ -849,7 +857,7 @@ class MeaningCompiler:
                 (getattr(node, "subject", None), "subject"),
                 (getattr(node, "object", None), "object"),
             ):
-                if not surface:
+                if not surface or is_pronoun(surface):
                     continue
                 gender, number = self.coreference.guess_agreement(surface)
                 local_mentions.append(
@@ -863,36 +871,65 @@ class MeaningCompiler:
                     )
                 )
 
-        add_mentions(clause)
+        def resolve_argument(node, surface, role):
+            if not is_pronoun(surface):
+                return node, False
+            link = self.coreference.resolve(
+                surface,
+                local_mentions,
+                context_records=self.griot.context.records(),
+            )
+            links.append(link)
+            if not link.resolved or not link.antecedent:
+                return replace(node, coreference_blocked=True), True
+
+            if role == "subject":
+                replacement = self.language._roles(
+                    link.antecedent,
+                    node.object,
+                    node.relation,
+                    node.text,
+                )
+                return replace(
+                    node,
+                    subject=link.antecedent,
+                    predicate=f"{node.relation}:{node.object or ''}",
+                    roles=replacement,
+                ), False
+
+            replacement = self.language._roles(
+                node.subject,
+                link.antecedent,
+                node.relation,
+                node.text,
+            )
+            return replace(
+                node,
+                object=link.antecedent,
+                predicate=f"{node.relation}:{link.antecedent}",
+                roles=replacement,
+            ), False
 
         def visit(child):
             child_out = child
-            pronoun = getattr(child, "subject", None)
-            if (
-                isinstance(pronoun, str)
-                and pronoun.casefold().strip() in self.coreference.PRONOUNS
-            ):
-                link = self.coreference.resolve(
-                    pronoun,
-                    local_mentions,
-                    context_records=self.griot.context.records(),
-                )
-                links.append(link)
-                if link.resolved and link.antecedent and child.object:
-                    roles = self.language._roles(
-                        link.antecedent,
-                        child.object,
-                        child.relation,
-                        child.text,
-                    )
-                    child_out = replace(
-                        child,
-                        subject=link.antecedent,
-                        predicate=f"{child.relation}:{child.object}",
-                        roles=roles,
-                    )
-                elif not link.resolved:
-                    return replace(child_out, coreference_blocked=True), True
+
+            child_out, subject_blocked = resolve_argument(
+                child_out,
+                getattr(child_out, "subject", None),
+                "subject",
+            )
+            if subject_blocked:
+                return child_out, True
+
+            add_mentions(child_out)
+
+            child_out, object_blocked = resolve_argument(
+                child_out,
+                getattr(child_out, "object", None),
+                "object",
+            )
+            if object_blocked:
+                return child_out, True
 
             add_mentions(child_out)
 
@@ -908,11 +945,32 @@ class MeaningCompiler:
                 )
             return child_out, False
 
-        coordinated = tuple(visit(item)[0] for item in getattr(clause, "coordinated", ()))
-        embedded = tuple(visit(item)[0] for item in getattr(clause, "embedded", ()))
-        relatives = tuple(visit(item)[0] for item in getattr(clause, "relative", ()))
+        resolved = clause
+        resolved, subject_blocked = resolve_argument(
+            resolved,
+            getattr(resolved, "subject", None),
+            "subject",
+        )
+        if subject_blocked:
+            return resolved
+
+        add_mentions(resolved)
+
+        resolved, object_blocked = resolve_argument(
+            resolved,
+            getattr(resolved, "object", None),
+            "object",
+        )
+        if object_blocked:
+            return resolved
+
+        add_mentions(resolved)
+
+        coordinated = tuple(visit(item)[0] for item in getattr(resolved, "coordinated", ()))
+        embedded = tuple(visit(item)[0] for item in getattr(resolved, "embedded", ()))
+        relatives = tuple(visit(item)[0] for item in getattr(resolved, "relative", ()))
         return replace(
-            clause,
+            resolved,
             coordinated=coordinated,
             embedded=embedded,
             relative=relatives,
