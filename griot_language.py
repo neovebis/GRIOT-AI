@@ -310,7 +310,13 @@ class LanguageIntelligence:
         if relative_parts is not None:
             main_text, relativizer, relative_text, antecedent = relative_parts
             main_clause = self._parse_clause(main_text)
-            if main_clause.relation is not None and main_clause.object == antecedent:
+            if (
+                main_clause.relation is not None
+                and (
+                    main_clause.object == antecedent
+                    or main_clause.subject == antecedent
+                )
+            ):
                 relative_clause = self._bind_relative_clause(relative_text, antecedent)
                 if relative_clause.relation is not None:
                     return replace(
