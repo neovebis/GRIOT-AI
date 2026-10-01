@@ -318,24 +318,6 @@ class LanguageIntelligence:
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
-        nested_relative_parts = self._split_nested_subject_relative_clause(clause)
-        if nested_relative_parts is not None:
-            main_text, marker, relative_text, antecedent = nested_relative_parts
-            main_clause = self._parse_clause(main_text)
-            if main_clause.relation is not None and main_clause.subject == antecedent:
-                relative_clause = self._bind_relative_clause(
-                    relative_text,
-                    antecedent,
-                    marker,
-                )
-                return replace(
-                    main_clause,
-                    text=clause,
-                    relative=(relative_clause,) if relative_clause.relation is not None else (),
-                    relativizer=marker,
-                    relative_antecedent=antecedent,
-                )
-
         multiple_relative_parts = self._split_multiple_relatives(clause)
         if multiple_relative_parts is not None:
             main_text, relatives_data, antecedent = multiple_relative_parts
@@ -366,6 +348,24 @@ class LanguageIntelligence:
                     relative_antecedent=antecedent,
                 )
 
+
+        nested_relative_parts = self._split_nested_subject_relative_clause(clause)
+        if nested_relative_parts is not None:
+            main_text, marker, relative_text, antecedent = nested_relative_parts
+            main_clause = self._parse_clause(main_text)
+            if main_clause.relation is not None and main_clause.subject == antecedent:
+                relative_clause = self._bind_relative_clause(
+                    relative_text,
+                    antecedent,
+                    marker,
+                )
+                return replace(
+                    main_clause,
+                    text=clause,
+                    relative=(relative_clause,) if relative_clause.relation is not None else (),
+                    relativizer=marker,
+                    relative_antecedent=antecedent,
+                )
         possessive_parts = self._split_possessive_relative(clause)
         if possessive_parts is not None:
             main_text, marker, relative_text, antecedent, possessed = possessive_parts
