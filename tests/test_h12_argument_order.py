@@ -18,7 +18,7 @@ class H12ArgumentOrderTests(unittest.TestCase):
     @staticmethod
     def _relation_shape(meaning):
         return {
-            (edge.subject, edge.relation, edge.object, edge.negated)
+            (edge.source, edge.relation, edge.target, edge.negated)
             for edge in meaning.edges
             if edge.relation == "attacks"
         }
