@@ -116,6 +116,7 @@ class MeaningCompiler:
         last_subject: str | None = None
         mentions: list[Mention] = []
         coreference_links: list[CoreferenceLink] = []
+        embedding_records: list[dict[str, object]] = []
 
         for sentence in (x.strip() for x in re.split(r"[.!?]+", text) if x.strip()):
             sentence = self.normalize(sentence)
@@ -192,89 +193,22 @@ class MeaningCompiler:
             )
             self._constraints(nodes, edges, s, sentence)
 
-            # H14: compile recognized embedded clauses into the same GIR.
-            # The top-level relation remains the main proposition; embedded
-            # events become additional grounded edges without inventing a
-            # relation for an unknown subordinate predicate.
+            # H15: recursively compile the entire embedded-clause tree.
+            # Every recognized proposition is grounded independently while
+            # preserving the subordinate path in edge provenance. Unknown
+            # predicates are represented only in hierarchy metadata and never
+            # become invented semantic relations.
             if language_clause is not None:
-                for embedded in language_clause.embedded:
-                    if not (
-                        embedded.subject
-                        and embedded.relation
-                        and embedded.object
-                    ):
-                        continue
-                    embedded_subject = self.clean(embedded.subject)
-                    embedded_object = self.clean(
-                        self._clean_object(embedded.object)
-                    )
-                    if not embedded_subject or not embedded_object:
-                        continue
-                    embedded_s = self._node(
-                        nodes,
-                        embedded_subject,
-                        "entity",
-                        1,
-                        ambiguity_map,
-                    )
-                    embedded_o = self._node(
-                        nodes,
-                        embedded_object,
-                        "entity",
-                        1,
-                        ambiguity_map,
-                    )
-                    embedded_negated = embedded.negated
-                    if embedded.relation in {
-                        "attacks", "eats", "sees", "uses", "builds",
-                        "creates", "gives", "helps", "hurts", "wants",
-                        "needs", "knows",
-                    }:
-                        embedded_scene = self._event(
-                            nodes,
-                            embedded.relation,
-                            embedded_subject,
-                            embedded_object,
-                        )
-                        edges += [
-                            MeaningEdge(
-                                embedded_scene.node_id,
-                                "has_agent",
-                                embedded_s.node_id,
-                                9,
-                                0.94,
-                                embedded_negated,
-                                embedded.text,
-                            ),
-                            MeaningEdge(
-                                embedded_scene.node_id,
-                                "has_patient",
-                                embedded_o.node_id,
-                                4,
-                                0.94,
-                                embedded_negated,
-                                embedded.text,
-                            ),
-                        ]
-                    edges.append(
-                        MeaningEdge(
-                            embedded_s.node_id,
-                            embedded.relation,
-                            embedded_o.node_id,
-                            self.RELATION_FAMILY.get(
-                                embedded.relation,
-                                2,
-                            ),
-                            0.92,
-                            embedded_negated,
-                            embedded.text,
-                        )
-                    )
-                    self._constraints(
+                for index, embedded in enumerate(language_clause.embedded):
+                    self._compile_embedded_tree(
+                        embedded,
                         nodes,
                         edges,
-                        embedded_s,
-                        embedded.text,
+                        ambiguity_map,
+                        depth=1,
+                        path=(index,),
+                        subordinators=(language_clause.subordinator or "embedded",),
+                        records=embedding_records,
                     )
 
         vector = self._compose_vector(nodes, edges)
@@ -302,6 +236,7 @@ class MeaningCompiler:
             for item in self._ambiguity_analysis.resolutions
         ) if self._ambiguity_analysis else ()
 
+        constraints["embedding"] = tuple(embedding_records)
         constraints["ambiguity"] = ambiguity_constraints
         metaphor_resolution = self.metaphor.analyze(normalized)
         constraints["intent"] = {
@@ -403,6 +338,105 @@ class MeaningCompiler:
             constraints,
             provenance=("semantic-compiler",),
         )
+
+    def _compile_embedded_tree(
+        self,
+        clause,
+        nodes: dict[str, MeaningNode],
+        edges: list[MeaningEdge],
+        ambiguity_map: Mapping[str, object],
+        *,
+        depth: int,
+        path: tuple[int, ...],
+        subordinators: tuple[str, ...],
+        records: list[dict[str, object]],
+    ) -> None:
+        """Recursively ground a LanguageClause embedding tree into GIR."""
+        relation = clause.relation
+        subject = self.clean(clause.subject) if clause.subject else None
+        object_ = (
+            self.clean(self._clean_object(clause.object))
+            if clause.object
+            else None
+        )
+        records.append(
+            {
+                "depth": depth,
+                "path": ".".join(str(item) for item in path),
+                "subordinators": subordinators,
+                "subordinator": clause.subordinator,
+                "subject": subject,
+                "relation": relation,
+                "object": object_,
+                "negated": clause.negated,
+            }
+        )
+
+        if subject and relation and object_:
+            source = self._node(nodes, subject, "entity", 1, ambiguity_map)
+            target = self._node(nodes, object_, "entity", 1, ambiguity_map)
+            provenance = f"embedded:{depth}:{'>'.join(subordinators)}"
+
+            if relation in {
+                "attacks", "eats", "sees", "uses", "builds",
+                "creates", "gives", "helps", "hurts", "wants",
+                "needs", "knows",
+            }:
+                scene = self._event(nodes, relation, subject, object_)
+                edges.extend(
+                    (
+                        MeaningEdge(
+                            scene.node_id,
+                            "has_agent",
+                            source.node_id,
+                            9,
+                            0.94,
+                            clause.negated,
+                            clause.text,
+                            provenance,
+                        ),
+                        MeaningEdge(
+                            scene.node_id,
+                            "has_patient",
+                            target.node_id,
+                            4,
+                            0.94,
+                            clause.negated,
+                            clause.text,
+                            provenance,
+                        ),
+                    )
+                )
+
+            edges.append(
+                MeaningEdge(
+                    source.node_id,
+                    relation,
+                    target.node_id,
+                    self.RELATION_FAMILY.get(relation, 2),
+                    0.92,
+                    clause.negated,
+                    clause.text,
+                    provenance,
+                )
+            )
+            self._constraints(nodes, edges, source, clause.text)
+
+        for index, child in enumerate(clause.embedded):
+            next_subordinators = (
+                *subordinators,
+                clause.subordinator or "embedded",
+            )
+            self._compile_embedded_tree(
+                child,
+                nodes,
+                edges,
+                ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                subordinators=next_subordinators,
+                records=records,
+            )
 
     @staticmethod
     def _language_constraints(analysis: LanguageAnalysis) -> Mapping[str, object]:
