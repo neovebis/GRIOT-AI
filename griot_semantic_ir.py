@@ -95,7 +95,9 @@ class MeaningCompiler:
         normalized = self.normalize(text)
         if not normalized:
             raise ValueError("text must not be empty")
-        language_analysis = self.language.analyze(normalized)
+        language_source = unicodedata.normalize("NFKC", text).casefold().strip()
+        language_source = re.sub(r"\s+", " ", language_source)
+        language_analysis = self.language.analyze(language_source)
 
         frame = self.griot.understand(normalized)
         semantic_intent = self.intent.detect(normalized, frame)
