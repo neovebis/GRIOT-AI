@@ -188,7 +188,11 @@ class MeaningCompiler:
                     language_clause.object,
                 )
             else:
-                parsed = self._parse(sentence_clean)
+                parsed = self._resolve_top_level_object_coreference(
+                    self._parse(sentence_clean),
+                    mentions,
+                    coreference_links,
+                )
             main_negated = (
                 language_clause.negated
                 if language_clause is not None
@@ -835,6 +839,52 @@ class MeaningCompiler:
             ),
             "markers": analysis.markers,
         }
+
+    @staticmethod
+    def _is_coreference_pronoun(value: str | None) -> bool:
+        return (
+            isinstance(value, str)
+            and value.casefold().strip()
+            in CoreferenceResolver.PRONOUNS
+        )
+
+    def _resolve_top_level_object_coreference(
+        self,
+        parsed: tuple[str, str, str] | None,
+        mentions: list[Mention],
+        links: list[CoreferenceLink],
+    ) -> tuple[str, str, str] | None:
+        if parsed is None:
+            return None
+
+        subject, relation, object_ = parsed
+        if not self._is_coreference_pronoun(object_):
+            return parsed
+
+        candidates = list(mentions)
+        if subject and not self._is_coreference_pronoun(subject):
+            gender, number = self.coreference.guess_agreement(subject)
+            candidates.append(
+                Mention(
+                    subject,
+                    "subject",
+                    len(candidates) + 1,
+                    gender,
+                    number,
+                    None,
+                )
+            )
+
+        link = self.coreference.resolve(
+            object_,
+            candidates,
+            context_records=self.griot.context.records(),
+        )
+        links.append(link)
+        if not link.resolved or not link.antecedent:
+            return None
+
+        return subject, relation, link.antecedent
 
     def _resolve_intrasentence_coreference(
         self,
