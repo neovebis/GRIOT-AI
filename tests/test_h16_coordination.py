@@ -24,6 +24,14 @@ class H16CoordinationTests(unittest.TestCase):
         sibling = root.coordinated[0]
         self.assertEqual((sibling.subject, sibling.relation, sibling.object), ("cão", "sees", "floresta"))
 
+    def test_adversative_coordination_is_structural(self) -> None:
+        clause = self.language.analyze(
+            "O lobo atacou o cão mas o cão viu a floresta."
+        ).clauses[0]
+        self.assertEqual(clause.coordinator, "mas")
+        self.assertEqual(clause.relation, "attacks")
+        self.assertEqual(clause.coordinated[0].relation, "sees")
+
     def test_or_is_preserved_without_collapsing_semantics(self) -> None:
         clause = self.language.analyze(
             "O lobo atacou o cão ou o lobo viu a floresta."
