@@ -1004,6 +1004,11 @@ class MeaningCompiler:
             ):
                 if not surface or is_pronoun(surface):
                     continue
+                if (
+                    getattr(node, "clitic_marker", None) == surface
+                    and surface.casefold().strip() in self.CLITIC_PROXY
+                ):
+                    continue
                 gender, number = self.coreference.guess_agreement(surface)
                 local_mentions.append(
                     Mention(
