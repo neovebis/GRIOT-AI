@@ -117,6 +117,7 @@ class MeaningCompiler:
         mentions: list[Mention] = []
         coreference_links: list[CoreferenceLink] = []
         embedding_records: list[dict[str, object]] = []
+        coordination_records: list[dict[str, object]] = []
 
         for sentence in (x.strip() for x in re.split(r"[.!?]+", text) if x.strip()):
             sentence = self.normalize(sentence)
@@ -213,6 +214,17 @@ class MeaningCompiler:
             # predicates are represented only in hierarchy metadata and never
             # become invented semantic relations.
             if language_clause is not None:
+                for index, coordinated in enumerate(language_clause.coordinated):
+                    self._compile_coordinated_tree(
+                        coordinated,
+                        nodes,
+                        edges,
+                        ambiguity_map,
+                        depth=1,
+                        path=(index,),
+                        coordinators=(language_clause.coordinator or "coord",),
+                        records=coordination_records,
+                    )
                 for index, embedded in enumerate(language_clause.embedded):
                     self._compile_embedded_tree(
                         embedded,
@@ -251,6 +263,7 @@ class MeaningCompiler:
         ) if self._ambiguity_analysis else ()
 
         constraints["embedding"] = tuple(embedding_records)
+        constraints["coordination"] = tuple(coordination_records)
         constraints["ambiguity"] = ambiguity_constraints
         metaphor_resolution = self.metaphor.analyze(normalized)
         constraints["intent"] = {
@@ -449,6 +462,69 @@ class MeaningCompiler:
                 depth=depth + 1,
                 path=(*path, index),
                 subordinators=next_subordinators,
+                records=records,
+            )
+
+    def _compile_coordinated_tree(
+        self,
+        clause,
+        nodes: dict[str, MeaningNode],
+        edges: list[MeaningEdge],
+        ambiguity_map: Mapping[str, object],
+        *,
+        depth: int,
+        path: tuple[int, ...],
+        coordinators: tuple[str, ...],
+        records: list[dict[str, object]],
+    ) -> None:
+        """Ground one coordinated sibling and recursively preserve its children."""
+        relation = clause.relation
+        subject = self.clean(clause.subject) if clause.subject else None
+        object_ = self.clean(self._clean_object(clause.object)) if clause.object else None
+        provenance = f"coordinated:{depth}:{'>'.join(coordinators)}"
+        records.append({
+            "depth": depth,
+            "path": ".".join(str(item) for item in path),
+            "coordinators": coordinators,
+            "coordinator": clause.coordinator,
+            "subject": subject,
+            "relation": relation,
+            "object": object_,
+            "negated": clause.negated,
+        })
+        if subject and relation and object_:
+            source = self._node(nodes, subject, "entity", 1, ambiguity_map)
+            target = self._node(nodes, object_, "entity", 1, ambiguity_map)
+            if relation in {
+                "attacks", "eats", "sees", "uses", "builds", "creates", "gives",
+                "helps", "hurts", "wants", "needs", "knows",
+            }:
+                scene = self._event(nodes, relation, subject, object_)
+                edges.extend((
+                    MeaningEdge(scene.node_id, "has_agent", source.node_id, 9, 0.94, clause.negated, clause.text, provenance),
+                    MeaningEdge(scene.node_id, "has_patient", target.node_id, 4, 0.94, clause.negated, clause.text, provenance),
+                ))
+            edges.append(MeaningEdge(
+                source.node_id, relation, target.node_id,
+                self.RELATION_FAMILY.get(relation, 2), 0.92,
+                clause.negated, clause.text, provenance,
+            ))
+            self._constraints(nodes, edges, source, clause.text)
+        for index, child in enumerate(clause.embedded):
+            child_records = []
+            self._compile_embedded_tree(
+                child, nodes, edges, ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                subordinators=(*coordinators, clause.subordinator or "embedded"),
+                records=child_records,
+            )
+        for index, sibling in enumerate(clause.coordinated):
+            self._compile_coordinated_tree(
+                sibling, nodes, edges, ambiguity_map,
+                depth=depth + 1,
+                path=(*path, index),
+                coordinators=(*coordinators, clause.coordinator or "coord"),
                 records=records,
             )
 
