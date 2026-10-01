@@ -912,6 +912,23 @@ class MeaningCompiler:
             in CoreferenceResolver.PRONOUNS
         )
 
+    @staticmethod
+    def _without_current_subject(
+        candidates: list[Mention],
+        subject: str | None,
+    ) -> list[Mention]:
+        if not subject:
+            return candidates
+        normalized = subject.casefold().strip()
+        for index in range(len(candidates) - 1, -1, -1):
+            item = candidates[index]
+            if (
+                item.role == "subject"
+                and item.surface.casefold().strip() == normalized
+            ):
+                return candidates[:index] + candidates[index + 1:]
+        return candidates
+
     def _resolve_top_level_object_coreference(
         self,
         parsed: tuple[str, str, str] | None,
@@ -942,6 +959,7 @@ class MeaningCompiler:
                     None,
                 )
             )
+        candidates = self._without_current_subject(candidates, subject)
 
         link = (
             self._object_coreference_link(
@@ -1005,12 +1023,16 @@ class MeaningCompiler:
             )
             if not is_pronoun(surface) and not clitic_surface:
                 return node, False
+            candidates = self._without_current_subject(
+                list(local_mentions),
+                getattr(node, "subject", None),
+            )
             link = (
-                self._resolve_clitic_link(surface, local_mentions)
+                self._resolve_clitic_link(surface, candidates)
                 if clitic_surface
                 else self.coreference.resolve(
                     surface,
-                    local_mentions,
+                    candidates,
                     context_records=self.griot.context.records(),
                 )
             )
