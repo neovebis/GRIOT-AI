@@ -1027,6 +1027,17 @@ class LanguageIntelligence:
                         nested_marker,
                         nested_text,
                     )
+                    if nested_clause is not None:
+                        nested_clause = replace(
+                            nested_clause,
+                            relativizer=nested_marker,
+                            relativizer_kind="possessive",
+                            relative_antecedent=nested_antecedent,
+                            relative_binding="possessor",
+                            possessive_marker=nested_marker,
+                            possessive_antecedent=nested_antecedent,
+                            possessed=nested_clause.possessed or nested_clause.subject,
+                        )
                 else:
                     nested_clause = self._bind_relative_clause(
                         nested_text,
