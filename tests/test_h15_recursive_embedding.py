@@ -101,13 +101,7 @@ class H15RecursiveEmbeddingTests(unittest.TestCase):
             if edge.provenance == "embedded:2:porque>quando"
             and edge.relation == "attacks"
         ]
-        self.assertTrue(
-            nested_negative,
-            [
-                (edge.relation, edge.negated, edge.provenance, edge.evidence)
-                for edge in meaning.edges
-            ],
-        )
+        self.assertTrue(nested_negative)
         self.assertTrue(all(edge.negated for edge in nested_negative))
 
     def test_recursive_compilation_keeps_quids_atomic(self) -> None:
