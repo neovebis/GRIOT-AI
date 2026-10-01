@@ -252,7 +252,7 @@ class LanguageIntelligence:
             if value.startswith("__COORD__"):
                 header, body = value.split("__", 2)[1:], ""
                 # encoded form: __COORD__connector__left\\nright
-                match = re.match(r"^__COORD__(e|ou|nem)__(.+)\\n(.+)$", value, flags=re.I | re.S)
+                match = re.match(r"^__COORD__(e|ou|nem)__(.+)\|\|\|(.+)$", value, flags=re.I | re.S)
                 if match:
                     connector, left, right = match.groups()
                     left_clause = self._parse_clause(left)
@@ -261,6 +261,7 @@ class LanguageIntelligence:
                         clauses_list.append(
                             replace(
                                 left_clause,
+                                text=value.replace("__COORD__" + connector + "__", "").replace("|||", " "),
                                 coordinator=self.normalize_token(connector),
                                 coordinated=(right_clause,),
                             )
@@ -311,7 +312,7 @@ class LanguageIntelligence:
         # coordinated proposition as a sibling while keeping the existing
         # punctuation/fronting behavior for non-coordinated clauses.
         coordination = re.search(
-            r"^(.+?)\\s+(e|ou|nem)\\s+(.+)$",
+            r"^(.+?)\s+(e|ou|nem)\s+(.+)$",
             normalized,
             flags=re.I,
         )
@@ -321,10 +322,10 @@ class LanguageIntelligence:
                 self._main_verb_index(left.strip()) is not None
                 and self._main_verb_index(right.strip()) is not None
             ):
-                return (f"__COORD__{self.normalize_token(connector)}__{left.strip()}\\n{right.strip()}",)
+                return (f"__COORD__{self.normalize_token(connector)}__{left.strip()}|||{right.strip()}",)
 
         chunks = re.split(
-            r"(?<=[,;])\\s*|\\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\\s+",
+            r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+",
             normalized,
             flags=re.I,
         )
