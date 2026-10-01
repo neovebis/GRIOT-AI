@@ -66,7 +66,7 @@ class ReasoningEngine:
 
     QUERY_RELATIONS = {
         "is_a", "part_of", "member_of", "has", "causes", "before", "after", "located_in",
-        "attacks", "eats", "sees", "uses", "builds", "creates", "helps", "hurts",
+        "attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts",
         "wants", "needs", "knows", "believes",
     }
 
