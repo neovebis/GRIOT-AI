@@ -841,6 +841,28 @@ class MeaningCompiler:
         }
 
     @staticmethod
+    def _object_coreference_link(
+        link: CoreferenceLink,
+    ) -> CoreferenceLink:
+        if link.status != "resolved" or len(link.candidates) < 2:
+            return link
+        ranked = sorted(
+            link.candidates,
+            key=lambda candidate: (-candidate.score, candidate.surface, candidate.quid or ""),
+        )
+        margin = ranked[0].score - ranked[1].score
+        if margin < 1.0:
+            return CoreferenceLink(
+                link.anaphor,
+                None,
+                link.confidence,
+                "ambiguous",
+                "object-recency-agreement-tie",
+                link.candidates,
+            )
+        return link
+
+    @staticmethod
     def _is_coreference_pronoun(value: str | None) -> bool:
         return (
             isinstance(value, str)
