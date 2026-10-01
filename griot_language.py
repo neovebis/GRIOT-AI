@@ -322,7 +322,14 @@ class LanguageIntelligence:
         for pattern, relation in self.RELATION_PATTERNS:
             match = pattern.match(parse_clause.strip())
             if match:
-                subject = self._strip_det(match.group(1))
+                subject = self._strip_det(
+                    re.sub(
+                        r"\b(?:não|nao|nunca|jamais|nem)\b",
+                        "",
+                        match.group(1),
+                        flags=re.I,
+                    ).strip()
+                )
                 object_ = self._strip_det(match.group(2))
                 return LanguageClause(
                     clause,
