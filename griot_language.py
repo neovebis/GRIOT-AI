@@ -75,6 +75,8 @@ class LanguageClause:
     relative: tuple["LanguageClause", ...] = ()
     relativizer: str | None = None
     relative_antecedent: str | None = None
+    relativizer_kind: str | None = None
+    relative_binding: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,7 +319,7 @@ class LanguageIntelligence:
                     or main_clause.subject == antecedent
                 )
             ):
-                relative_clause = self._bind_relative_clause(relative_text, antecedent)
+                relative_clause = self._bind_relative_clause(relative_text, antecedent, relativizer)
                 if relative_clause.relation is not None:
                     return replace(
                         main_clause,
@@ -325,6 +327,8 @@ class LanguageIntelligence:
                         relative=(relative_clause,),
                         relativizer=relativizer,
                         relative_antecedent=antecedent,
+                        relativizer_kind=self._relative_kind(relativizer),
+                        relative_binding=relative_clause.relative_binding,
                     )
                 # The relative structure is still recognized even when its
                 # predicate is unsupported. Preserve the main proposition and
@@ -606,22 +610,49 @@ class LanguageIntelligence:
             return None
         return antecedent, self.normalize_token(marker), relative_text.strip()
 
+    @staticmethod
+    def _relative_kind(relativizer: str | None) -> str | None:
+        if not relativizer:
+            return None
+        normalized = relativizer.casefold()
+        if normalized == "onde":
+            return "locative"
+        if normalized == "quem":
+            return "personal"
+        if normalized.startswith("cujo"):
+            return "possessive"
+        return "nominal"
+
     def _bind_relative_clause(
         self,
         relative_text: str,
         antecedent: str,
+        relativizer: str | None = None,
     ) -> "LanguageClause":
         parsed = self._parse_clause(relative_text)
         if parsed.relation is None:
-            return parsed
+            return replace(
+                parsed,
+                relative_antecedent=antecedent,
+                relativizer_kind=self._relative_kind(relativizer),
+                relative_binding="unknown",
+            )
         subject = parsed.subject
         object_ = parsed.object
+        binding: str | None = None
         if subject is None and object_:
             subject = antecedent
+            binding = "subject"
         elif object_ is None and subject:
             object_ = antecedent
+            binding = "object"
         else:
-            return parsed
+            return replace(
+                parsed,
+                relative_antecedent=antecedent,
+                relativizer_kind=self._relative_kind(relativizer),
+                relative_binding="explicit",
+            )
         roles = self._roles(subject, object_, parsed.relation, parsed.text)
         return replace(
             parsed,
@@ -630,6 +661,8 @@ class LanguageIntelligence:
             predicate=f"{parsed.relation}:{object_ or ''}",
             roles=roles,
             relative_antecedent=antecedent,
+            relativizer_kind=self._relative_kind(relativizer),
+            relative_binding=binding,
         )
 
     def _split_embedded_clause(
