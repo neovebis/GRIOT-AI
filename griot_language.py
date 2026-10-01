@@ -928,6 +928,7 @@ class LanguageIntelligence:
             return replace(
                 parsed,
                 relative_antecedent=antecedent,
+                relativizer=relativizer,
                 relativizer_kind=self._relative_kind(relativizer),
                 relative_binding="unknown",
                 relative_preposition=self._relative_preposition(relativizer),
