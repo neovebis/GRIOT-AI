@@ -616,29 +616,6 @@ class MeaningCompiler:
                 for clause in analysis.clauses
             ),
             "quantifiers": tuple(
-                        {
-                            "surface": item.surface,
-                            "kind": item.kind,
-                            "scope": item.scope,
-                            "confidence": item.confidence,
-                        }
-                        for item in clause.quantifiers
-                    ),
-                    "comparison": (
-                        {
-                            "subject": clause.comparison.subject,
-                            "operator": clause.comparison.operator,
-                            "reference": clause.comparison.reference,
-                            "property_text": clause.comparison.property_text,
-                            "confidence": clause.comparison.confidence,
-                        }
-                        if clause.comparison
-                        else None
-                    ),
-                }
-                for clause in analysis.clauses
-            ),
-            "quantifiers": tuple(
                 {
                     "surface": item.surface,
                     "kind": item.kind,
