@@ -126,5 +126,7 @@ jobs:
         run: python -m unittest tests.test_h9_lexical_generalization -v
       - name: H10 semantic frame generalization tests
         run: python -m unittest tests.test_h10_semantic_frame_generalization -v
+      - name: H11 structural paraphrase tests
+        run: python -m unittest tests.test_h11_structural_paraphrase -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
