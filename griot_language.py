@@ -120,7 +120,7 @@ class LanguageIntelligence:
         "logo", "assim", "que",
     })
 
-    NEGATIONS = frozenset({"não", "nao", "nunca", "jamais"})
+    NEGATIONS = frozenset({"não", "nao", "nunca", "jamais", "nem"})
 
     QUANTIFIER_KINDS = {
         "todo": "universal",
