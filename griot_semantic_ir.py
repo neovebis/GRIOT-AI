@@ -250,7 +250,7 @@ class MeaningCompiler:
                         ambiguity_map,
                         depth=1,
                         path=(index,),
-                        relativizers=(language_clause.relativizer or "relative",),
+                        relativizers=(relative.relativizer or language_clause.relativizer or "relative",),
                         antecedent=language_clause.relative_antecedent,
                         records=relative_records,
                         embedding_records=embedding_records,
@@ -430,7 +430,9 @@ class MeaningCompiler:
         relation = clause.relation
         subject = self.clean(clause.subject) if clause.subject else None
         object_ = self.clean(self._clean_object(clause.object)) if clause.object else None
-        provenance = f"relative:{depth}:{'>'.join(relativizers)}"
+        marker_path = ">".join(relativizers)
+        suffix = "" if path == (0,) else "." + ".".join(str(item) for item in path)
+        provenance = f"relative:{depth}:{marker_path}{suffix}"
         records.append(
             {
                 "depth": depth,
