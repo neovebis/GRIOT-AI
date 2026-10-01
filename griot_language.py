@@ -264,6 +264,15 @@ class LanguageIntelligence:
         normalized = re.sub(r"\s+", " ", text.strip())
         if not normalized:
             return ()
+        # A fronted temporal adjunct followed by a comma is still part of
+        # the same clause. Normalize that punctuation before generic splitting
+        # so structural parsing receives the complete proposition.
+        normalized = re.sub(
+            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,?\s*",
+            lambda match: match.group(0).replace(",", " "),
+            normalized,
+            flags=re.I,
+        )
         chunks = re.split(r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+", normalized, flags=re.I)
         return tuple(chunk.strip(" ,;") for chunk in chunks if chunk.strip(" ,;"))
 
