@@ -49,8 +49,16 @@ class H27CliticCoreferenceTests(unittest.TestCase):
         )
         links = [x for x in result.gir.constraints["coreference"] if x["anaphor"] == "o"]
         self.assertTrue(links)
-        self.assertEqual(links[-1]["antecedent"], "cão")
-        self.assertEqual(links[-1]["status"], "resolved")
+        self.assertEqual(
+            links[-1]["antecedent"],
+            "cão",
+            msg=f"link={links[-1]!r}",
+        )
+        self.assertEqual(
+            links[-1]["status"],
+            "resolved",
+            msg=f"link={links[-1]!r}",
+        )
 
     def test_clitic_surface_marker_is_preserved(self) -> None:
         result = self.engine.analisar(
@@ -65,7 +73,11 @@ class H27CliticCoreferenceTests(unittest.TestCase):
             "O cão viu a casa. O lobo viu-o."
         )
         root = result.gir.constraints["language"]["clauses"][-1]
-        self.assertEqual(root["object"], "cão")
+        self.assertEqual(
+            root["object"],
+            "cão",
+            msg=f"serialized clitic clause={root!r}",
+        )
 
     def test_unresolved_clitic_abstains(self) -> None:
         result = self.engine.analisar(
