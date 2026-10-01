@@ -180,7 +180,7 @@ class ExperimentPlanner:
 
     @staticmethod
     def _clone_engine(source: GRIOT) -> GRIOT:
-        sandbox = GRIOT(source.config)
+        sandbox = GRIOT.create(dimension=source.kernel.dimension)
         builtin_codes = {q.code for q in sandbox.quids.all()}
         builtin_symbols = {q.symbol for q in sandbox.quids.all()}
         for q in source.quids.all():

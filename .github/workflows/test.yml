@@ -23,6 +23,120 @@ jobs:
         with:
           python-version: "3.11"
       - name: Compile
-        run: python -m compileall -q griot_engine.py
+        run: python -m compileall -q griot_engine.py griot_context.py griot_gir.py griot_semantic_ir.py griot_reasoning_v040.py griot_cognition_v100.py griot_provenance.py griot_working_graph.py griot_query_planner.py griot_ambiguity.py griot_polysemy.py griot_coreference.py griot_discourse.py griot_metaphor.py griot_intent.py griot_math.py griot_simulation.py griot_worldmodel_v070.py griot_planning_v080.py griot_hypothesis_v050.py griot_counterfactual.py griot_causality.py griot_verification.py griot_extraction.py griot_validation.py griot_deduplication.py griot_consolidation.py griot_promotion.py griot_demotion.py griot_versioning.py griot_incremental.py griot_indices.py griot_storage.py griot_sharding.py griot_cache.py griot_distributed_working_graph.py griot_selective_retrieval.py griot_scale.py griot_runtime.py griot_gir.py griot_integration_pipeline.py griot_execution_control.py griot_semantic_grammar.py griot_reasoning_invariants.py griot_lexical_semantics.py quid_core.py
+      - name: A1 integration tests
+        run: python -m unittest tests.test_a1_core_integration -v
+      - name: A2 GIR contract tests
+        run: python -m unittest tests.test_a2_gir_contract -v
+      - name: A3 Context Engine tests
+        run: python -m unittest tests.test_a3_context_engine -v
+      - name: A4 unified reasoning tests
+        run: python -m unittest tests.test_a4_reasoning_engine -v
+      - name: A5 provenance and epistemic tests
+        run: python -m unittest tests.test_a5_provenance_epistemic -v
+      - name: A6 Working Graph tests
+        run: python -m unittest tests.test_a6_working_graph -v
+      - name: A7 Query Planner tests
+        run: python -m unittest tests.test_a7_query_planner -v
+      - name: B1 ambiguity tests
+        run: python -m unittest tests.test_b1_ambiguity -v
+      - name: B2 polysemy tests
+        run: python -m unittest tests.test_b2_polysemy -v
+      - name: B3 coreference tests
+        run: python -m unittest tests.test_b3_coreference -v
+      - name: B4 discourse context tests
+        run: python -m unittest tests.test_b4_discourse_context -v
+      - name: B5 metaphor tests
+        run: python -m unittest tests.test_b5_metaphor -v
+      - name: B6 semantic intent tests
+        run: python -m unittest tests.test_b6_semantic_intent -v
+      - name: C1 mathematics tests
+        run: python -m unittest tests.test_c1_mathematics -v
+      - name: C2 simulation tests
+        run: python -m unittest tests.test_c2_simulation -v
+      - name: C3 planning tests
+        run: python -m unittest tests.test_c3_planning -v
+      - name: C4 hypothesis tests
+        run: python -m unittest tests.test_c4_hypotheses -v
+      - name: C5 counterfactual tests
+        run: python -m unittest tests.test_c5_counterfactual -v
+      - name: C6 causality tests
+        run: python -m unittest tests.test_c6_causality -v
+      - name: C7 verification tests
+        run: python -m unittest tests.test_c7_verification -v
+      - name: D1 extraction tests
+        run: python -m unittest tests.test_d1_extraction -v
+      - name: D2 validation tests
+        run: python -m unittest tests.test_d2_validation -v
+      - name: D3 deduplication tests
+        run: python -m unittest tests.test_d3_deduplication -v
+      - name: D4 consolidation tests
+        run: python -m unittest tests.test_d4_consolidation -v
+      - name: D5 promotion tests
+        run: python -m unittest tests.test_d5_promotion -v
+      - name: D6 demotion tests
+        run: python -m unittest tests.test_d6_demotion -v
+      - name: D7 versioning tests
+        run: python -m unittest tests.test_d7_versioning -v
+      - name: D8 incremental learning tests
+        run: python -m unittest tests.test_d8_incremental_learning -v
+      - name: E2 index tests
+        run: python -m unittest tests.test_e2_indices -v
+      - name: E3 sharding tests
+        run: python -m unittest tests.test_e3_sharding -v
+      - name: E4 cache tests
+        run: python -m unittest tests.test_e4_cache -v
+      - name: E5 distributed working graph tests
+        run: python -m unittest tests.test_e5_distributed_working_graph -v
+      - name: E6 selective retrieval tests
+        run: python -m unittest tests.test_e6_selective_retrieval -v
+      - name: E7 scale tests
+        run: python -m unittest tests.test_e7_scale -v
+      - name: F1 total integration tests
+        run: python -m unittest tests.test_f1_total_integration -v
+      - name: F2 adversarial tests
+        run: python -m unittest tests.test_f2_adversarial -v
+      - name: F3 semantic tests
+        run: python -m unittest tests.test_f3_semantic -v
+      - name: F4 reasoning tests
+        run: python -m unittest tests.test_f4_reasoning -v
+      - name: F5 memory tests
+        run: python -m unittest tests.test_f5_memory -v
+      - name: F6 contradiction tests
+        run: python -m unittest tests.test_f6_contradiction -v
+      - name: F7 scale integration tests
+        run: python -m unittest tests.test_f7_scale_integration -v
+      - name: F8 hardening tests
+        run: python -m unittest tests.test_f8_hardening -v
+      - name: H1 integration tests
+        run: python -m unittest tests.test_h1_integration -v
+      - name: H2 execution control tests
+        run: python -m unittest tests.test_h2_execution_control -v
+      - name: H4 execution transition tests
+        run: python -m unittest tests.test_h4_execution_transitions -v
+      - name: H5 canonical runtime tests
+        run: python -m unittest tests.test_h5_canonical_runtime -v
+      - name: H6 integrated runtime API tests
+        run: python -m unittest tests.test_h6_integrated_runtime_api -v
+      - name: H7 semantic verification matrix
+        run: python -m unittest tests.test_h7_semantic_verification -v
+      - name: H8 adversarial reasoning invariants
+        run: python -m unittest tests.test_h8_adversarial_invariants -v
+      - name: H9 lexical generalization tests
+        run: python -m unittest tests.test_h9_lexical_generalization -v
+      - name: H10 semantic frame generalization tests
+        run: python -m unittest tests.test_h10_semantic_frame_generalization -v
+      - name: H11 structural paraphrase tests
+        run: python -m unittest tests.test_h11_structural_paraphrase -v
+      - name: H12 argument order tests
+        run: python -m unittest tests.test_h12_argument_order -v
+      - name: H13 complement structure tests
+        run: python -m unittest tests.test_h13_complement_structure -v
+      - name: H14 embedded clause tests
+        run: python -m unittest tests.test_h14_embedded_clauses -v
+      - name: H15 recursive embedding tests
+        run: python -m unittest tests.test_h15_recursive_embedding -v
+      - name: H16 coordination tests
+        run: python -m unittest tests.test_h16_coordination -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v

@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
-from griot_semantic_ir import MeaningRepresentation, SemanticGRIOT
+from griot_context import ContextView
+from griot_gir import GIR
+from griot_semantic_ir import SemanticGRIOT
+
 try:
     from griot_engine import Fact, Inference
 except ImportError:
@@ -26,79 +29,219 @@ class ProofStep:
     confidence: float
     rule: str
     provenance: str
+    negated: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimReasoning:
+    relation: str
+    subject: str
+    object: str
+    requested_negated: bool
+    status: TruthStatus
+    confidence: float
+    proofs: tuple[ProofStep, ...]
+    evidence: tuple[Fact | Inference, ...] = ()
+    causes: tuple[ProofStep, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
 class ReasoningResult:
     status: TruthStatus
     confidence: float
-    meaning: MeaningRepresentation
+    meaning: GIR
     proofs: tuple[ProofStep, ...]
     causes: tuple[ProofStep, ...] = ()
+    claims: tuple[ClaimReasoning, ...] = ()
+    context: ContextView | None = None
 
 
-class ReasoningController:
-    """Proof-oriented controller over GRIOT semantic IR and graph memory."""
+class ReasoningEngine:
+    """Unified proof-oriented reasoning engine over GIR and graph memory.
+
+    All semantic claims in a GIR are evaluated. Durable graph evidence is the
+    only truth source at this stage; transient context is attached for later
+    reasoning stages but cannot itself establish truth.
+    """
 
     QUERY_RELATIONS = {
         "is_a", "part_of", "member_of", "has", "causes", "before", "after", "located_in",
-        "attacks", "eats", "sees", "uses", "builds", "creates", "helps", "hurts",
+        "attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts",
         "wants", "needs", "knows", "believes",
     }
 
     def __init__(self, semantic: SemanticGRIOT | None = None) -> None:
         self.semantic = semantic or SemanticGRIOT()
 
-    def reason(self, text: str) -> ReasoningResult:
+    def reason(self, text: str, context: ContextView | None = None) -> ReasoningResult:
         meaning = self.semantic.understand(text)
+        if context is None:
+            context = self.semantic.engine.context.view(meaning)
+        return self.reason_meaning(text, meaning, context)
+
+    def reason_meaning(
+        self,
+        text: str,
+        meaning: GIR,
+        context: ContextView | None = None,
+    ) -> ReasoningResult:
+        """Evaluate every query relation in a validated GIR.
+
+        Query negation is interpreted as a requested polarity: a negative graph
+        fact supports a negative query, while a positive graph fact refutes it.
+        """
+
+        del text
+        meaning.validate()
+
         candidates = [edge for edge in meaning.edges if edge.relation in self.QUERY_RELATIONS]
         if not candidates:
-            return ReasoningResult(TruthStatus.UNKNOWN, meaning.frame.confidence, meaning, ())
+            return ReasoningResult(
+                TruthStatus.UNKNOWN,
+                meaning.frame.confidence,
+                meaning,
+                (),
+                context=context,
+            )
 
-        edge = candidates[0]
         nodes = {node.node_id: node for node in meaning.nodes}
-        subject = nodes[edge.source].quid
-        object_ = nodes[edge.target].quid
+        claims: list[ClaimReasoning] = []
+
+        for edge in candidates:
+            source_node = nodes.get(edge.source)
+            target_node = nodes.get(edge.target)
+            if source_node is None or target_node is None:
+                continue
+
+            subject = source_node.quid
+            object_ = target_node.quid
+            evidence = self._evidence_for_claim(subject, edge.relation, object_)
+            support = [
+                item for item in evidence
+                if bool(getattr(item, "negated", False)) == edge.negated
+            ]
+            contrary = [
+                item for item in evidence
+                if bool(getattr(item, "negated", False)) != edge.negated
+            ]
+
+            support_proofs = self._proofs(support)
+            contrary_proofs = self._proofs(contrary)
+            if support and contrary:
+                status = TruthStatus.CONFLICT
+                claim_confidence = max(self._confidence(support + contrary))
+                proofs = support_proofs + contrary_proofs
+            elif support:
+                status = TruthStatus.SUPPORTED
+                claim_confidence = max(self._confidence(support))
+                proofs = support_proofs
+            elif contrary:
+                status = TruthStatus.REFUTED
+                claim_confidence = max(self._confidence(contrary))
+                proofs = contrary_proofs
+            else:
+                status = TruthStatus.UNKNOWN
+                claim_confidence = 0.0
+                proofs = ()
+
+            claims.append(
+                ClaimReasoning(
+                    relation=edge.relation,
+                    subject=subject,
+                    object=object_,
+                    requested_negated=edge.negated,
+                    status=status,
+                    confidence=claim_confidence,
+                    proofs=proofs,
+                    evidence=evidence,
+                    causes=self._causes_for(object_),
+                )
+            )
+
+        if not claims:
+            return ReasoningResult(
+                TruthStatus.UNKNOWN,
+                0.0,
+                meaning,
+                (),
+                context=context,
+            )
+
+        statuses = {claim.status for claim in claims}
+        if TruthStatus.CONFLICT in statuses:
+            overall = TruthStatus.CONFLICT
+            confidence = max(claim.confidence for claim in claims)
+        elif TruthStatus.REFUTED in statuses:
+            overall = TruthStatus.REFUTED
+            confidence = max(
+                claim.confidence for claim in claims
+                if claim.status is TruthStatus.REFUTED
+            )
+        elif all(claim.status is TruthStatus.SUPPORTED for claim in claims):
+            overall = TruthStatus.SUPPORTED
+            confidence = min(claim.confidence for claim in claims)
+        else:
+            overall = TruthStatus.UNKNOWN
+            confidence = 0.0
+
+        proofs = self._dedupe_steps(step for claim in claims for step in claim.proofs)
+        causes = self._dedupe_steps(step for claim in claims for step in claim.causes)
+        return ReasoningResult(
+            overall,
+            confidence,
+            meaning,
+            proofs,
+            causes,
+            tuple(claims),
+            context,
+        )
+
+    def _evidence_for_claim(
+        self,
+        subject: str,
+        relation: str,
+        object_: str,
+    ) -> tuple[Fact | Inference, ...]:
         graph = self.semantic.engine.graph
 
-        evidence = graph.query(subject, edge.relation, object_)
-        positive = [item for item in evidence if not getattr(item, "negated", False)]
-        negative = [item for item in evidence if getattr(item, "negated", False)]
-
-        proofs = tuple(self._proofs(positive))
-        negative_proofs = tuple(self._proofs(negative))
-
-        if positive and negative:
-            return ReasoningResult(
-                TruthStatus.CONFLICT,
-                max(self._confidence(positive + negative)),
-                meaning,
-                proofs + negative_proofs,
-                self._causes_for(object_),
-            )
-        if positive:
-            return ReasoningResult(
-                TruthStatus.SUPPORTED,
-                max(self._confidence(positive)),
-                meaning,
-                proofs,
-                self._causes_for(object_),
-            )
-        if negative:
-            return ReasoningResult(
-                TruthStatus.REFUTED,
-                max(self._confidence(negative)),
-                meaning,
-                negative_proofs,
-                self._causes_for(object_),
-            )
-        return ReasoningResult(
-            TruthStatus.UNKNOWN,
-            0.0,
-            meaning,
-            (),
-            self._causes_for(object_),
+        # Read all direct facts from durable storage so distinct provenance
+        # entries are not collapsed by graph.query's semantic deduplication.
+        direct = sorted(
+            (
+                fact
+                for fact in graph.facts()
+                if fact.subject == subject
+                and fact.relation == relation
+                and fact.object == object_
+            ),
+            key=lambda fact: (
+                fact.subject,
+                fact.relation,
+                fact.object,
+                bool(fact.negated),
+                -float(fact.confidence),
+                fact.provenance,
+                fact.evidence or "",
+            ),
         )
+        inferred = sorted(
+            (
+                item
+                for item in graph.query(subject, relation, object_)
+                if isinstance(item, Inference)
+            ),
+            key=lambda item: (
+                item.fact.subject,
+                item.fact.relation,
+                item.fact.object,
+                bool(item.fact.negated),
+                -float(item.confidence),
+                item.rule,
+            ),
+        )
+        # Direct facts stay source-complete; inferred results are already
+        # generated from the graph's transitive/rule machinery.
+        return tuple(direct) + tuple(inferred)
 
     def why(self, target: str) -> tuple[ProofStep, ...]:
         q = self.semantic.engine.quids.get(target)
@@ -110,24 +253,91 @@ class ReasoningController:
             if f.relation == "causes" and f.object == target_symbol
         ]
         facts.sort(key=lambda f: (-f.confidence, f.subject, f.object))
-        return tuple(self._proofs(facts))
+        return self._proofs(facts)
 
     @staticmethod
     def _confidence(items: Iterable[Fact | Inference]) -> list[float]:
         return [float(item.confidence) for item in items]
 
     @staticmethod
-    def _proofs(items: Iterable[Fact | Inference]) -> list[ProofStep]:
+    def _proofs(items: Iterable[Fact | Inference]) -> tuple[ProofStep, ...]:
+        ordered = sorted(
+            items,
+            key=lambda item: (
+                (item.fact.relation, item.fact.subject, item.fact.object, bool(item.fact.negated), -float(item.confidence), item.rule)
+                if isinstance(item, Inference)
+                else (item.relation, item.subject, item.object, bool(item.negated), -float(item.confidence), "direct")
+            ),
+        )
         out: list[ProofStep] = []
-        for item in items:
+        for item in ordered:
             if isinstance(item, Inference):
-                f = item.fact
-                out.append(ProofStep(f.relation, f.subject, f.object, item.confidence, item.rule, f.provenance))
+                fact = item.fact
+                out.append(
+                    ProofStep(
+                        fact.relation,
+                        fact.subject,
+                        fact.object,
+                        item.confidence,
+                        item.rule,
+                        fact.provenance,
+                        fact.negated,
+                    )
+                )
                 for support in item.support:
-                    out.append(ProofStep(support.relation, support.subject, support.object, support.confidence, "support", support.provenance))
+                    out.append(
+                        ProofStep(
+                            support.relation,
+                            support.subject,
+                            support.object,
+                            support.confidence,
+                            "support",
+                            support.provenance,
+                            support.negated,
+                        )
+                    )
             else:
-                out.append(ProofStep(item.relation, item.subject, item.object, item.confidence, "direct", item.provenance))
-        return out
+                out.append(
+                    ProofStep(
+                        item.relation,
+                        item.subject,
+                        item.object,
+                        item.confidence,
+                        "direct",
+                        item.provenance,
+                        item.negated,
+                    )
+                )
+        return tuple(out)
+
+    @staticmethod
+    def _dedupe_steps(items: Iterable[ProofStep]) -> tuple[ProofStep, ...]:
+        seen: set[tuple[object, ...]] = set()
+        out: list[ProofStep] = []
+        for step in items:
+            key = (
+                step.relation,
+                step.subject,
+                step.object,
+                step.confidence,
+                step.rule,
+                step.provenance,
+            )
+            if key not in seen:
+                seen.add(key)
+                out.append(step)
+        return tuple(out)
 
 
-__all__ = ["TruthStatus", "ProofStep", "ReasoningResult", "ReasoningController"]
+class ReasoningController(ReasoningEngine):
+    """Compatibility facade retaining the pre-A4 controller name."""
+
+
+__all__ = [
+    "ClaimReasoning",
+    "ReasoningEngine",
+    "ReasoningController",
+    "ReasoningResult",
+    "ProofStep",
+    "TruthStatus",
+]

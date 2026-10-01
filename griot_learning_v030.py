@@ -95,13 +95,23 @@ class KnowledgeInducer:
                 continue
             subject = self.semantic.compiler.clean(match.group(1))
             kind = self.semantic.compiler.clean(match.group(2))
+            tail = match.group(3)
+            if not tail and " que " in kind:
+                kind, tail = kind.split(" que ", 1)
+                kind = self.semantic.compiler.clean(kind)
+                tail = self.semantic.compiler.clean(tail)
             if subject and kind:
                 s = self._quid(subject)
                 k = self._quid(kind)
                 facts.append(Fact(s.symbol, "is_a", k.symbol, 0.94, False, "induction", sentence))
-            tail = match.group(3)
             if tail and subject:
-                for property_fact in self._simple_property(tail, subject):
+                property_match = re.match(
+                    r"^(?:possui|tem|contém|cobre)\s+(?:um|uma|o|a|os|as)?\s*(.+)$",
+                    tail,
+                    re.I,
+                )
+                expression = property_match.group(1) if property_match else tail
+                for property_fact in self._simple_property(expression, subject):
                     facts.append(property_fact)
         return facts
 
@@ -182,6 +192,13 @@ class KnowledgeInducer:
 
     def _simple_property(self, expression: str, subject: str) -> list[Fact]:
         expression = self.semantic.compiler.clean(expression)
+        match = re.match(
+            r"^(?:tem|possui|contém|cobre)\s+(?:um|uma|o|a|os|as)?\s*(.+)$",
+            expression,
+            re.I,
+        )
+        if match:
+            expression = self.semantic.compiler.clean(match.group(1))
         sq = self._quid(subject)
         oq = self._quid(expression, family=2)
         return [Fact(sq.symbol, "has", oq.symbol, 0.9, False, "induction", expression)]

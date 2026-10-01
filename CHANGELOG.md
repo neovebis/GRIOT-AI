@@ -1,5 +1,12 @@
 # Changelog
 
+## Architecture 0.4.0 - Frozen
+- Completed the finite A-F integration plan through F9.
+- Froze QUID/GIR, context, reasoning, provenance, learning, memory and scale invariants.
+- Validated the consolidated branch with the dedicated architecture suite and full unittest suite.
+- Kept the package/distribution version at 0.9.0; this architecture milestone is tracked independently.
+
+
 ## 0.9.0
 - Added two-phase autonomous knowledge acquisition.
 - Added staging ledger separated from durable memory.

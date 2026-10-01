@@ -4,12 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Iterable
 
-from griot_reasoning_v040 import ReasoningController, ReasoningResult, TruthStatus
-from griot.engine import GRIOT
-try:
-    from griot_engine import Fact, Inference
-except ImportError:
-    from griot.types import Fact, Inference
+from griot_engine import Fact, GRIOT, Inference
+from griot_reasoning_v040 import ReasoningEngine, ReasoningResult, TruthStatus
 
 
 class HypothesisKind(str, Enum):
@@ -60,8 +56,8 @@ class HypothesisController:
         ("causes", "causes", "causes"),
     )
 
-    def __init__(self, reasoning: ReasoningController | None = None) -> None:
-        self.reasoning = reasoning or ReasoningController()
+    def __init__(self, reasoning: ReasoningEngine | None = None) -> None:
+        self.reasoning = reasoning or ReasoningEngine()
 
     def generate(self, query: str, limit: int = 8) -> HypothesisReport:
         if limit <= 0:
@@ -208,7 +204,7 @@ class HypothesisController:
 
         # Explicitly clone the semantic state instead of deepcopying the QUID
         # registry; its itertools allocator is intentionally not copyable.
-        sandbox_engine = GRIOT(source_engine.config)
+        sandbox_engine = GRIOT.create(dimension=source_engine.kernel.dimension)
         builtin_codes = {q.code for q in sandbox_engine.quids.all()}
         builtin_symbols = {q.symbol for q in sandbox_engine.quids.all()}
         for q in source_engine.quids.all():
@@ -247,7 +243,7 @@ class HypothesisController:
                     graph._contradictions.add((a.subject, a.relation, a.object))
 
         graph.add_fact(assumption_fact)
-        sandbox_reasoning = ReasoningController(sandbox)
+        sandbox_reasoning = ReasoningEngine(sandbox)
         after = sandbox_reasoning.reason(query)
 
         return CounterfactualResult(

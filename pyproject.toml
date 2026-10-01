@@ -9,3 +9,8 @@ description = "GRIOT: numeric semantic engine with atomic QUID representations, 
 requires-python = ">=3.11"
 readme = "README.md"
 license = {text = "Proprietary"}
+
+[tool.griot]
+architecture_version = "0.4.0"
+release_status = "frozen"
+freeze_commit = "cb1d564e59e345941dc9601b4195868e51e362f5"

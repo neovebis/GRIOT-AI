@@ -19,6 +19,10 @@ There are exactly 10 semantic families, IDs 1..10. IDs may be serialized with pa
 
 The layers are additive. The historical implementation remains recoverable.
 
+## Architecture milestone v0.4.0
+
+The GRIOT architecture is frozen at v0.4.0 after integration and hardening across semantic understanding, reasoning, learning, memory and scale. The distribution/package version remains 0.9.0 because package releases and architecture milestones are tracked independently. See GRIOT_V040_FREEZE.md for the freeze invariants.
+
 This is a symbolic/numeric research engine, not a claim of unrestricted natural-language understanding.
 
 ## Run
