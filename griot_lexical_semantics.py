@@ -89,6 +89,53 @@ class SemanticLexicon:
         "agridem": "agredir",
     }
 
+    PASSIVE_FORMS = {
+        "atacado": "atacar",
+        "atacada": "atacar",
+        "atacados": "atacar",
+        "atacadas": "atacar",
+        "agredido": "agredir",
+        "agredida": "agredir",
+        "agredidos": "agredir",
+        "agredidas": "agredir",
+        "observado": "observar",
+        "observada": "observar",
+        "observados": "observar",
+        "observadas": "observar",
+        "utilizado": "utilizar",
+        "utilizada": "utilizar",
+        "utilizados": "utilizar",
+        "utilizadas": "utilizar",
+        "construído": "construir",
+        "construída": "construir",
+        "construidos": "construir",
+        "construídas": "construir",
+        "criado": "criar",
+        "criada": "criar",
+        "criados": "criar",
+        "criadas": "criar",
+        "ajudado": "ajudar",
+        "ajudada": "ajudar",
+        "ferido": "ferir",
+        "ferida": "ferir",
+    }
+
+    NOMINALIZATIONS = {
+        "ataque": "attacks",
+        "agressão": "attacks",
+        "agressao": "attacks",
+        "observação": "sees",
+        "observacao": "sees",
+        "utilização": "uses",
+        "utilizacao": "uses",
+        "construção": "builds",
+        "construcao": "builds",
+        "criação": "creates",
+        "criacao": "creates",
+        "ajuda": "helps",
+        "ferimento": "hurts",
+    }
+
     @staticmethod
     def normalize(value: str) -> str:
         return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value).casefold().strip())
@@ -146,6 +193,18 @@ class SemanticLexicon:
             "inflection",
             0.93,
         )
+
+    @classmethod
+    def passive_relation(cls, value: str) -> str | None:
+        lemma = cls.PASSIVE_FORMS.get(cls.normalize(value))
+        if lemma is None:
+            return None
+        canonical = cls.ALIASES.get(lemma, lemma)
+        return cls.CANONICAL_RELATIONS.get(canonical)
+
+    @classmethod
+    def nominalization_relation(cls, value: str) -> str | None:
+        return cls.NOMINALIZATIONS.get(cls.normalize(value))
 
     @classmethod
     def relation_patterns(cls) -> tuple[tuple[re.Pattern[str], str], ...]:
