@@ -282,9 +282,9 @@ class LanguageIntelligence:
 
         chunks = re.split(r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+", normalized, flags=re.I)
         return tuple(
-            chunk.replace(fronted_marker, ",").strip(" ,;")
+            chunk.replace(fronted_marker, ", ").strip(" ,;")
             for chunk in chunks
-            if chunk.replace(fronted_marker, ",").strip(" ,;")
+            if chunk.replace(fronted_marker, ", ").strip(" ,;")
         )
 
     def _parse_clause(self, clause: str) -> LanguageClause:
