@@ -779,6 +779,7 @@ class MeaningCompiler:
                 "possessive_marker": clause.possessive_marker,
                 "possessive_antecedent": clause.possessive_antecedent,
                 "possessed": clause.possessed,
+                "coreference_blocked": clause.coreference_blocked,
                 "embedded": tuple(clause_to_dict(child) for child in clause.embedded),
                 "coordinated": tuple(clause_to_dict(child) for child in clause.coordinated),
                 "relative": tuple(clause_to_dict(child) for child in clause.relative),
