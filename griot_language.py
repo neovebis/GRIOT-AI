@@ -305,10 +305,18 @@ class LanguageIntelligence:
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
         relative_parts = self._split_relative_clause(clause)
+        if relative_parts is None:
+            relative_parts = self._split_subject_relative_clause(clause)
         if relative_parts is not None:
             main_text, relativizer, relative_text, antecedent = relative_parts
             main_clause = self._parse_clause(main_text)
-            if main_clause.relation is not None and main_clause.object == antecedent:
+            if (
+                main_clause.relation is not None
+                and (
+                    main_clause.object == antecedent
+                    or main_clause.subject == antecedent
+                )
+            ):
                 relative_clause = self._bind_relative_clause(relative_text, antecedent)
                 if relative_clause.relation is not None:
                     return replace(
@@ -318,6 +326,16 @@ class LanguageIntelligence:
                         relativizer=relativizer,
                         relative_antecedent=antecedent,
                     )
+                # The relative structure is still recognized even when its
+                # predicate is unsupported. Preserve the main proposition and
+                # abstain from inventing a relative relation.
+                return replace(
+                    main_clause,
+                    text=clause,
+                    relative=(),
+                    relativizer=relativizer,
+                    relative_antecedent=antecedent,
+                )
 
         main_text, subordinator, subordinate_text = self._split_embedded_clause(clause)
         if subordinate_text is not None:
@@ -482,6 +500,61 @@ class LanguageIntelligence:
                 relative_antecedent=relative_antecedent,
             )
         return result
+
+    def _split_subject_relative_clause(
+        self,
+        clause: str,
+    ) -> tuple[str, str, str, str] | None:
+        text = re.sub(r"\s+", " ", clause.strip()).strip(" .;!?")
+        marker_pattern = r"(o qual|a qual|os quais|as quais|cujo|cuja|cujos|cujas|quem|onde|que)"
+        match = re.search(
+            r"^(.+?)\s+" + marker_pattern + r"\s+(.+)$",
+            text,
+            flags=re.I,
+        )
+        if not match:
+            return None
+
+        prefix, marker, remainder = match.groups()
+        if self._main_verb_index(prefix.strip()) is not None:
+            return None
+
+        antecedent = self._strip_det(prefix.strip())
+        if not antecedent:
+            return None
+
+        words = remainder.strip().split()
+        first_verb = self._main_verb_index(remainder.strip())
+        if first_verb is None or first_verb >= len(words) - 1:
+            return None
+
+        # The first predicate belongs to the relative clause. Find the
+        # earliest later boundary where the remaining text is a valid main
+        # predicate for the same antecedent. The relative predicate itself may
+        # be unknown; H18 must preserve the main clause and abstain semantically.
+        for split in range(first_verb + 1, len(words)):
+            relative_text = " ".join(words[:split]).strip(" ,.;:!?")
+            main_tail = " ".join(words[split:]).strip(" ,.;:!?")
+            if not relative_text or not main_tail:
+                continue
+            if self._main_verb_index(main_tail) is None:
+                continue
+            relative_clause = self._parse_clause(relative_text)
+            main_candidate = self._parse_clause(
+                f"{antecedent} {main_tail}"
+            )
+            if (
+                main_candidate.relation is None
+                or main_candidate.subject != antecedent
+            ):
+                continue
+            return (
+                f"{antecedent} {main_tail}",
+                self.normalize_token(marker),
+                relative_text,
+                antecedent,
+            )
+        return None
 
     def _split_relative_clause(
         self,
