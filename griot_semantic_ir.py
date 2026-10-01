@@ -116,6 +116,7 @@ class MeaningCompiler:
         last_subject: str | None = None
         mentions: list[Mention] = []
         coreference_links: list[CoreferenceLink] = []
+        resolved_language_clauses = list(language_analysis.clauses)
         embedding_records: list[dict[str, object]] = []
         coordination_records: list[dict[str, object]] = []
         relative_records: list[dict[str, object]] = []
@@ -153,12 +154,17 @@ class MeaningCompiler:
                     continue
                 if link.antecedent:
                     sentence_clean = f"{link.antecedent} {pronoun_tail}"
-            language_clause = next(
+            language_clause_index = next(
                 (
-                    clause for clause in language_analysis.clauses
+                    index for index, clause in enumerate(language_analysis.clauses)
                     if self.normalize(clause.text) == self.normalize(sentence_clean)
                 ),
                 None,
+            )
+            language_clause = (
+                resolved_language_clauses[language_clause_index]
+                if language_clause_index is not None
+                else None
             )
             if language_clause is not None:
                 language_clause = self._resolve_intrasentence_coreference(
@@ -166,6 +172,8 @@ class MeaningCompiler:
                     mentions,
                     coreference_links,
                 )
+                if language_clause_index is not None:
+                    resolved_language_clauses[language_clause_index] = language_clause
             if (
                 language_clause is not None
                 and language_clause.subject
@@ -397,7 +405,9 @@ class MeaningCompiler:
             }
             for family in (self._polysemy_analysis.families if self._polysemy_analysis else ())
         )
-        constraints["language"] = self._language_constraints(language_analysis)
+        constraints["language"] = self._language_constraints(
+            replace(language_analysis, clauses=tuple(resolved_language_clauses))
+        )
         constraints["lexical"] = tuple(
             {
                 "surface": item.surface,
@@ -570,7 +580,7 @@ class MeaningCompiler:
             }
         )
 
-        if subject and relation and object_:
+        if subject and relation and object_ and not getattr(clause, "coreference_blocked", False):
             source = self._node(nodes, subject, "entity", 1, ambiguity_map)
             target = self._node(nodes, object_, "entity", 1, ambiguity_map)
             provenance = f"embedded:{depth}:{'>'.join(subordinators)}"
@@ -678,7 +688,7 @@ class MeaningCompiler:
             "object": object_,
             "negated": clause.negated,
         })
-        if subject and relation and object_:
+        if subject and relation and object_ and not getattr(clause, "coreference_blocked", False):
             source = self._node(nodes, subject, "entity", 1, ambiguity_map)
             target = self._node(nodes, object_, "entity", 1, ambiguity_map)
             if relation in {
