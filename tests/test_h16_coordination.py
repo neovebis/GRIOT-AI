@@ -80,6 +80,29 @@ class H16CoordinationTests(unittest.TestCase):
         self.assertIn("attacks", relations)
         self.assertNotIn("acaricia", relations)
 
+    def test_multiple_coordination_levels_are_preserved(self) -> None:
+        root = self.language.analyze(
+            "O lobo atacou o cão e o cão viu a floresta e o lobo comeu a carne."
+        ).clauses[0]
+        self.assertEqual(root.coordinator, "e")
+        self.assertEqual(root.relation, "attacks")
+        self.assertEqual(len(root.coordinated), 1)
+        middle = root.coordinated[0]
+        self.assertEqual(middle.relation, "sees")
+        self.assertEqual(middle.coordinator, "e")
+        self.assertEqual(len(middle.coordinated), 1)
+        self.assertEqual(middle.coordinated[0].relation, "eats")
+
+    def test_subordination_inside_coordinated_branch_is_nested_under_that_branch(self) -> None:
+        root = self.language.analyze(
+            "O lobo atacou o cão e o cão viu a floresta porque o lobo comeu a carne."
+        ).clauses[0]
+        self.assertEqual(root.coordinator, "e")
+        sibling = root.coordinated[0]
+        self.assertEqual(sibling.relation, "sees")
+        self.assertEqual(sibling.subordinator, "porque")
+        self.assertEqual(sibling.embedded[0].relation, "eats")
+
     def test_coordination_with_nested_embedding_preserves_both_branches(self) -> None:
         analysis = self.language.analyze(
             "O lobo atacou o cão e o cão viu a floresta porque o lobo fugiu."
