@@ -195,12 +195,17 @@ class CoreferenceResolver:
         known = {
             "leão": ("masc", "sing"),
             "lobo": ("masc", "sing"),
+            "lobos": ("masc", "plur"),
+            "cão": ("masc", "sing"),
+            "cães": ("masc", "plur"),
             "humano": ("masc", "sing"),
             "animal": ("masc", "sing"),
             "árvore": ("fem", "sing"),
             "presa": ("fem", "sing"),
             "empresa": ("fem", "sing"),
             "conta": ("fem", "sing"),
+            "casa": ("fem", "sing"),
+            "casas": ("fem", "plur"),
             "folhas": ("fem", "plur"),
             "animais": ("masc", "plur"),
         }
