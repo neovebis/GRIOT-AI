@@ -215,6 +215,33 @@ class MeaningCompiler:
             # predicates are represented only in hierarchy metadata and never
             # become invented semantic relations.
             if language_clause is not None:
+                if language_clause.possessive_antecedent and language_clause.possessed:
+                    owner = self._node(
+                        nodes,
+                        self.clean(language_clause.possessive_antecedent),
+                        "entity",
+                        1,
+                        ambiguity_map,
+                    )
+                    possessed = self._node(
+                        nodes,
+                        self.clean(language_clause.possessed),
+                        "entity",
+                        1,
+                        ambiguity_map,
+                    )
+                    edges.append(
+                        MeaningEdge(
+                            owner.node_id,
+                            "has",
+                            possessed.node_id,
+                            self.RELATION_FAMILY["has"],
+                            0.94,
+                            False,
+                            language_clause.text,
+                            f"possessive:1:{language_clause.possessive_marker or 'cujo'}",
+                        )
+                    )
                 for index, relative in enumerate(language_clause.relative):
                     self._compile_relative_tree(
                         relative,
@@ -726,6 +753,9 @@ class MeaningCompiler:
                 "relativizer_kind": clause.relativizer_kind,
                 "relative_binding": clause.relative_binding,
                 "relative_preposition": clause.relative_preposition,
+                "possessive_marker": clause.possessive_marker,
+                "possessive_antecedent": clause.possessive_antecedent,
+                "possessed": clause.possessed,
                 "embedded": tuple(clause_to_dict(child) for child in clause.embedded),
                 "coordinated": tuple(clause_to_dict(child) for child in clause.coordinated),
                 "relative": tuple(clause_to_dict(child) for child in clause.relative),
