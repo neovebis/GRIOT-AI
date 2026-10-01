@@ -156,5 +156,7 @@ jobs:
         run: python -m unittest tests.test_h24_discourse_coreference -v
       - name: H25 intrasentence coreference tests
         run: python -m unittest tests.test_h25_intrasentence_coreference -v
+      - name: H26 object coreference tests
+        run: python -m unittest tests.test_h26_object_coreference -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
