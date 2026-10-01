@@ -569,39 +569,39 @@ class LanguageIntelligence:
         if first_verb is None:
             return None
 
+        preverb = words[:first_verb]
+        subject_start = None
+        for index in range(len(preverb) - 1, 0, -1):
+            token = self.normalize_token(preverb[index])
+            if token in self.DETERMINERS:
+                subject_start = index
+                break
+
+        if subject_start is not None:
+            possessed_tokens = preverb[:subject_start]
+            relative_subject_prefix = preverb[subject_start:]
+        else:
+            possessed_tokens = preverb
+            relative_subject_prefix = preverb
+
+        possessed = self._strip_det(" ".join(possessed_tokens))
+        if not possessed:
+            return None
+
         for split in range(first_verb + 1, len(words)):
-            relative_text = " ".join(words[:split]).strip(" ,.;:!?")
+            relative_body = words[first_verb:split]
+            relative_text = " ".join(
+                [*relative_subject_prefix, *relative_body]
+            ).strip(" ,.;:!?")
             main_tail = " ".join(words[split:]).strip(" ,.;:!?")
+            if not relative_text or not main_tail:
+                continue
             if self._main_verb_index(main_tail) is None:
                 continue
 
             relative_clause = self._parse_clause(relative_text)
             main_candidate = self._parse_clause(f"{antecedent} {main_tail}")
             if main_candidate.relation is None or main_candidate.subject != antecedent:
-                continue
-
-            # Separate the possessed NP from an explicit relative subject.
-            preverb = words[:first_verb]
-            parsed_subject = (
-                self._strip_det(relative_clause.subject)
-                if relative_clause.subject
-                else None
-            )
-            possessed_tokens = preverb
-            if parsed_subject:
-                subject_words = parsed_subject.split()
-                for width in range(len(subject_words), 0, -1):
-                    if len(preverb) < width:
-                        continue
-                    candidate = self._strip_det(" ".join(preverb[-width:]))
-                    if candidate == parsed_subject:
-                        possessed_tokens = preverb[:-width]
-                        break
-
-            possessed = self._strip_det(" ".join(possessed_tokens))
-            if not possessed:
-                possessed = parsed_subject
-            if not possessed:
                 continue
 
             return (
