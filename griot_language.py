@@ -269,6 +269,9 @@ class LanguageIntelligence:
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
+        structural = self._parse_structural_clause(clause)
+        if structural is not None:
+            return structural
         negated = bool(re.search(r"(?<!\w)(?:não|nao|nunca|jamais)(?!\w)", lower))
         modality = self._find_modality(lower)
         temporal = tuple(value for word, value in self.TEMPORAL.items() if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", lower))
@@ -332,6 +335,113 @@ class LanguageIntelligence:
             quantifiers,
             self._comparison(clause),
         )
+
+    def _parse_structural_clause(self, clause: str) -> LanguageClause | None:
+        working = re.sub(
+            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,\s*",
+            "",
+            clause.strip(),
+            flags=re.I,
+        )
+
+        # Passive voice: surface patient becomes semantic object and the
+        # "por/pelo/pela/..." complement becomes semantic agent.
+        passive = re.match(
+            r"^(.+?)\s+(?:é|foi|era|erá|está|estava|são|foram|eram|será)\s+([^\s]+)\s+(?:por|pelo|pela|pelos|pelas)\s+(.+)$",
+            working,
+            flags=re.I,
+        )
+        if passive:
+            patient = self._strip_det(passive.group(1).strip())
+            participle = passive.group(2).strip(" ,;:.!?")
+            agent = self._strip_det(passive.group(3).strip())
+            relation = SemanticLexicon.passive_relation(participle)
+            if relation and patient and agent:
+                return LanguageClause(
+                    clause,
+                    agent,
+                    f"{relation}:{patient}",
+                    participle,
+                    relation,
+                    patient,
+                    (
+                        SemanticRole("agent", agent, 0.93),
+                        SemanticRole("patient", patient, 0.94),
+                    ),
+                    bool(re.search(r"\b(?:não|nao|nunca|jamais)\b", clause, re.I)),
+                    self._clause_tense(clause),
+                    self._clause_aspect(clause),
+                    self._find_modality(clause.casefold()),
+                    tuple(value for word, value in self.TEMPORAL.items() if re.search(rf"(?<!\w){re.escape(word)}(?!\w)", clause.casefold())),
+                    self._quantifiers(clause),
+                    self._comparison(clause),
+                )
+
+        # Nominalized relation: "o ataque do lobo ao cão" and
+        # "a construção da casa pelo arquiteto".
+        nominal = re.match(
+            r"^(?:o|a|os|as)\s+([^\s]+)\s+(?:de|do|da|dos|das)\s+(.+?)\s+(?:a|ao|à|aos|às)\s+(.+)$",
+            working,
+            flags=re.I,
+        )
+        if nominal:
+            relation = SemanticLexicon.nominalization_relation(nominal.group(1))
+            if relation:
+                agent = self._strip_det(nominal.group(2).strip())
+                patient = self._strip_det(nominal.group(3).strip())
+                if agent and patient:
+                    return LanguageClause(
+                        clause,
+                        agent,
+                        f"{relation}:{patient}",
+                        nominal.group(1),
+                        relation,
+                        patient,
+                        (
+                            SemanticRole("agent", agent, 0.90),
+                            SemanticRole("patient", patient, 0.90),
+                        ),
+                        False,
+                        None,
+                        None,
+                        None,
+                        (),
+                        self._quantifiers(clause),
+                        self._comparison(clause),
+                    )
+
+        nominal_by = re.match(
+            r"^(?:o|a|os|as)\s+([^\s]+)\s+(?:de|do|da|dos|das)\s+(.+?)\s+(?:por|pelo|pela|pelos|pelas)\s+(.+)$",
+            working,
+            flags=re.I,
+        )
+        if nominal_by:
+            relation = SemanticLexicon.nominalization_relation(nominal_by.group(1))
+            if relation:
+                patient = self._strip_det(nominal_by.group(2).strip())
+                agent = self._strip_det(nominal_by.group(3).strip())
+                if patient and agent:
+                    return LanguageClause(
+                        clause,
+                        agent,
+                        f"{relation}:{patient}",
+                        nominal_by.group(1),
+                        relation,
+                        patient,
+                        (
+                            SemanticRole("agent", agent, 0.90),
+                            SemanticRole("patient", patient, 0.90),
+                        ),
+                        False,
+                        None,
+                        None,
+                        None,
+                        (),
+                        self._quantifiers(clause),
+                        self._comparison(clause),
+                    )
+
+        return None
 
     def _roles(self, subject: str | None, object_: str | None, relation: str | None, clause: str) -> tuple[SemanticRole, ...]:
         roles: list[SemanticRole] = []
