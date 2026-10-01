@@ -1125,6 +1125,28 @@ class LanguageIntelligence:
         if not antecedent:
             return None
 
+        direct_candidate = (
+            self._build_possessive_modifier(
+                antecedent,
+                marker,
+                nested_text,
+            )
+            if marker.startswith("cujo")
+            else self._bind_relative_clause(
+                nested_text,
+                antecedent,
+                marker,
+            )
+        )
+        if (
+            direct_candidate is not None
+            and direct_candidate.relation is not None
+            and direct_candidate.subject is not None
+            and direct_candidate.object is not None
+            and self.normalize_token(direct_candidate.object) not in self.DETERMINERS
+        ):
+            return main_text, marker, nested_text, antecedent
+
         words = nested_text.split()
         for split in range(1, len(words)):
             nested_relative_text = " ".join(words[:split]).strip(" ,.;:!?")
