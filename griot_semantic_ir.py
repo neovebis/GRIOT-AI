@@ -95,8 +95,14 @@ class MeaningCompiler:
         normalized = self.normalize(text)
         if not normalized:
             raise ValueError("text must not be empty")
-        language_source = unicodedata.normalize("NFKC", text).casefold().strip()
-        language_source = re.sub(r"\s+", " ", language_source)
+        language_source = normalized
+        if re.search(
+            r"\b[\wÀ-ÿ]+-(?:lo|la|los|las|o|a|os|as)\b",
+            text,
+            flags=re.I,
+        ):
+            language_source = unicodedata.normalize("NFKC", text).casefold().strip()
+            language_source = re.sub(r"\s+", " ", language_source)
         language_analysis = self.language.analyze(language_source)
 
         frame = self.griot.understand(normalized)
