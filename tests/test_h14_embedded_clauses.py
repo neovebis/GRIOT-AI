@@ -15,7 +15,7 @@ class H14EmbeddedClauseTests(unittest.TestCase):
 
     def test_because_creates_embedded_clause(self) -> None:
         analysis = self.language.analyze(
-            "O lobo atacou o cão porque o cão invadiu a floresta."
+            "O lobo atacou o cão porque o cão viu a floresta."
         )
         self.assertEqual(len(analysis.clauses), 1)
         clause = analysis.clauses[0]
