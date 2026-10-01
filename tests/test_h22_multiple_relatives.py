@@ -13,6 +13,17 @@ class H22MultipleRelativeTests(unittest.TestCase):
         self.language = LanguageIntelligence()
         self.semantic = SemanticGRIOT(self.engine)
 
+    def test_multiple_subject_relative_detector_is_structural(self) -> None:
+        parts = self.language._split_multiple_relatives(
+            "O cão que atacou o lobo e que viu a floresta comeu a carne."
+        )
+        self.assertIsNotNone(parts, msg=f"multiple-relative parts={parts!r}")
+        assert parts is not None
+        main_text, relatives, antecedent = parts
+        self.assertEqual(main_text, "cão comeu a carne")
+        self.assertEqual(antecedent, "cão")
+        self.assertEqual(len(relatives), 2)
+
     def test_two_subject_relatives_become_siblings(self) -> None:
         clause = self.language.analyze(
             "O cão que atacou o lobo e que viu a floresta comeu a carne."
