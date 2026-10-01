@@ -78,6 +78,9 @@ class LanguageClause:
     relativizer_kind: str | None = None
     relative_binding: str | None = None
     relative_preposition: str | None = None
+    possessive_marker: str | None = None
+    possessive_antecedent: str | None = None
+    possessed: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,6 +318,25 @@ class LanguageIntelligence:
 
     def _parse_clause(self, clause: str) -> LanguageClause:
         lower = clause.casefold()
+        possessive_parts = self._split_possessive_relative(clause)
+        if possessive_parts is not None:
+            main_text, marker, relative_text, antecedent, possessed = possessive_parts
+            main_clause = self._parse_clause(main_text)
+            if main_clause.relation is not None and main_clause.subject == antecedent:
+                relative_clause = self._parse_clause(relative_text)
+                return replace(
+                    main_clause,
+                    text=clause,
+                    relative=(relative_clause,) if relative_clause.relation is not None else (),
+                    relativizer=marker,
+                    relative_antecedent=antecedent,
+                    relativizer_kind="possessive",
+                    relative_binding="possessor",
+                    possessive_marker=marker,
+                    possessive_antecedent=antecedent,
+                    possessed=possessed,
+                )
+
         relative_parts = self._split_relative_clause(clause)
         if relative_parts is None:
             relative_parts = self._split_subject_relative_clause(clause)
@@ -520,6 +542,53 @@ class LanguageIntelligence:
                 relative_preposition=self._relative_preposition(relativizer),
             )
         return result
+
+    def _split_possessive_relative(
+        self,
+        clause: str,
+    ) -> tuple[str, str, str, str, str] | None:
+        text = re.sub(r"\s+", " ", clause.strip()).strip(" .;!?")
+        markers = ("cujo", "cuja", "cujos", "cujas")
+        match = re.search(
+            r"^(.+?)\s+(" + "|".join(markers) + r")\s+(.+)$",
+            text,
+            flags=re.I,
+        )
+        if not match:
+            return None
+
+        prefix, marker, remainder = match.groups()
+        if self._main_verb_index(prefix.strip()) is not None:
+            return None
+        antecedent = self._strip_det(prefix.strip())
+        if not antecedent:
+            return None
+
+        words = remainder.split()
+        first_verb = self._main_verb_index(remainder)
+        if first_verb is None or first_verb <= 0:
+            return None
+        possessed = self._strip_det(" ".join(words[:first_verb]))
+        if not possessed:
+            return None
+
+        for split in range(first_verb + 1, len(words)):
+            relative_text = " ".join(words[:split]).strip(" ,.;:!?")
+            main_tail = " ".join(words[split:]).strip(" ,.;:!?")
+            if self._main_verb_index(main_tail) is None:
+                continue
+            relative_clause = self._parse_clause(relative_text)
+            main_candidate = self._parse_clause(f"{antecedent} {main_tail}")
+            if main_candidate.relation is None or main_candidate.subject != antecedent:
+                continue
+            return (
+                f"{antecedent} {main_tail}",
+                self.normalize_token(marker),
+                relative_text,
+                antecedent,
+                possessed,
+            )
+        return None
 
     def _split_subject_relative_clause(
         self,
