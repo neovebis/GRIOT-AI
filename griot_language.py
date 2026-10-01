@@ -306,6 +306,21 @@ class LanguageIntelligence:
             main_clause = self._parse_clause(main_text)
             if main_clause.relation is not None:
                 embedded_clause = self._parse_clause(subordinate_text)
+                if main_clause.coordinator and main_clause.coordinated:
+                    # A trailing subordinate marker after coordination binds
+                    # deterministically to the final conjunct in this shallow
+                    # grammar, preserving branch-local scope.
+                    siblings = list(main_clause.coordinated)
+                    siblings[-1] = replace(
+                        siblings[-1],
+                        subordinator=subordinator,
+                        embedded=(embedded_clause,),
+                    )
+                    return replace(
+                        main_clause,
+                        text=clause,
+                        coordinated=tuple(siblings),
+                    )
                 return replace(
                     main_clause,
                     text=clause,
