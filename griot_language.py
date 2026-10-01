@@ -264,15 +264,17 @@ class LanguageIntelligence:
         normalized = re.sub(r"\s+", " ", text.strip())
         if not normalized:
             return ()
-        # A fronted temporal adjunct followed by a comma is still part of
-        # the same clause. Normalize that punctuation before generic splitting
-        # so structural parsing receives the complete proposition.
-        normalized = re.sub(
-            r"^(?:ontem|hoje|agora|amanhã|amanha|antes|depois)\s*,?\s*",
-            lambda match: match.group(0).replace(",", " "),
-            normalized,
-            flags=re.I,
-        )
+        fronted_prefix = re.match(r"^([^,;]+),\s*(.+)$", normalized)
+        if fronted_prefix:
+            prefix, remainder = fronted_prefix.groups()
+            # A leading non-verbal constituent followed by a verbal clause is
+            # treated as a fronted adjunct/argument, not as two clauses.
+            if (
+                self._main_verb_index(prefix.strip()) is None
+                and self._main_verb_index(remainder.strip()) is not None
+            ):
+                normalized = f"{prefix.strip()} {remainder.strip()}"
+
         chunks = re.split(r"(?<=[,;])\s*|\s+(?:mas|porém|porem|contudo|entretanto|portanto|logo)\s+", normalized, flags=re.I)
         return tuple(chunk.strip(" ,;") for chunk in chunks if chunk.strip(" ,;"))
 
