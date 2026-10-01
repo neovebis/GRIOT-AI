@@ -82,7 +82,7 @@ class H25IntrasentenceCoreferenceTests(unittest.TestCase):
 
     def test_h21_possessive_relative_remains_intact(self) -> None:
         result = self.engine.analisar(
-            "O cão cujo dono atacou o lobo e ele viu a floresta."
+            "O cão cujo dono atacou o lobo comeu a carne e ele viu a floresta."
         )
         self.assertTrue(any(edge.relation == "has" for edge in result.gir.edges))
         self.assertTrue(any(link["anaphor"] == "ele" for link in result.gir.constraints["coreference"]))
