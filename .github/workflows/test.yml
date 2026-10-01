@@ -152,5 +152,7 @@ jobs:
         run: python -m unittest tests.test_h22_multiple_relatives -v
       - name: H23 nested relative tests
         run: python -m unittest tests.test_h23_nested_relatives -v
+      - name: H24 discourse coreference tests
+        run: python -m unittest tests.test_h24_discourse_coreference -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v

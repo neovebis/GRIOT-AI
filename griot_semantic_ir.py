@@ -136,18 +136,23 @@ class MeaningCompiler:
                 flags=re.I,
             ).strip()
             pronoun = re.match(
-                r"^(ele|ela|eles|elas|isso|isto|este|esta|esse|essa|aquilo)\s+(.*)$",
+                r"^(?:(e|mas|porém|porem|contudo|entretanto|depois|então|entao|agora)\s+)?"
+                r"(ele|ela|eles|elas|isso|isto|este|esta|esse|essa|aquilo)\s+(.*)$",
                 sentence_clean,
+                flags=re.I,
             )
             if pronoun:
+                discourse_marker, pronoun_surface, pronoun_tail = pronoun.groups()
                 link = self.coreference.resolve(
-                    pronoun.group(1),
+                    pronoun_surface,
                     mentions,
                     context_records=self.griot.context.records(),
                 )
                 coreference_links.append(link)
-                if link.resolved and link.antecedent:
-                    sentence_clean = f"{link.antecedent} {pronoun.group(2)}"
+                if not link.resolved:
+                    continue
+                if link.antecedent:
+                    sentence_clean = f"{link.antecedent} {pronoun_tail}"
             language_clause = next(
                 (
                     clause for clause in language_analysis.clauses
