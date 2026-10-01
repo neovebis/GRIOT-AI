@@ -82,6 +82,8 @@ class LanguageClause:
     possessive_antecedent: str | None = None
     possessed: str | None = None
     coreference_blocked: bool = False
+    clitic_marker: str | None = None
+    clitic_role: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -307,17 +309,40 @@ class LanguageIntelligence:
                 normalized = f"{prefix_probe}{fronted_marker}{remainder_probe}"
 
         chunks = re.split(
-            r"(?<=[;])\s*",
+            r"(?<=[;.!?])\s*",
             normalized,
             flags=re.I,
         )
         return tuple(
-            chunk.replace(fronted_marker, ", ").strip(" ,;")
+            chunk.replace(fronted_marker, ", ").strip(" ,;.!?")
             for chunk in chunks
-            if chunk.replace(fronted_marker, ", ").strip(" ,;")
+            if chunk.replace(fronted_marker, ", ").strip(" ,;.!?")
         )
 
     def _parse_clause(self, clause: str) -> LanguageClause:
+        clitic = self._detect_clitic_form(clause)
+        if clitic is not None:
+            expanded, marker = clitic
+            parsed = self._parse_clause(expanded)
+            if parsed.relation is not None:
+                if parsed.coordinated:
+                    return replace(
+                        parsed,
+                        text=clause,
+                        coordinated=self._mark_last_clitic_clause(
+                            parsed.coordinated,
+                            marker,
+                        ),
+                    )
+                return replace(
+                    parsed,
+                    text=clause,
+                    object=marker,
+                    predicate=f"{parsed.relation}:{marker}",
+                    clitic_marker=marker,
+                    clitic_role="object",
+                )
+
         lower = clause.casefold()
         multiple_relative_parts = self._split_multiple_relatives(clause)
         if multiple_relative_parts is not None:
@@ -695,6 +720,56 @@ class LanguageIntelligence:
                 antecedent,
             )
         return None
+
+    def _mark_last_clitic_clause(
+        self,
+        clauses: tuple[LanguageClause, ...],
+        marker: str,
+    ) -> tuple[LanguageClause, ...]:
+        if not clauses:
+            return clauses
+        items = list(clauses)
+        for index in range(len(items) - 1, -1, -1):
+            clause = items[index]
+            if clause.coordinated:
+                nested = self._mark_last_clitic_clause(
+                    clause.coordinated,
+                    marker,
+                )
+                if nested != clause.coordinated:
+                    items[index] = replace(clause, coordinated=nested)
+                    return tuple(items)
+            if clause.relation is not None:
+                items[index] = replace(
+                    clause,
+                    object=marker,
+                    predicate=f"{clause.relation}:{marker}",
+                    clitic_marker=marker,
+                    clitic_role="object",
+                )
+                return tuple(items)
+        return clauses
+
+    def _detect_clitic_form(
+        self,
+        clause: str,
+    ) -> tuple[str, str] | None:
+        pattern = re.compile(
+            r"\b([\wÀ-ÿ]+)-((?:lo|la|los|las|lhe|lhes|o|a|os|as))\b",
+            re.I,
+        )
+        match = pattern.search(clause)
+        if not match:
+            return None
+
+        verb, marker = match.groups()
+        if self._pos(verb) not in {"VERB", "AUX"}:
+            return None
+
+        expanded = (
+            f"{clause[:match.start()]}{verb} {marker}{clause[match.end():]}"
+        )
+        return re.sub(r"\s+", " ", expanded).strip(), self.normalize_token(marker)
 
     def _split_multiple_relatives(
         self,

@@ -95,7 +95,15 @@ class MeaningCompiler:
         normalized = self.normalize(text)
         if not normalized:
             raise ValueError("text must not be empty")
-        language_analysis = self.language.analyze(normalized)
+        language_source = normalized
+        if re.search(
+            r"\b[\wÀ-ÿ]+-(?:lo|la|los|las|o|a|os|as)\b",
+            text,
+            flags=re.I,
+        ):
+            language_source = unicodedata.normalize("NFKC", text).casefold().strip()
+            language_source = re.sub(r"\s+", " ", language_source)
+        language_analysis = self.language.analyze(language_source)
 
         frame = self.griot.understand(normalized)
         semantic_intent = self.intent.detect(normalized, frame)
@@ -174,8 +182,8 @@ class MeaningCompiler:
                 )
                 if language_clause_index is not None:
                     resolved_language_clauses[language_clause_index] = language_clause
-            if language_clause is not None and language_clause.coreference_blocked:
-                continue
+            # Coreference blocking is branch-local. A blocked child
+            # must not erase valid relations from the main clause or relatives.
             if (
                 language_clause is not None
                 and language_clause.subject
@@ -215,23 +223,24 @@ class MeaningCompiler:
             mentions.append(
                 Mention(object_, "object", len(mentions) + 1, object_gender, object_number, o.quid)
             )
-            if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts", "wants", "needs", "knows"}:
-                scene = self._event(nodes, relation, subject, object_)
-                edges += [
-                    MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, main_negated, sentence),
-                    MeaningEdge(scene.node_id, "has_patient", o.node_id, 4, 0.94, main_negated, sentence),
-                ]
-            edges.append(
-                MeaningEdge(
-                    s.node_id,
-                    relation,
-                    o.node_id,
-                    self.RELATION_FAMILY.get(relation, 2),
-                    0.92,
-                    main_negated,
-                    sentence,
+            if not getattr(language_clause, "coreference_blocked", False):
+                if relation in {"attacks", "eats", "sees", "uses", "builds", "creates", "gives", "helps", "hurts", "wants", "needs", "knows"}:
+                    scene = self._event(nodes, relation, subject, object_)
+                    edges += [
+                        MeaningEdge(scene.node_id, "has_agent", s.node_id, 9, 0.94, main_negated, sentence),
+                        MeaningEdge(scene.node_id, "has_patient", o.node_id, 4, 0.94, main_negated, sentence),
+                    ]
+                edges.append(
+                    MeaningEdge(
+                        s.node_id,
+                        relation,
+                        o.node_id,
+                        self.RELATION_FAMILY.get(relation, 2),
+                        0.92,
+                        main_negated,
+                        sentence,
+                    )
                 )
-            )
             self._constraints(nodes, edges, s, sentence)
 
             # H15: recursively compile the entire embedded-clause tree.
@@ -786,6 +795,8 @@ class MeaningCompiler:
                 "possessive_antecedent": clause.possessive_antecedent,
                 "possessed": clause.possessed,
                 "coreference_blocked": clause.coreference_blocked,
+                "clitic_marker": clause.clitic_marker,
+                "clitic_role": clause.clitic_role,
                 "embedded": tuple(clause_to_dict(child) for child in clause.embedded),
                 "coordinated": tuple(clause_to_dict(child) for child in clause.coordinated),
                 "relative": tuple(clause_to_dict(child) for child in clause.relative),
@@ -840,6 +851,46 @@ class MeaningCompiler:
             "markers": analysis.markers,
         }
 
+    CLITIC_PROXY = {
+        "o": "ele",
+        "a": "ela",
+        "os": "eles",
+        "as": "elas",
+        "lo": "ele",
+        "la": "ela",
+        "los": "eles",
+        "las": "elas",
+    }
+
+    def _resolve_clitic_link(
+        self,
+        surface: str,
+        mentions: list[Mention],
+    ) -> CoreferenceLink:
+        proxy = self.CLITIC_PROXY.get(surface.casefold().strip())
+        if proxy is None:
+            return CoreferenceLink(
+                surface,
+                None,
+                0.0,
+                "unresolved",
+                "unsupported-clitic",
+                (),
+            )
+        proxy_link = self.coreference.resolve(
+            proxy,
+            mentions,
+            context_records=self.griot.context.records(),
+        )
+        return CoreferenceLink(
+            surface,
+            proxy_link.antecedent if proxy_link.resolved else None,
+            proxy_link.confidence,
+            proxy_link.status,
+            f"clitic:{proxy_link.strategy}",
+            proxy_link.candidates,
+        )
+
     @staticmethod
     def _object_coreference_link(
         link: CoreferenceLink,
@@ -870,6 +921,23 @@ class MeaningCompiler:
             in CoreferenceResolver.PRONOUNS
         )
 
+    @staticmethod
+    def _without_current_subject(
+        candidates: list[Mention],
+        subject: str | None,
+    ) -> list[Mention]:
+        if not subject:
+            return candidates
+        normalized = subject.casefold().strip()
+        for index in range(len(candidates) - 1, -1, -1):
+            item = candidates[index]
+            if (
+                item.role == "subject"
+                and item.surface.casefold().strip() == normalized
+            ):
+                return candidates[:index] + candidates[index + 1:]
+        return candidates
+
     def _resolve_top_level_object_coreference(
         self,
         parsed: tuple[str, str, str] | None,
@@ -880,7 +948,11 @@ class MeaningCompiler:
             return None
 
         subject, relation, object_ = parsed
-        if not self._is_coreference_pronoun(object_):
+        is_clitic = (
+            isinstance(object_, str)
+            and object_.casefold().strip() in self.CLITIC_PROXY
+        )
+        if not self._is_coreference_pronoun(object_) and not is_clitic:
             return parsed
 
         candidates = list(mentions)
@@ -896,12 +968,19 @@ class MeaningCompiler:
                     None,
                 )
             )
+        candidates = self._without_current_subject(candidates, subject)
 
-        link = self._object_coreference_link(
-            self.coreference.resolve(
-                object_,
-                candidates,
-                context_records=self.griot.context.records(),
+        link = (
+            self._object_coreference_link(
+                self.coreference.resolve(
+                    object_,
+                    candidates,
+                    context_records=self.griot.context.records(),
+                )
+            )
+            if not is_clitic
+            else self._object_coreference_link(
+                self._resolve_clitic_link(object_, candidates)
             )
         )
         links.append(link)
@@ -933,6 +1012,11 @@ class MeaningCompiler:
             ):
                 if not surface or is_pronoun(surface):
                     continue
+                if (
+                    getattr(node, "clitic_marker", None) == surface
+                    and surface.casefold().strip() in self.CLITIC_PROXY
+                ):
+                    continue
                 gender, number = self.coreference.guess_agreement(surface)
                 local_mentions.append(
                     Mention(
@@ -946,12 +1030,25 @@ class MeaningCompiler:
                 )
 
         def resolve_argument(node, surface, role):
-            if not is_pronoun(surface):
+            clitic_surface = (
+                isinstance(surface, str)
+                and getattr(node, "clitic_marker", None) == surface
+                and surface.casefold().strip() in self.CLITIC_PROXY
+            )
+            if not is_pronoun(surface) and not clitic_surface:
                 return node, False
-            link = self.coreference.resolve(
-                surface,
-                local_mentions,
-                context_records=self.griot.context.records(),
+            candidates = self._without_current_subject(
+                list(local_mentions),
+                getattr(node, "subject", None),
+            )
+            link = (
+                self._resolve_clitic_link(surface, candidates)
+                if clitic_surface
+                else self.coreference.resolve(
+                    surface,
+                    candidates,
+                    context_records=self.griot.context.records(),
+                )
             )
             if role == "object":
                 link = self._object_coreference_link(link)
@@ -1053,6 +1150,9 @@ class MeaningCompiler:
         )
 
     def _parse(self, sentence: str) -> tuple[str, str, str] | None:
+        clitic = self.language._detect_clitic_form(sentence)
+        if clitic is not None:
+            sentence = clitic[0]
         modal = re.match(r"^(.*?)\s+(?:pode|deve|precisa)\s+(.+)$", sentence, re.I)
         candidate = f"{modal.group(1)} {modal.group(2)}" if modal else sentence
         for pattern, relation in self.STATEMENTS + self.VERBS:
