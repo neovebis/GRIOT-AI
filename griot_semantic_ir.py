@@ -174,8 +174,8 @@ class MeaningCompiler:
                 )
                 if language_clause_index is not None:
                     resolved_language_clauses[language_clause_index] = language_clause
-            if language_clause is not None and language_clause.coreference_blocked:
-                continue
+            # Coreference blocking is branch-local. A blocked child
+            # must not erase valid relations from the main clause or relatives.
             if (
                 language_clause is not None
                 and language_clause.subject
