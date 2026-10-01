@@ -640,10 +640,19 @@ class MeaningCompiler:
 
     @staticmethod
     def _dedupe(edges: Iterable[MeaningEdge]) -> list[MeaningEdge]:
-        seen: set[tuple[str, str, str, bool]] = set()
+        # Preserve distinct embedded occurrences when provenance identifies
+        # different clause paths, while retaining the historical collapse for
+        # duplicate top-level edges with no provenance.
+        seen: set[tuple[str, str, str, bool, str | None]] = set()
         out: list[MeaningEdge] = []
         for edge in edges:
-            key = (edge.source, edge.relation, edge.target, edge.negated)
+            key = (
+                edge.source,
+                edge.relation,
+                edge.target,
+                edge.negated,
+                edge.provenance if edge.provenance is not None else None,
+            )
             if key not in seen:
                 seen.add(key)
                 out.append(edge)
