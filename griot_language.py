@@ -646,10 +646,32 @@ class LanguageIntelligence:
             return None
 
         tail_words = nested_tail.split()
-        for split in range(len(tail_words) - 1, 0, -1):
+        for split in range(1, len(tail_words)):
             nested_relative_text = " ".join(tail_words[:split]).strip(" ,.;:!?")
             main_tail = " ".join(tail_words[split:]).strip(" ,.;:!?")
             if not nested_relative_text or not main_tail:
+                continue
+
+            nested_candidate = (
+                self._build_possessive_modifier(
+                    antecedent=antecedent,
+                    marker=nested_marker,
+                    relative_text=nested_relative_text,
+                )
+                if nested_marker.startswith("cujo")
+                else self._bind_relative_clause(
+                    nested_relative_text,
+                    antecedent,
+                    nested_marker,
+                )
+            )
+            if (
+                nested_candidate is None
+                or nested_candidate.relation is None
+                or nested_candidate.subject is None
+                or nested_candidate.object is None
+                or self.normalize_token(nested_candidate.object) in self.DETERMINERS
+            ):
                 continue
 
             main_candidate = self._parse_clause(
@@ -665,9 +687,6 @@ class LanguageIntelligence:
                 f"{outer_relative_prefix} {nested_marker} "
                 f"{nested_relative_text}"
             ).strip()
-            if self._main_verb_index(relative_text) is None:
-                continue
-
             return (
                 f"{antecedent} {main_tail}",
                 self.normalize_token(marker),
@@ -1120,6 +1139,7 @@ class LanguageIntelligence:
                 or nested_candidate.relation is None
                 or nested_candidate.subject is None
                 or nested_candidate.object is None
+                or self.normalize_token(nested_candidate.object) in self.DETERMINERS
             ):
                 continue
 
@@ -1145,11 +1165,14 @@ class LanguageIntelligence:
         relative_text: str,
     ) -> "LanguageClause | None":
         parsed = self._parse_clause(relative_text)
-        if parsed.relation is None:
+        if (
+            parsed.relation is None
+            or parsed.subject is None
+            or parsed.object is None
+            or self.normalize_token(parsed.object) in self.DETERMINERS
+        ):
             return None
-        possessed = parsed.subject or ""
-        if not possessed:
-            return None
+        possessed = parsed.subject
         return replace(
             parsed,
             relative_antecedent=antecedent,
