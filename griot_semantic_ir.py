@@ -460,7 +460,7 @@ class MeaningCompiler:
                 "negated": clause.negated,
             }
         )
-        if subject and relation and object_:
+        if subject and relation and object_ and not getattr(clause, "coreference_blocked", False):
             source = self._node(nodes, subject, "entity", 1, ambiguity_map)
             target = self._node(nodes, object_, "entity", 1, ambiguity_map)
             if relation in {
@@ -881,10 +881,7 @@ class MeaningCompiler:
                         roles=roles,
                     )
                 elif not link.resolved:
-                    # Preserve the clause structurally but do not invent a
-                    # semantic antecedent. It will be abstained during GIR
-                    # compilation rather than silently using the pronoun.
-                    return child_out, True
+                    return replace(child_out, coreference_blocked=True), True
 
             add_mentions(child_out)
 
