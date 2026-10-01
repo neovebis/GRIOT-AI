@@ -136,5 +136,7 @@ jobs:
         run: python -m unittest tests.test_h14_embedded_clauses -v
       - name: H15 recursive embedding tests
         run: python -m unittest tests.test_h15_recursive_embedding -v
+      - name: H16 coordination tests
+        run: python -m unittest tests.test_h16_coordination -v
       - name: Unit tests
         run: python -m unittest discover -s tests -v
