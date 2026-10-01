@@ -130,7 +130,7 @@ class LanguageIntelligence:
 
     RELATIVE_MARKERS = (
         "o qual", "a qual", "os quais", "as quais",
-        "no qual", "na qual", "nos quais", "nas quais",
+        "no qual", "na qual", "nos quais", "nas quais", "ao qual", "à qual",
         "em que", "a que", "de que", "do qual", "da qual",
         "dos quais", "das quais", "a quem", "de quem", "em quem",
         "cujo", "cuja", "cujos", "cujas", "quem", "onde", "que",
@@ -629,7 +629,7 @@ class LanguageIntelligence:
         normalized = relativizer.casefold()
         if normalized in {"em que", "no qual", "na qual", "nos quais", "nas quais", "em quem"}:
             return "em"
-        if normalized in {"a quem", "a que", "ao qual", "à qual", "a qual"}:
+        if normalized in {"a quem", "a que", "ao qual", "à qual"}:
             return "a"
         if normalized in {"de que", "do qual", "da qual", "dos quais", "das quais", "de quem"}:
             return "de"
@@ -640,10 +640,12 @@ class LanguageIntelligence:
         if not relativizer:
             return None
         normalized = relativizer.casefold()
-        if normalized == "onde":
+        if normalized in {"onde", "em que", "no qual", "na qual", "nos quais", "nas quais"}:
             return "locative"
-        if normalized == "quem":
+        if normalized in {"quem", "a quem", "de quem", "em quem"}:
             return "personal"
+        if normalized.split(" ", 1)[0] in {"a", "ao", "à", "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas"}:
+            return "prepositional"
         if normalized.startswith("cujo"):
             return "possessive"
         return "nominal"
@@ -661,6 +663,7 @@ class LanguageIntelligence:
                 relative_antecedent=antecedent,
                 relativizer_kind=self._relative_kind(relativizer),
                 relative_binding="unknown",
+                relative_preposition=self._relative_preposition(relativizer),
             )
         subject = parsed.subject
         object_ = parsed.object
@@ -677,6 +680,7 @@ class LanguageIntelligence:
                 relative_antecedent=antecedent,
                 relativizer_kind=self._relative_kind(relativizer),
                 relative_binding="explicit",
+                relative_preposition=self._relative_preposition(relativizer),
             )
         roles = self._roles(subject, object_, parsed.relation, parsed.text)
         return replace(
@@ -688,6 +692,7 @@ class LanguageIntelligence:
             relative_antecedent=antecedent,
             relativizer_kind=self._relative_kind(relativizer),
             relative_binding=binding,
+            relative_preposition=self._relative_preposition(relativizer),
         )
 
     def _split_embedded_clause(
