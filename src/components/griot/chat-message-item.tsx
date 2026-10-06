@@ -228,6 +228,11 @@ export const ChatMessageItem = React.memo(
       () => (message.role === "assistant" ? extractWebSiteFromContent(message.content) : null),
       [message.role, message.content],
     );
+    const hasFencedPreviewBlock = React.useMemo(
+      () => /```(html|jsx|tsx|svg|react)\b/i.test(message.content),
+      [message.content],
+    );
+    const showBottomPreviewBar = Boolean(webSiteData?.hasSite && !hasFencedPreviewBlock);
     const [previewModalOpen, setPreviewModalOpen] = React.useState(false);
 
     if (message.role === "user") {
@@ -342,9 +347,9 @@ export const ChatMessageItem = React.memo(
             </div>
             <div className="rounded-3xl rounded-tl-sm border border-hairline/80 bg-surface/90 px-4 py-3 text-[15px] leading-relaxed text-foreground shadow-xs">
               <MarkdownContent content={message.content} />
-              {webSiteData?.hasSite ? (
+              {showBottomPreviewBar ? (
                 <PreviewBar
-                  title={webSiteData.title}
+                  title={webSiteData!.title}
                   subtitle="Live Preview no dispositivo"
                   onPreview={() => setPreviewModalOpen(true)}
                 />
@@ -358,12 +363,12 @@ export const ChatMessageItem = React.memo(
               onRegenerate={() => onRegenerate(message.id)}
             />
             {showAdAfter ? <NativeAdSlot slotId={`quick-${message.id}`} /> : null}
-            {webSiteData?.hasSite ? (
+            {showBottomPreviewBar ? (
               <FunctionalPreviewModal
                 open={previewModalOpen}
                 onClose={() => setPreviewModalOpen(false)}
-                srcDoc={webSiteData.html}
-                title={webSiteData.title}
+                srcDoc={webSiteData!.html}
+                title={webSiteData!.title}
               />
             ) : null}
           </div>
@@ -401,9 +406,9 @@ export const ChatMessageItem = React.memo(
         ) : null}
 
         <MarkdownContent content={message.content} />
-        {webSiteData?.hasSite ? (
+        {showBottomPreviewBar ? (
           <PreviewBar
-            title={webSiteData.title}
+            title={webSiteData!.title}
             subtitle="index.html · Live Preview no dispositivo"
             onPreview={() => setPreviewModalOpen(true)}
           />
@@ -415,12 +420,12 @@ export const ChatMessageItem = React.memo(
           onRegenerate={() => onRegenerate(message.id)}
         />
         {showAdAfter ? <NativeAdSlot slotId={`main-${message.id}`} /> : null}
-        {webSiteData?.hasSite ? (
+        {showBottomPreviewBar ? (
           <FunctionalPreviewModal
             open={previewModalOpen}
             onClose={() => setPreviewModalOpen(false)}
-            srcDoc={webSiteData.html}
-            title={webSiteData.title}
+            srcDoc={webSiteData!.html}
+            title={webSiteData!.title}
           />
         ) : null}
       </div>

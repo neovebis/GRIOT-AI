@@ -60,7 +60,9 @@ function isPreviewableLang(lang: string, code: string): boolean {
   return (
     trimmed.startsWith("<svg") ||
     trimmed.includes("<!DOCTYPE html>") ||
-    (trimmed.includes("<html") && trimmed.includes("</html>"))
+    (trimmed.includes("<html") && trimmed.includes("</html>")) ||
+    ((l === "js" || l === "javascript" || l === "ts" || l === "typescript") &&
+      (trimmed.includes("export default") || trimmed.includes("return (") || trimmed.includes("React.") || (trimmed.includes("<") && trimmed.includes("/>"))))
   );
 }
 

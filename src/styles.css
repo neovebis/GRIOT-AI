@@ -365,3 +365,14 @@ html[data-text-size="compact"] {
 html[data-text-size="large"] {
   font-size: 17.5px;
 }
+
+/* GRIOT Live Preview Nativo — isolamento total contra sobreposição da barra de texto */
+body[data-griot-preview-active="true"] .griot-chat-input-dock {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+body[data-griot-preview-active="true"] {
+  overflow: hidden !important;
+}

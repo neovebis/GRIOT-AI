@@ -11,7 +11,7 @@ import { Thinking } from "@/components/griot/thinking";
 import { UserActions, AssistantActions } from "@/components/griot/message-actions";
 import { ChatMessageItem } from "./chat-message-item";
 import { MarkdownContent } from "./markdown-content";
-import { PreviewBar, FunctionalPreviewModal } from "./preview-bar";
+import { PreviewBar, FunctionalPreviewModal, preparePreviewHtml } from "./preview-bar";
 import { ConversationDrawer, type Conversation } from "@/components/griot/chat-drawers";
 import { labelFromLocale, useI18n, useT } from "@/lib/i18n";
 import { VoiceSession } from "@/lib/voice-session";
@@ -190,29 +190,106 @@ function triggerHaptic(type: "light" | "medium" | "heavy" | "selection" = "light
 }
 
 function generatePreviewSrcDoc(files: WorkspaceFile[]): string {
-  const htmlFile =
-    files.find((f) => f.path.endsWith(".html") || f.path === "index.html") || files[0];
+  if (!files || files.length === 0) {
+    return "<!DOCTYPE html><html lang='pt'><body style='background:#0b0f17;color:#94a3b8;font-family:sans-serif;padding:32px;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;'><div><h3 style='color:#f1f5f9;font-size:15px;margin-bottom:6px;'>Nenhum ficheiro no workspace</h3><p style='font-size:12px;opacity:0.8;'>Crie ficheiros HTML, JSX ou TSX para pré-visualizar em tempo real.</p></div></body></html>";
+  }
+
+  // 1. Procurar por ficheiro HTML principal
+  const htmlFile = files.find(
+    (f) => f.path.toLowerCase() === "index.html" || f.path.toLowerCase().endsWith("/index.html") || f.path.toLowerCase().endsWith(".html")
+  );
+
+  // 2. Se NÃO houver HTML, mas houver componente React / JS / TS
   if (!htmlFile) {
-    return "<!DOCTYPE html><html><body style='font-family:sans-serif;padding:20px;color:#888;'><h3>Nenhum ficheiro HTML no workspace.</h3></body></html>";
+    const reactOrJsFile = files.find(
+      (f) =>
+        f.path.endsWith(".tsx") ||
+        f.path.endsWith(".jsx") ||
+        f.path.endsWith("App.js") ||
+        f.path.endsWith("index.js") ||
+        f.path.endsWith(".js") ||
+        f.path.endsWith(".ts")
+    );
+
+    if (reactOrJsFile) {
+      const ext = reactOrJsFile.path.split(".").pop() || "tsx";
+      let prepared = preparePreviewHtml(reactOrJsFile.content, ext);
+
+      // Injetar CSS do workspace se houver
+      const cssFiles = files.filter((f) => f.path.endsWith(".css"));
+      if (cssFiles.length > 0) {
+        const combinedCss = cssFiles.map((c) => c.content).join("\n");
+        prepared = prepared.replace("</head>", `<style>\n${combinedCss}\n</style></head>`);
+      }
+      return prepared;
+    }
+
+    // 3. Se houver SVG
+    const svgFile = files.find((f) => f.path.endsWith(".svg") || f.content.trim().startsWith("<svg"));
+    if (svgFile) {
+      return preparePreviewHtml(svgFile.content, "svg");
+    }
+
+    return preparePreviewHtml(files[0].content, files[0].path.split(".").pop() || "txt");
   }
+
+  // 4. Caso haja HTML:
   let doc = htmlFile.content;
-  for (const f of files) {
-    if (f.path.endsWith(".css")) {
-      if (doc.includes("</head>")) {
-        doc = doc.replace("</head>", `<style>${f.content}</style></head>`);
-      } else {
-        doc = `<style>${f.content}</style>` + doc;
-      }
-    }
-    if (f.path.endsWith(".js") && !f.path.endsWith(".test.js")) {
-      if (doc.includes("</body>")) {
-        doc = doc.replace("</body>", `<script>${f.content}</script></body>`);
-      } else {
-        doc = doc + `<script>${f.content}</script>`;
-      }
+
+  // Injetar/substituir ficheiros CSS
+  const cssFiles = files.filter((f) => f.path.endsWith(".css"));
+  for (const css of cssFiles) {
+    const fileName = css.path.split("/").pop() || "";
+    const linkRegex = new RegExp(`<link[^>]+href=["'][^"']*${fileName}["'][^>]*>`, "gi");
+    if (linkRegex.test(doc)) {
+      doc = doc.replace(linkRegex, `<style>\n${css.content}\n</style>`);
+    } else if (doc.includes("</head>")) {
+      doc = doc.replace("</head>", `<style>\n${css.content}\n</style></head>`);
+    } else {
+      doc = `<style>\n${css.content}\n</style>` + doc;
     }
   }
-  return doc;
+
+  // Verificar se há scripts React/TSX no workspace
+  const scriptFiles = files.filter(
+    (f) => (f.path.endsWith(".js") || f.path.endsWith(".jsx") || f.path.endsWith(".ts") || f.path.endsWith(".tsx")) &&
+      !f.path.endsWith(".test.js") && !f.path.endsWith(".test.ts")
+  );
+
+  const hasReactOrTsx = scriptFiles.some(
+    (f) => f.path.endsWith(".tsx") || f.path.endsWith(".jsx") || f.content.includes("export default") || f.content.includes("return (")
+  );
+
+  if (hasReactOrTsx) {
+    const mainComponent = scriptFiles.find(
+      (f) => f.path.includes("App.") || f.path.includes("main.") || f.path.includes("index.")
+    ) || scriptFiles[0];
+
+    if (mainComponent) {
+      const ext = mainComponent.path.split(".").pop() || "tsx";
+      let rendered = preparePreviewHtml(mainComponent.content, ext);
+      if (cssFiles.length > 0) {
+        const combinedCss = cssFiles.map((c) => c.content).join("\n");
+        rendered = rendered.replace("</head>", `<style>\n${combinedCss}\n</style></head>`);
+      }
+      return rendered;
+    }
+  }
+
+  // Scripts JS normais
+  for (const js of scriptFiles) {
+    const fileName = js.path.split("/").pop() || "";
+    const scriptRegex = new RegExp(`<script[^>]+src=["'][^"']*${fileName}["'][^>]*>\\s*</script>`, "gi");
+    if (scriptRegex.test(doc)) {
+      doc = doc.replace(scriptRegex, `<script>\n${js.content}\n</script>`);
+    } else if (doc.includes("</body>")) {
+      doc = doc.replace("</body>", `<script>\n${js.content}\n</script></body>`);
+    } else {
+      doc = doc + `<script>\n${js.content}\n</script>`;
+    }
+  }
+
+  return preparePreviewHtml(doc, "html");
 }
 
 interface QuickPersonaSegment {
@@ -2217,6 +2294,14 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
     },
   ] as const;
 
+  const hasWorkspacePreview = workspaceFiles.some(
+    (f) =>
+      /\.(html|jsx|tsx|svg)$/i.test(f.path) ||
+      f.path === "index.html" ||
+      f.path === "App.tsx" ||
+      f.path === "App.jsx"
+  );
+
   const conversationActions = [
     { id: "share", label: t("Partilhar"), Icon: Share2, run: share },
     {
@@ -2225,6 +2310,16 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
       Icon: Pin,
       run: togglePin,
     },
+    ...(hasWorkspacePreview
+      ? [
+          {
+            id: "preview",
+            label: t("Live Preview do Projeto"),
+            Icon: Play,
+            run: async () => setPreviewOpen(true),
+          },
+        ]
+      : []),
     {
       id: "project",
       label: t("Adicionar a projeto"),
@@ -2323,15 +2418,18 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
         />
       </div>
 
-      {/* Barra Elegante de Pré-visualização de Projeto / Site Criado */}
-      {workspaceFiles.some((f) => f.path.endsWith(".html") || f.path === "index.html") && (
-        <div className="absolute right-3.5 top-[calc(max(env(safe-area-inset-top,0px),24px)+4px)] z-45 max-w-[280px]">
-          <PreviewBar
-            title={t("Site Criado")}
-            subtitle="index.html · Live Preview"
-            onPreview={() => setPreviewOpen(true)}
-            className="!my-0 !py-1 !px-2.5 shadow-md bg-surface/95"
-          />
+      {/* Botão Elegante de Live Preview do Projeto / Workspace (não colide com o centro) */}
+      {hasWorkspacePreview && (
+        <div className="absolute right-3 top-[calc(max(env(safe-area-inset-top,0px),24px)+5px)] z-45">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            title={t("Live Preview")}
+            className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-[12px] font-medium text-primary shadow-2xs backdrop-blur-xl transition-all active:scale-95 hover:bg-primary/20"
+          >
+            <Play className="size-3 fill-current" />
+            <span className="font-sans">Preview</span>
+          </button>
         </div>
       )}
 
@@ -2757,7 +2855,7 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
         />
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-50">
+      <div className="fixed inset-x-0 bottom-0 z-50 griot-chat-input-dock">
         <div className="mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
           {sheet === "actions" ? (
             <div className="sheet-up mb-2 overflow-hidden rounded-[26px] border border-hairline bg-surface/95 backdrop-blur-2xl">
