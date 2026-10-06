@@ -6,7 +6,6 @@
  * real failure instead of returning fabricated git/npm/test output.
  */
 
-import { executeRemoteAction } from "./remote-executor";
 import { executeLocalAction } from "./local-harness";
 import { executeInGriotSandbox } from "./sandbox-executor";
 import { getRuntimeMode, executeNativeCommand, isNativeAndroidPlatform } from "./native-terminal-bridge";
@@ -120,7 +119,7 @@ export class GriotActionExecutor {
 
     const effectiveWsId = workspaceId || "local-default";
 
-    // 1. Execução de código e scripts (Cloud Run Sandbox)
+    // 1. Execução de código e scripts (Cloud Run Sandbox Real)
     if (
       action.type === "code.run" ||
       action.type === "code.execute" ||
@@ -130,7 +129,7 @@ export class GriotActionExecutor {
       action.type.startsWith("sandbox.") ||
       action.params?.runtime === "sandbox"
     ) {
-      return executeInGriotSandbox(action);
+      return executeInGriotSandbox(action, { workspaceId: effectiveWsId });
     }
 
     // 2. Operações de sistema de ficheiros (fs.*), pesquisa (search.*), código estático (code.*) ou projetos (project.*) são geridas no workspace local
@@ -147,14 +146,8 @@ export class GriotActionExecutor {
     }
 
     // 3. Comandos de Terminal / Shell / Git / Testes:
-    // MODO SANDBOX: Conecta EXCLUSIVAMENTE ao GRIOT Sandbox real (runtimeProvider = "griot_sandbox")
-    // Se o Sandbox falhar, a falha é reportada explicitamente sem fallback mascarado.
-    if (getRuntimeMode() === "sandbox") {
-      return executeInGriotSandbox(action);
-    }
-
-    // MODO NATIVO (Terminal / Emulator): Preserva o caminho original intacto
-    if (getRuntimeMode() === "native") {
+    // Se estiver em modo native no Android, tenta execução nativa no dispositivo primeiro
+    if (getRuntimeMode() === "native" && isNativeAndroidPlatform()) {
       const cmd = String(
         action.params.command ||
           action.params.cmd ||
@@ -164,30 +157,24 @@ export class GriotActionExecutor {
       );
       if (cmd) {
         const nativeRes = await executeNativeCommand(cmd, { cwd: String(action.params.cwd || "") });
-
-        // Se o binário não existir no rootfs local (exit code 127) ou em ambiente web/preview,
-        // tenta resolver através do GRIOT Sandbox isolado no Execution Gateway
-        if (nativeRes.exitCode === 127 || !isNativeAndroidPlatform()) {
-          const sandboxRes = await executeInGriotSandbox(action);
-          if (sandboxRes.status === "success" || sandboxRes.exitCode === 0) {
-            return sandboxRes;
-          }
+        if (nativeRes.exitCode !== 127) {
+          return {
+            actionId: action.id,
+            actionType: action.type,
+            status: nativeRes.status,
+            exitCode: nativeRes.exitCode,
+            stdout: nativeRes.stdout,
+            stderr: nativeRes.stderr,
+            durationMs: nativeRes.durationMs,
+            timestamp: new Date().toISOString(),
+          };
         }
-
-        return {
-          actionId: action.id,
-          actionType: action.type,
-          status: nativeRes.status,
-          exitCode: nativeRes.exitCode,
-          stdout: nativeRes.stdout,
-          stderr: nativeRes.stderr,
-          durationMs: nativeRes.durationMs,
-          timestamp: new Date().toISOString(),
-        };
       }
     }
 
-    return executeLocalAction(action, effectiveWsId);
+    // Caso contrário (Web, Preview, Sandbox mode ou comando ausente no rootfs local):
+    // Executa diretamente no Sandbox real gVisor do Cloud Run
+    return executeInGriotSandbox(action, { workspaceId: effectiveWsId });
   }
 
   formatFeedbackForAI(result: GriotExecutionResult): string {

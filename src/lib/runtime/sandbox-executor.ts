@@ -1,13 +1,16 @@
 /**
  * GRIOT Sandbox Execution Client (Google Cloud Run gVisor Gateway)
  *
- * Runtime Primário de Execução Isolada:
+ * Runtime Primário de Execução Isolada Real:
  * - Sandbox gVisor em container seguro no Google Cloud Run
  * - Endpoint: https://griot-studio-gateway-canary-997890752468.europe-west1.run.app/execute
- * - Suporta execução nativa de scripts Python e comandos Bash com retorno de stdout, stderr e exit_code.
+ * - Suporta execução nativa e autêntica de scripts Python e comandos Bash com retorno de stdout, stderr e exit_code reais.
+ * - Sincronização automática de ficheiros do workspace para o container Linux.
+ * - Auto-provisionamento de ambientes para Git e Node.js sob demanda.
  */
 
 import type { GriotAction, GriotExecutionResult } from "./protocol";
+import { getWorkspaceFiles, type WorkspaceFile } from "./local-harness";
 
 export const DEFAULT_CLOUD_RUN_SANDBOX_ENDPOINT =
   "https://griot-studio-gateway-canary-997890752468.europe-west1.run.app/execute";
@@ -75,6 +78,109 @@ export function getCloudRunSandboxToken(): string {
     return String(envToken).trim();
   }
   return DEFAULT_CLOUD_RUN_SANDBOX_TOKEN;
+}
+
+/**
+ * Converte de forma segura strings UTF-8 para base64 em qualquer ambiente (Browser ou Node).
+ */
+export function encodeUtf8ToBase64(str: string): string {
+  if (typeof window !== "undefined" && typeof window.btoa === "function") {
+    try {
+      return window.btoa(unescape(encodeURIComponent(str)));
+    } catch {
+      // continua para fallback
+    }
+  }
+  if (typeof Buffer !== "undefined") {
+    return Buffer.from(str, "utf-8").toString("base64");
+  }
+  return "";
+}
+
+/**
+ * Constrói o script Bash para sincronizar ficheiros do workspace e executar o comando no container gVisor.
+ */
+export function buildSandboxWorkspaceScript(
+  command: string,
+  files: WorkspaceFile[] = [],
+  options: {
+    language?: "python" | "bash";
+    codeToRun?: string;
+  } = {},
+): string {
+  const lines: string[] = [
+    "#!/usr/bin/env bash",
+    "set -e",
+    "mkdir -p /workspace && cd /workspace",
+  ];
+
+  // Desempacota ficheiros de workspace existentes no container
+  for (const f of files) {
+    if (!f.path || typeof f.content !== "string") continue;
+    if (f.content.length > 600_000) continue; // ignora ficheiros gigantes
+    const cleanPath = f.path.trim().replace(/^(\.\/|\/)/, "");
+    if (!cleanPath) continue;
+    const b64 = encodeUtf8ToBase64(f.content);
+    if (b64) {
+      lines.push(
+        `mkdir -p "$(dirname '${cleanPath}')" && echo '${b64}' | base64 -d > '${cleanPath}'`,
+      );
+    }
+  }
+
+  const trimmedCmd = command.trim();
+
+  // Auto-provisionamento de Git sob demanda
+  if (
+    trimmedCmd.startsWith("git ") ||
+    trimmedCmd.includes(" git ") ||
+    trimmedCmd.startsWith("git\t") ||
+    trimmedCmd === "git"
+  ) {
+    lines.push(
+      "if ! command -v git >/dev/null 2>&1; then",
+      "  export DEBIAN_FRONTEND=noninteractive",
+      "  apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq git >/dev/null 2>&1",
+      "fi",
+      "git config --global user.name 'GRIOT Agent' 2>/dev/null || true",
+      "git config --global user.email 'agent@griot.local' 2>/dev/null || true",
+      "git config --global init.defaultBranch main 2>/dev/null || true",
+    );
+  }
+
+  // Auto-provisionamento de Node / npm sob demanda
+  if (
+    trimmedCmd.startsWith("node ") ||
+    trimmedCmd.startsWith("node\t") ||
+    trimmedCmd.startsWith("npm ") ||
+    trimmedCmd.startsWith("npm\t") ||
+    trimmedCmd.startsWith("npx ") ||
+    trimmedCmd.startsWith("yarn ") ||
+    trimmedCmd.startsWith("pnpm ") ||
+    trimmedCmd.includes(" node ") ||
+    trimmedCmd.includes(" npm ")
+  ) {
+    lines.push(
+      "if ! command -v node >/dev/null 2>&1; then",
+      "  curl -fsSL https://nodejs.org/dist/v20.18.0/node-v20.18.0-linux-x64.tar.gz 2>/dev/null | tar -xz -C /usr/local --strip-components=1 2>/dev/null",
+      "fi",
+    );
+  }
+
+  // Execução de código Python com preservação de ambiente de workspace
+  if (options.language === "python" && options.codeToRun) {
+    const pyB64 = encodeUtf8ToBase64(options.codeToRun);
+    lines.push(
+      `echo '${pyB64}' | base64 -d > __griot_exec__.py`,
+      "set +e",
+      "python3 -u __griot_exec__.py",
+    );
+  } else {
+    // Execução regular de comando Bash
+    lines.push("set +e", trimmedCmd || "pwd");
+  }
+
+  return lines.join("\n");
 }
 
 /**
@@ -173,41 +279,52 @@ export async function getOrStartSandboxRun(
 }
 
 /**
- * Executa uma ação do protocolo GRIOT no Sandbox remoto do Cloud Run.
+ * Executa uma ação do protocolo GRIOT no Sandbox remoto real do Cloud Run.
+ * Fornece sincronização com o workspace local e execução em container Linux genuíno.
  */
 export async function executeInGriotSandbox(
   action: GriotAction,
-  targetProjectId?: string,
+  options: {
+    workspaceId?: string;
+    files?: WorkspaceFile[];
+  } = {},
 ): Promise<GriotExecutionResult> {
   const start = Date.now();
+  const workspaceId = options.workspaceId || "default";
+  const params = action.params || {};
 
   // 1. Extrair código e determinar a linguagem
-  const rawCode = String(
-    action.params?.code ||
-      action.params?.command ||
-      action.params?.cmd ||
-      action.params?.script ||
-      action.params?.program ||
-      (action.type.startsWith("git.") ? `git ${action.type.replace("git.", "")}` : "") ||
-      (action.type === "test.run" ? `npm test -- ${action.params?.filter || ""}` : "") ||
-      (action.type === "build.run" ? `npm run build` : "") ||
+  let rawCode = String(
+    params.code ||
+      params.command ||
+      params.cmd ||
+      params.script ||
+      params.program ||
       "",
   ).trim();
 
-  let language: "python" | "bash" = "bash";
-
-  const explicitLang = String(action.params?.language || action.params?.lang || "").toLowerCase();
-  if (explicitLang === "python" || explicitLang === "py") {
-    language = "python";
-  } else if (explicitLang === "bash" || explicitLang === "sh" || explicitLang === "shell") {
-    language = "bash";
-  } else if (
-    action.type === "python.run" ||
-    action.type === "python.execute" ||
-    action.params?.program === "python" ||
-    action.params?.program === "python3"
-  ) {
-    language = "python";
+  // Mapeamento semântico de ações para comandos de shell reais
+  if (!rawCode) {
+    if (action.type === "git.status") {
+      rawCode = "git status";
+    } else if (action.type === "git.commit") {
+      const msg = String(params.message || "Atualização de ficheiros via GRIOT").replace(/"/g, '\\"');
+      rawCode = `git add -A && git commit -m "${msg}"`;
+    } else if (action.type === "git.log") {
+      rawCode = "git log -n 10 --oneline";
+    } else if (action.type === "git.diff") {
+      rawCode = "git diff";
+    } else if (action.type.startsWith("git.")) {
+      rawCode = `git ${action.type.replace("git.", "")}`;
+    } else if (action.type === "test.run" || action.type === "test.verify") {
+      const filter = String(params.filter || "").trim();
+      rawCode = filter ? `npm test -- ${filter}` : "npm test";
+    } else if (action.type === "shell.build") {
+      rawCode = "npm run build";
+    } else if (action.type === "shell.install") {
+      const pkg = String(params.package || params.packages || "").trim();
+      rawCode = pkg ? `npm install ${pkg}` : "npm install";
+    }
   }
 
   if (!rawCode) {
@@ -223,11 +340,44 @@ export async function executeInGriotSandbox(
     };
   }
 
-  // 2. Chamar o Cloud Run Sandbox
-  const res = await executeRemoteCloudRunSandbox(rawCode, language);
+  // 2. Determinar se é Python ou Bash
+  let language: "python" | "bash" = "bash";
+  const explicitLang = String(params.language || params.lang || "").toLowerCase();
+
+  if (
+    explicitLang === "python" ||
+    explicitLang === "py" ||
+    action.type === "python.run" ||
+    action.type === "python.execute" ||
+    params.program === "python" ||
+    params.program === "python3"
+  ) {
+    language = "python";
+  }
+
+  // 3. Recuperar ficheiros do workspace local
+  const files = options.files || getWorkspaceFiles(workspaceId);
+
+  let finalScriptToRun = rawCode;
+  let executionLanguage: "python" | "bash" = language;
+
+  if (files.length > 0) {
+    // Quando existem ficheiros no workspace, empacota-os num script Bash que inicializa o /workspace
+    executionLanguage = "bash";
+    finalScriptToRun = buildSandboxWorkspaceScript(rawCode, files, {
+      language,
+      codeToRun: language === "python" ? rawCode : undefined,
+    });
+  } else if (language === "bash") {
+    // Mesmo sem ficheiros prévios, garante auto-provisionamento de git/node se necessário
+    finalScriptToRun = buildSandboxWorkspaceScript(rawCode, [], { language: "bash" });
+  }
+
+  // 4. Chamar o container gVisor no Cloud Run
+  const res = await executeRemoteCloudRunSandbox(finalScriptToRun, executionLanguage);
 
   const isSuccess = res.exit_code === 0 && !res.error;
-  const stdout = res.stdout || (isSuccess ? "[Cloud Run Sandbox] Comando executado com sucesso." : "");
+  const stdout = res.stdout ?? "";
   const stderr = res.stderr || (res.error ? `Erro: ${res.error}` : "");
 
   return {

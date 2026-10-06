@@ -119,7 +119,7 @@ jobs:
           sha256sum GRIOT-Mobile*.apk
 
           GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-          TAG_TO_USE="v${GRADLE_VER:-1.0.97}"
+          TAG_TO_USE="v${GRADLE_VER:-1.0.98}"
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_TO_USE="${{ github.ref_name }}"
           fi
