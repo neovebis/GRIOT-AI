@@ -120,7 +120,20 @@ export class GriotActionExecutor {
 
     const effectiveWsId = workspaceId || "local-default";
 
-    // 1. Operações de sistema de ficheiros (fs.*), pesquisa (search.*), código (code.*) ou projetos (project.*) são geridas no workspace local
+    // 1. Execução de código e scripts (Cloud Run Sandbox)
+    if (
+      action.type === "code.run" ||
+      action.type === "code.execute" ||
+      action.type.startsWith("python.") ||
+      action.type.startsWith("bash.") ||
+      action.category === "sandbox" ||
+      action.type.startsWith("sandbox.") ||
+      action.params?.runtime === "sandbox"
+    ) {
+      return executeInGriotSandbox(action);
+    }
+
+    // 2. Operações de sistema de ficheiros (fs.*), pesquisa (search.*), código estático (code.*) ou projetos (project.*) são geridas no workspace local
     if (
       action.category === "fs" ||
       action.category === "search" ||
@@ -131,15 +144,6 @@ export class GriotActionExecutor {
       action.type.startsWith("opb.")
     ) {
       return executeLocalAction(action, effectiveWsId);
-    }
-
-    // 2. Ações explicitamente marcadas para Sandbox ou de execução em container isolado
-    if (
-      action.category === "sandbox" ||
-      action.type.startsWith("sandbox.") ||
-      action.params?.runtime === "sandbox"
-    ) {
-      return executeInGriotSandbox(action);
     }
 
     // 3. Comandos de Terminal / Shell / Git / Testes:

@@ -1,25 +1,30 @@
 /**
- * GRIOT Sandbox Execution Client
+ * GRIOT Sandbox Execution Client (Google Cloud Run gVisor Gateway)
  *
- * Arquitetura Primária de Execução do GRIOT Studio:
- * GRIOT Studio → Studio Compute (Edge Function griot-studio-compute)
- *              → Connected Compute (Execution Gateway)
- *              → GRIOT Sandbox (Container isolado)
- *              → Execução
- *
- * Regras Fundamentais:
- * 1. Runtime primário: griot_sandbox.
- * 2. Reconciliação / Inicialização do container isolado no Execution Gateway.
- * 3. Se o Sandbox falhar, falha explicitamente com erro legível.
- * 4. NÃO fazer fallback automático para Cloud Run.
- * 5. NÃO fazer fallback para Google Cloud Shell.
- * 6. NÃO criar mocks ou simulações locais como substituição.
+ * Runtime Primário de Execução Isolada:
+ * - Sandbox gVisor em container seguro no Google Cloud Run
+ * - Endpoint: https://griot-studio-gateway-canary-997890752468.europe-west1.run.app/execute
+ * - Suporta execução nativa de scripts Python e comandos Bash com retorno de stdout, stderr e exit_code.
  */
 
-import { supabase } from "@/integrations/supabase/client";
-import { getActiveProjectSync, ensureActiveProject, isValidUuid } from "@/lib/project-service";
-import { getCurrentWorkspaceId } from "@/lib/workspace";
 import type { GriotAction, GriotExecutionResult } from "./protocol";
+
+export const DEFAULT_CLOUD_RUN_SANDBOX_ENDPOINT =
+  "https://griot-studio-gateway-canary-997890752468.europe-west1.run.app/execute";
+
+export const DEFAULT_CLOUD_RUN_SANDBOX_TOKEN = "esdras@123123";
+
+export interface CloudRunExecutePayload {
+  language: "python" | "bash";
+  code: string;
+}
+
+export interface CloudRunExecuteResponse {
+  stdout?: string;
+  stderr?: string;
+  exit_code?: number;
+  error?: string;
+}
 
 export interface SandboxRunInfo {
   id: string;
@@ -33,74 +38,153 @@ export interface SandboxRunInfo {
 }
 
 /**
- * Obtém ou inicia um run ativo do GRIOT Sandbox para o projeto.
+ * Obtém o endpoint ativo do Cloud Run Sandbox (via localStorage, env ou default).
  */
-export async function getOrStartSandboxRun(
-  projectId: string,
-  objective = "GRIOT Studio Execution",
-): Promise<{ run: SandboxRunInfo | null; error: string | null }> {
+export function getCloudRunSandboxEndpoint(): string {
+  if (typeof window !== "undefined") {
+    const customUrl =
+      window.localStorage.getItem("griot_gcp_runner_url") ||
+      window.localStorage.getItem("griot_cloud_run_sandbox_url");
+    if (customUrl) {
+      const clean = customUrl.trim().replace(/\/$/, "");
+      return clean.endsWith("/execute") ? clean : `${clean}/execute`;
+    }
+  }
+  const envUrl = (import.meta as any)?.env?.VITE_GRIOT_SANDBOX_URL;
+  if (envUrl) {
+    const clean = String(envUrl).trim().replace(/\/$/, "");
+    return clean.endsWith("/execute") ? clean : `${clean}/execute`;
+  }
+  return DEFAULT_CLOUD_RUN_SANDBOX_ENDPOINT;
+}
+
+/**
+ * Obtém o token de autorização do Cloud Run Sandbox.
+ */
+export function getCloudRunSandboxToken(): string {
+  if (typeof window !== "undefined") {
+    const customToken =
+      window.localStorage.getItem("griot_gcp_runner_secret") ||
+      window.localStorage.getItem("griot_cloud_run_sandbox_token");
+    if (customToken) {
+      return customToken.trim();
+    }
+  }
+  const envToken = (import.meta as any)?.env?.VITE_GRIOT_SANDBOX_TOKEN;
+  if (envToken) {
+    return String(envToken).trim();
+  }
+  return DEFAULT_CLOUD_RUN_SANDBOX_TOKEN;
+}
+
+/**
+ * Executa código diretamente no Sandbox remoto gVisor do Cloud Run.
+ */
+export async function executeRemoteCloudRunSandbox(
+  code: string,
+  language: "python" | "bash" = "bash",
+  options: {
+    timeoutMs?: number;
+    endpoint?: string;
+    token?: string;
+  } = {},
+): Promise<CloudRunExecuteResponse> {
+  const endpoint = options.endpoint || getCloudRunSandboxEndpoint();
+  const token = options.token || getCloudRunSandboxToken();
+  const timeoutMs = options.timeoutMs ?? 60_000;
+
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    const { data: userAuth } = await supabase.auth.getUser();
-    const workspaceId = userAuth?.user?.id ? await getCurrentWorkspaceId(userAuth.user.id) : null;
-    const reqHeaders: Record<string, string> = { "content-type": "application/json" };
-    if (workspaceId) {
-      reqHeaders["x-griot-workspace-id"] = workspaceId;
-    }
-
-    // 1. Tenta obter o run ativo mais recente
-    const { data: latestData, error: latestErr } = await supabase.functions.invoke(
-      `griot-studio-compute/projects/${projectId}/runs/latest`,
-      { method: "GET", headers: reqHeaders },
-    );
-
-    if (!latestErr && latestData?.run?.id && latestData.run.status === "ready") {
-      return { run: latestData.run, error: null };
-    }
-
-    // 2. Se não houver run pronto, solicita inicialização do GRIOT Sandbox
-    const { data: startData, error: startErr } = await supabase.functions.invoke(
-      `griot-studio-compute/projects/${projectId}/runs`,
-      {
-        method: "POST",
-        body: { objective, runtimeProvider: "griot_sandbox" },
-        headers: reqHeaders,
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
-    );
+      body: JSON.stringify({
+        language,
+        code,
+      }),
+      signal: controller.signal,
+    });
 
-    if (startErr) {
+    clearTimeout(timeoutTimer);
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      let parsedError = errorText;
+      try {
+        const j = JSON.parse(errorText);
+        parsedError = j.error || errorText;
+      } catch {
+        // use raw text
+      }
       return {
-        run: null,
-        error: `[GRIOT Sandbox]: Falha ao provisionar container de execução isolada: ${startErr.message}`,
+        exit_code: res.status,
+        stderr: `[Cloud Run Sandbox HTTP ${res.status}]: ${parsedError || res.statusText}`,
+        stdout: "",
       };
     }
 
-    if (!startData?.run?.id) {
-      return {
-        run: null,
-        error: `[GRIOT Sandbox]: O Execution Gateway não retornou uma identidade de execução válida.`,
-      };
-    }
-
-    return { run: startData.run, error: null };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const data = (await res.json()) as CloudRunExecuteResponse;
     return {
-      run: null,
-      error: `[GRIOT Sandbox]: Erro ao comunicar com o Studio Compute: ${msg}`,
+      stdout: data.stdout ?? "",
+      stderr: data.stderr ?? "",
+      exit_code: typeof data.exit_code === "number" ? data.exit_code : 0,
+      error: data.error,
+    };
+  } catch (err) {
+    clearTimeout(timeoutTimer);
+    const isTimeout = err instanceof DOMException && err.name === "AbortError";
+    const msg = isTimeout
+      ? `Execução no Cloud Run Sandbox excedeu o limite de tempo (${timeoutMs / 1000}s).`
+      : err instanceof Error
+        ? err.message
+        : String(err);
+
+    return {
+      exit_code: isTimeout ? 124 : 1,
+      stderr: `[Cloud Run Sandbox]: ${msg}`,
+      stdout: "",
     };
   }
 }
 
 /**
- * Executa um comando ou processo isolado diretamente no GRIOT Sandbox.
+ * Reconcilia ou inicializa a identidade de sessão do Sandbox (compatibilidade de API).
+ */
+export async function getOrStartSandboxRun(
+  projectId = "default-project",
+  objective = "GRIOT Studio Execution",
+): Promise<{ run: SandboxRunInfo | null; error: string | null }> {
+  return {
+    run: {
+      id: "cloud-run-gvisor",
+      runtimeId: "europe-west1-canary",
+      connectionId: "griot-studio-gateway-canary",
+      provider: "cloud_run_gvisor",
+      status: "ready",
+      state: "running",
+    },
+    error: null,
+  };
+}
+
+/**
+ * Executa uma ação do protocolo GRIOT no Sandbox remoto do Cloud Run.
  */
 export async function executeInGriotSandbox(
   action: GriotAction,
   targetProjectId?: string,
 ): Promise<GriotExecutionResult> {
   const start = Date.now();
-  const cmd = String(
-    action.params?.command ||
+
+  // 1. Extrair código e determinar a linguagem
+  const rawCode = String(
+    action.params?.code ||
+      action.params?.command ||
       action.params?.cmd ||
       action.params?.script ||
       action.params?.program ||
@@ -110,125 +194,50 @@ export async function executeInGriotSandbox(
       "",
   ).trim();
 
-  let projectId = targetProjectId || getActiveProjectSync()?.id || "";
+  let language: "python" | "bash" = "bash";
 
-  if (!projectId || !isValidUuid(projectId)) {
-    try {
-      const activeProj = await ensureActiveProject();
-      projectId = activeProj.id;
-    } catch {
-      // Ignora erro e valida abaixo
-    }
+  const explicitLang = String(action.params?.language || action.params?.lang || "").toLowerCase();
+  if (explicitLang === "python" || explicitLang === "py") {
+    language = "python";
+  } else if (explicitLang === "bash" || explicitLang === "sh" || explicitLang === "shell") {
+    language = "bash";
+  } else if (
+    action.type === "python.run" ||
+    action.type === "python.execute" ||
+    action.params?.program === "python" ||
+    action.params?.program === "python3"
+  ) {
+    language = "python";
   }
 
-  if (!projectId || !isValidUuid(projectId)) {
+  if (!rawCode) {
     return {
       actionId: action.id,
       actionType: action.type,
       status: "failed",
       exitCode: 1,
       stdout: "",
-      stderr: `[GRIOT Sandbox]: Nenhum projeto ativo com UUID válido foi encontrado para execução isolada.`,
+      stderr: "[Cloud Run Sandbox]: Nenhum comando ou script fornecido para execução.",
       durationMs: Date.now() - start,
       timestamp: new Date().toISOString(),
     };
   }
 
-  // 1. Inicia / Reconcilia o GRIOT Sandbox
-  const { run, error: runError } = await getOrStartSandboxRun(
-    projectId,
-    `Comando: ${cmd || action.type}`,
-  );
+  // 2. Chamar o Cloud Run Sandbox
+  const res = await executeRemoteCloudRunSandbox(rawCode, language);
 
-  if (runError || !run) {
-    // FALHA EXPLÍCITA — SEM FALLBACK PARA CLOUD SHELL OU CLOUD RUN
-    return {
-      actionId: action.id,
-      actionType: action.type,
-      status: "failed",
-      exitCode: 1,
-      stdout: "",
-      stderr: runError || `[GRIOT Sandbox]: Runtime isolado indisponível no Execution Gateway.`,
-      durationMs: Date.now() - start,
-      timestamp: new Date().toISOString(),
-    };
-  }
+  const isSuccess = res.exit_code === 0 && !res.error;
+  const stdout = res.stdout || (isSuccess ? "[Cloud Run Sandbox] Comando executado com sucesso." : "");
+  const stderr = res.stderr || (res.error ? `Erro: ${res.error}` : "");
 
-  // 2. Executa o comando no container isolado
-  try {
-    const { data: userAuth } = await supabase.auth.getUser();
-    const workspaceId = userAuth?.user?.id ? await getCurrentWorkspaceId(userAuth.user.id) : null;
-    const reqHeaders: Record<string, string> = { "content-type": "application/json" };
-    if (workspaceId) {
-      reqHeaders["x-griot-workspace-id"] = workspaceId;
-    }
-
-    const { data: execData, error: execErr } = await supabase.functions.invoke(
-      `griot-studio-compute/runs/${run.id}/execute?projectId=${encodeURIComponent(projectId)}`,
-      {
-        method: "POST",
-        body: {
-          command: cmd,
-          program: "sh",
-          args: ["-c", cmd],
-        },
-        headers: reqHeaders,
-      },
-    );
-
-    if (execErr) {
-      return {
-        actionId: action.id,
-        actionType: action.type,
-        status: "failed",
-        exitCode: 1,
-        stdout: "",
-        stderr: `[GRIOT Sandbox]: Erro na execução remota do processo: ${execErr.message}`,
-        durationMs: Date.now() - start,
-        timestamp: new Date().toISOString(),
-      };
-    }
-
-    const state = execData?.state;
-    if (state === "approval_required") {
-      return {
-        actionId: action.id,
-        actionType: action.type,
-        status: "failed",
-        exitCode: 126,
-        stdout: execData?.stdout || "",
-        stderr: `[GRIOT Sandbox]: Esta operação no container requer aprovação de segurança da equipa/projeto.`,
-        durationMs: Date.now() - start,
-        timestamp: new Date().toISOString(),
-      };
-    }
-
-    const isSuccess =
-      execData?.exitCode === 0 || execData?.status === "success" || (!execData?.stderr && execData?.stdout);
-
-    return {
-      actionId: action.id,
-      actionType: action.type,
-      status: isSuccess ? "success" : "failed",
-      exitCode: typeof execData?.exitCode === "number" ? execData.exitCode : (isSuccess ? 0 : 1),
-      stdout:
-        execData?.stdout ||
-        (isSuccess ? `[GRIOT Sandbox] Comando concluído no container isolado.` : ""),
-      stderr: execData?.stderr || "",
-      durationMs: Date.now() - start,
-      timestamp: new Date().toISOString(),
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return {
-      actionId: action.id,
-      actionType: action.type,
-      status: "failed",
-      exitCode: 1,
-      stdout: "",
-      stderr: `[GRIOT Sandbox]: Falha de comunicação com o container remoto: ${msg}`,
-      durationMs: Date.now() - start,
-      timestamp: new Date().toISOString(),
-    };
-  }
+  return {
+    actionId: action.id,
+    actionType: action.type,
+    status: isSuccess ? "success" : "failed",
+    exitCode: typeof res.exit_code === "number" ? res.exit_code : (isSuccess ? 0 : 1),
+    stdout,
+    stderr,
+    durationMs: Date.now() - start,
+    timestamp: new Date().toISOString(),
+  };
 }
