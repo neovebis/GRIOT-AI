@@ -240,7 +240,7 @@ export function runWorkspaceDiagnostics(workspaceId = "default"): WorkspaceDiagn
  */
 export function formatDiagnosticReport(report: WorkspaceDiagnosticReport): string {
   if (report.isClean) {
-    return `[GRIOT Code Diagnostician]: ✅ Workspace 100% íntegro. Todos os ${report.totalFilesScanned} ficheiros possuem sintaxe e tags JSX válidas.`;
+    return `[GRIOT Code Diagnostician]: ✅ Sintaxe, delimitadores e tags JSX válidos em todos os ${report.totalFilesScanned} ficheiros analisados.`;
   }
 
   const lines = [

@@ -97,13 +97,9 @@ export class GriotNativeObserverBridge {
       }
     }
 
-    // Em web/PWA ou fallback: simula ativação da permissão com flag local
-    this.isServiceActive = !this.isServiceActive;
-    const prefs = loadPrefs();
-    prefs["observer:accessibility_enabled"] = this.isServiceActive;
-    window.localStorage.setItem("griot_user_prefs", JSON.stringify(prefs));
-    window.dispatchEvent(new CustomEvent("griot:prefs-changed", { detail: prefs }));
-    return this.isServiceActive;
+    // Em web/PWA ou fallback não-nativo: Acessibilidade de SO não está disponível
+    console.info("[Native Observer Bridge] Acessibilidade do sistema operacional disponível exclusivamente na app Android.");
+    return false;
   }
 
   public async requestNotificationPermission(): Promise<boolean> {
@@ -120,12 +116,22 @@ export class GriotNativeObserverBridge {
       }
     }
 
-    this.isNotifActive = !this.isNotifActive;
-    const prefs = loadPrefs();
-    prefs["observer:notifications_enabled"] = this.isNotifActive;
-    window.localStorage.setItem("griot_user_prefs", JSON.stringify(prefs));
-    window.dispatchEvent(new CustomEvent("griot:prefs-changed", { detail: prefs }));
-    return this.isNotifActive;
+    // No Web/PWA, solicita a API real do browser sem fabricar permissão de SO
+    if (typeof window !== "undefined" && "Notification" in window) {
+      try {
+        const perm = await Notification.requestPermission();
+        this.isNotifActive = perm === "granted";
+        const prefs = loadPrefs();
+        prefs["observer:notifications_enabled"] = this.isNotifActive;
+        window.localStorage.setItem("griot_user_prefs", JSON.stringify(prefs));
+        window.dispatchEvent(new CustomEvent("griot:prefs-changed", { detail: prefs }));
+        return this.isNotifActive;
+      } catch {
+        return false;
+      }
+    }
+
+    return false;
   }
 
   public async syncRealDeviceStatus(): Promise<AccessibilityPermissionStatus> {
@@ -152,9 +158,10 @@ export class GriotNativeObserverBridge {
   }
 
   public getStatus(): AccessibilityPermissionStatus {
+    const isNative = typeof window !== "undefined" && (window as any).Capacitor?.isNativePlatform?.();
     const prefs = loadPrefs();
     return {
-      serviceEnabled: prefs["observer:accessibility_enabled"] === true,
+      serviceEnabled: isNative ? (prefs["observer:accessibility_enabled"] === true) : false,
       notificationListenerEnabled: prefs["observer:notifications_enabled"] === true,
       monitoredPackages: [
         "com.openai.chatgpt",

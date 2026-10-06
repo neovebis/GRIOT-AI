@@ -33,13 +33,7 @@ export function NativeTerminalModal({ open, onClose }: NativeTerminalModalProps)
     {
       id: "init-1",
       type: "system",
-      text: "GRIOT Native Harness v2.4 — ARM64 Linux PRoot Environment",
-      timestamp: new Date().toLocaleTimeString(),
-    },
-    {
-      id: "init-2",
-      type: "system",
-      text: "Rootfs: /data/data/com.griot.app/files/usr | Phantom Killer Shield: ATIVO",
+      text: "GRIOT Runtime Terminal — A estabelecer ligação ao ambiente...",
       timestamp: new Date().toLocaleTimeString(),
     },
   ]);
@@ -51,7 +45,26 @@ export function NativeTerminalModal({ open, onClose }: NativeTerminalModalProps)
 
   useEffect(() => {
     if (open) {
-      void getNativeSystemInfo().then(setSysInfo);
+      void getNativeSystemInfo().then((info) => {
+        setSysInfo(info);
+        setHistory((prev) => [
+          ...prev.filter((entry) => entry.id !== "init-1"),
+          {
+            id: `env-${Date.now()}`,
+            type: "system",
+            text: info.isArm64
+              ? `[GRIOT Nativo]: ${info.os} (${info.abi}) | Rootfs: ${info.rootfsPath}`
+              : `[GRIOT Cloud Run Sandbox]: ${info.os} (${info.abi}) | Workspace: ${info.workspacePath}`,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+          {
+            id: `mem-${Date.now()}`,
+            type: "system",
+            text: `Memória: ${info.availMemMb}MB livres de ${info.totalMemMb}MB | Proteção de Processos: ${info.phantomProcessGuard ? "ATIVA" : "INATIVA"}`,
+            timestamp: new Date().toLocaleTimeString(),
+          },
+        ]);
+      });
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [open]);

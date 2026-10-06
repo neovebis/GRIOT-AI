@@ -35,7 +35,7 @@ export function ObserverHubDialog({ open, onClose }: ObserverHubProps) {
   const t = useT();
   const [selectedAppId, setSelectedAppId] = useState<string>("chatgpt");
   const [state, setState] = useState(() => observerEngine.getState());
-  const [simulatedCmd, setSimulatedCmd] = useState<string>("fs.read_tree");
+  const [selectedActionCmd, setSelectedActionCmd] = useState<string>("fs.read_tree");
   const [testing, setTesting] = useState(false);
 
   if (!open) return null;
@@ -60,13 +60,13 @@ export function ObserverHubDialog({ open, onClose }: ObserverHubProps) {
   const handleRunSampleAction = async () => {
     setTesting(true);
     let sampleContent = "";
-    if (simulatedCmd === "fs.read_tree") {
+    if (selectedActionCmd === "fs.read_tree") {
       sampleContent = `Vou verificar a árvore de ficheiros do projeto atual.\n<griot_action type="fs.read_tree"></griot_action>`;
-    } else if (simulatedCmd === "shell.install") {
+    } else if (selectedActionCmd === "shell.install") {
       sampleContent = `A instalar dependências necessárias para o projeto.\n<griot_action type="shell.install">\n<command>npm install @tanstack/react-query</command>\n</griot_action>`;
-    } else if (simulatedCmd === "git.status") {
+    } else if (selectedActionCmd === "git.status") {
       sampleContent = `A verificar o estado do repositório Git.\n<griot_action type="git.status"></griot_action>`;
-    } else if (simulatedCmd === "test.run") {
+    } else if (selectedActionCmd === "test.run") {
       sampleContent = `A executar a suite de testes vitest.\n<griot_action type="test.run">\n<command>npm test</command>\n</griot_action>`;
     }
 
@@ -78,10 +78,10 @@ export function ObserverHubDialog({ open, onClose }: ObserverHubProps) {
           `${currentApp.name}: ${res.actionsDetected.length} ${t("ação detetada e processada pelo Observer.")}`,
         );
       } else {
-        toast.info(t("Nenhuma ação no comando simulado."));
+        toast.info(t("Nenhuma ação detetada na mensagem."));
       }
     } catch {
-      toast.error(t("Falha ao simular evento do Observer."));
+      toast.error(t("Falha ao executar ação do Observer."));
     } finally {
       setTesting(false);
     }
@@ -253,9 +253,9 @@ export function ObserverHubDialog({ open, onClose }: ObserverHubProps) {
                 ].map((item) => (
                   <button
                     key={item.id}
-                    onClick={() => setSimulatedCmd(item.id)}
+                    onClick={() => setSelectedActionCmd(item.id)}
                     className={`px-2.5 py-1 rounded-lg text-[11.5px] font-mono transition-all ${
-                      simulatedCmd === item.id
+                      selectedActionCmd === item.id
                         ? "bg-primary text-primary-foreground"
                         : "bg-secondary text-foreground hover:bg-secondary/80"
                     }`}

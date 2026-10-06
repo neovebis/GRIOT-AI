@@ -146,7 +146,7 @@ export const getActivePlan = createServerFn({ method: "POST" })
         query: `metadata['userId']:'${userId}'`,
         limit: 20,
       });
-      const active = subs.data.find((s) => ["active", "trialing", "past_due"].includes(s.status));
+      const active = subs.data.find((s: any) => ["active", "trialing", "past_due"].includes(s.status));
       const price = active?.items.data[0]?.price;
       const lookup = (typeof price === "object" ? price?.lookup_key : null) ?? "";
       return { plan: PRICE_TO_PLAN[lookup] ?? "free" };

@@ -79,10 +79,7 @@ function ControlPage() {
         }));
 
         const pipelineNodes = Array.isArray(pipelineRes?.data?.nodes) ? pipelineRes.data.nodes : [];
-        const activeAgents =
-          pipelineNodes.length > 0
-            ? pipelineNodes.filter((n: any) => n.enabled !== false).length
-            : 4;
+        const activeAgents = pipelineNodes.filter((n: any) => n.enabled !== false).length;
 
         const rawUsage = usageRes?.data || [];
         const runs = rawUsage.map((u: any) => ({
@@ -103,7 +100,7 @@ function ControlPage() {
           runs,
           totalCost,
           profile: {
-            desktop_online: true,
+            desktop_online: profileRes?.data?.desktop_online === true,
             display_name: profileRes?.data?.display_name || "GRIOT",
           },
         };
@@ -111,17 +108,17 @@ function ControlPage() {
         console.warn("Falha na consulta de Control:", err);
         return {
           services: [],
-          activeAgents: 4,
+          activeAgents: 0,
           runs: [],
           totalCost: 0,
-          profile: { desktop_online: true, display_name: "GRIOT" },
+          profile: { desktop_online: false, display_name: "GRIOT" },
         };
       }
     },
   });
 
   const cost = data?.totalCost ?? 0;
-  const activeAgents = data?.activeAgents ?? 4;
+  const activeAgents = data?.activeAgents ?? 0;
 
   return (
     <Screen

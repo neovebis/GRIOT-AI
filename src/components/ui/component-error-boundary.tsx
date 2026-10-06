@@ -30,7 +30,7 @@ export class ComponentErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("[ComponentErrorBoundary] Erro capturado no componente:", error, errorInfo);
   }
 
@@ -39,7 +39,7 @@ export class ComponentErrorBoundary extends Component<Props, State> {
     this.props.onReset?.();
   };
 
-  render() {
+  override render() {
     if (this.state.hasError) {
       if (this.props.inline) {
         return (
