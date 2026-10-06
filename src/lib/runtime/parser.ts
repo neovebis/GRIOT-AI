@@ -117,17 +117,31 @@ export function parseGriotActions(text: string): GriotAction[] {
       const branchMatch = body.match(/<branch>([\s\S]*?)<\/branch>/i);
       const messageMatch = body.match(/<message>([\s\S]*?)<\/message>/i);
 
+      const codeMatch = body.match(/<code>([\s\S]*?)<\/code>/i);
+      const langMatch = body.match(/<language>([\s\S]*?)<\/language>/i) || body.match(/<lang>([\s\S]*?)<\/lang>/i);
+
       if (cmdMatch) params.command = cmdMatch[1].trim();
       if (contentMatch) params.content = contentMatch[1];
       if (pathMatch) params.path = pathMatch[1].trim();
       if (branchMatch) params.branch = branchMatch[1].trim();
       if (messageMatch) params.message = messageMatch[1].trim();
+      if (codeMatch) params.code = codeMatch[1].trim();
+      if (langMatch) params.language = langMatch[1].trim();
 
-      if (!cmdMatch && !contentMatch && !pathMatch && body) {
+      if (!cmdMatch && !contentMatch && !pathMatch && !codeMatch && body) {
         if (typeStr.startsWith("shell.") || typeStr.startsWith("test.")) {
           params.command = body;
         } else if (typeStr.startsWith("fs.")) {
           params.content = body;
+        } else if (
+          typeStr.startsWith("sandbox.") ||
+          typeStr.startsWith("code.") ||
+          typeStr.startsWith("python.") ||
+          typeStr.startsWith("bash.")
+        ) {
+          params.code = body;
+          if (typeStr.startsWith("python.")) params.language = "python";
+          if (typeStr.startsWith("bash.")) params.language = "bash";
         }
       }
     }
@@ -183,6 +197,14 @@ export function parseGriotActions(text: string): GriotAction[] {
     } else if (rawType === "opb" || rawType === "opb.recall" || rawType === "recall") {
       actionType = "opb.recall";
       params.query = content.trim() || pathOrArg || "";
+    } else if (rawType === "python" || rawType === "py") {
+      actionType = "sandbox.execute";
+      params.language = "python";
+      params.code = content.trim();
+    } else if (rawType === "sandbox" || rawType === "gvisor") {
+      actionType = "sandbox.execute";
+      params.language = pathOrArg?.toLowerCase() === "python" ? "python" : "bash";
+      params.code = content.trim();
     } else if (rawType === "projectlist" || rawType === "project_list" || rawType === "projects") {
       actionType = "project.list";
     } else if (rawType === "diagnose" || rawType === "code:diagnose" || rawType === "lint") {

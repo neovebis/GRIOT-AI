@@ -234,7 +234,9 @@ class ChatExecutionManager {
       this.activeExecutions.delete(conversationId);
     }
 
-    const isFastMode = effort === "low" || scope === "quick";
+    const isExecutionRequest =
+      /execut|rodar|roda|sandbox|python|bash|script|terminal|comando|teste|test|patch|code_run|shell/i.test(userPrompt);
+    const isFastMode = (effort === "low" || scope === "quick") && !isExecutionRequest;
     // Limite de segurança de 1 hora (3600000 ms) para análises completas, ou 10 minutos em modo rápido
     const executionTimeoutMs = isFastMode ? 600000 : 3600000;
     const controller = new AbortController();
@@ -392,6 +394,18 @@ class ChatExecutionManager {
 
     if (!effectiveSystemInstruction?.includes("[MEMÓRIA OPB")) {
       effectiveSystemInstruction = `${effectiveSystemInstruction || ""}\n\n${GRIOT_OPB_SYSTEM_PROMPT}`;
+    }
+
+    const GRIOT_SANDBOX_SYSTEM_PROMPT = `[AMBIENTE DE EXECUÇÃO ISOLADO (SANDBOX GVISOR NO CLOUD RUN)]
+Tu tens acesso direto ao sandbox gVisor no Cloud Run para executar código real.
+Ferramenta nativa disponível: 'sandbox_execute' com parâmetros: { "language": "python" | "bash", "code": "..." }.
+Sempre que o utilizador pedir para rodar scripts em Python, comandos Bash, validar algoritmos ou testar código:
+- Executa IMEDIATAMENTE a ferramenta 'sandbox_execute' ou emite o bloco <griot_action type="sandbox.execute">{"language":"python","code":"..."}</griot_action>.
+- O sandbox está 100% verificado, ativo e conectado ao teu harness.
+- NUNCA digas que não tens ferramentas de execução ou que não há ponte conectada.`;
+
+    if (!effectiveSystemInstruction?.includes("[AMBIENTE DE EXECUÇÃO ISOLADO")) {
+      effectiveSystemInstruction = `${effectiveSystemInstruction || ""}\n\n${GRIOT_SANDBOX_SYSTEM_PROMPT}`;
     }
 
     // Prepara mensagens garantindo que o prompt do utilizador está presente sem duplicar

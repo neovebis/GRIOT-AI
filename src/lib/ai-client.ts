@@ -45,6 +45,18 @@ export interface AIResponse {
 /** Declarações de Ferramentas Nativas para Gemini */
 export const GEMINI_TOOL_DECLARATIONS = [
   {
+    name: "sandbox_execute",
+    description: "Executa código Python ou comandos Bash no ambiente isolado (sandbox gVisor no Cloud Run). Retorna stdout, stderr e exit_code reais. Usa sempre que precisares de testar, validar ou executar Python ou scripts.",
+    parameters: {
+      type: "OBJECT",
+      properties: {
+        language: { type: "STRING", description: "Linguagem de execução: 'python' ou 'bash'." },
+        code: { type: "STRING", description: "O script Python ou comando Bash a ser executado." },
+      },
+      required: ["language", "code"],
+    },
+  },
+  {
     name: "shell_exec",
     description: "Executa um comando na shell do workspace (ex: npm install, git status, build).",
     parameters: {
@@ -2536,6 +2548,14 @@ function mapFunctionNameToActionType(name: string): GriotActionType {
     case "list_projects":
     case "get_projects":
       return "project.list";
+    case "sandbox_execute":
+    case "sandbox_run":
+    case "execute_sandbox":
+    case "code_run":
+    case "code_execute":
+    case "python_run":
+    case "bash_run":
+      return "sandbox.execute";
     case "call_connector":
     case "execute_connector":
     case "connector_execute":
