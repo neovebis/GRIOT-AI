@@ -311,7 +311,7 @@ function HomePage() {
           </div>
 
           <Link
-            to="/pay"
+            to="/neoverbis-pay"
             className="shrink-0 flex items-center gap-1 rounded-xl bg-primary text-primary-foreground px-3 py-1.5 text-[12px] font-semibold hover:opacity-90 active:scale-95 transition-all shadow-xs"
           >
             <span>{isWalletDepleted ? t("Recarregar GCU") : t("Planos & GCU")}</span>

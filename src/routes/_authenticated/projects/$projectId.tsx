@@ -691,7 +691,7 @@ export function ProjectDetailView({ projectId, onBack, onDeleted }: ProjectDetai
                           <span
                             key={p}
                             className={`rounded-md border px-1.5 py-0.2 text-[9.5px] uppercase font-mono font-medium ${
-                              taskProgress?.stage === p || (isRunning && taskProgress?.stage?.startsWith(p))
+                              (taskProgress?.stage as string) === p || (isRunning && taskProgress?.stage?.startsWith(p))
                                 ? "border-primary bg-primary text-primary-foreground animate-pulse"
                                 : "border-hairline bg-background/80"
                             }`}

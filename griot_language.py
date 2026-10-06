@@ -205,7 +205,7 @@ class LanguageIntelligence:
     ) + SemanticLexicon.relation_patterns()
 
     VERB_LEMMAS = {
-        "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar", "ruge": "rugir", "rugiu": "rugir", "rugir": "rugir", "rugem": "rugir", "habita": "habitar", "habitou": "habitar", "habitar": "habitar", "habitam": "habitar", "vive": "viver", "viveu": "viver", "viver": "viver", "vivem": "viver",
+        "ataca": "atacar", "atacou": "atacar", "atacar": "atacar", "atacam": "atacar", "agride": "agredir", "agridem": "agredir", "agrediu": "agredir", "agredir": "agredir", "ruge": "rugir", "rugiu": "rugir", "rugir": "rugir", "rugem": "rugir", "habita": "habitar", "habitou": "habitar", "habitar": "habitar", "habitam": "habitar", "vive": "viver", "viveu": "viver", "viver": "viver", "vivem": "viver",
         "come": "comer", "comeu": "comer", "comer": "comer", "comem": "comer",
         "vê": "ver", "ve": "ver", "viu": "ver", "ver": "ver", "veem": "ver",
         "usa": "usar", "usou": "usar", "usar": "usar", "usam": "usar",
@@ -324,6 +324,20 @@ class LanguageIntelligence:
         if clitic is not None:
             expanded, marker = clitic
             parsed = self._parse_clause(expanded)
+            if parsed.coordinated:
+                last_coord = parsed.coordinated[-1]
+                updated_coord = replace(
+                    last_coord,
+                    object=marker,
+                    predicate=f"{last_coord.relation}:{marker}" if last_coord.relation else last_coord.predicate,
+                    clitic_marker=marker,
+                    clitic_role="object",
+                )
+                return replace(
+                    parsed,
+                    text=clause,
+                    coordinated=parsed.coordinated[:-1] + (updated_coord,),
+                )
             if parsed.relation is not None:
                 return replace(
                     parsed,
@@ -1525,6 +1539,7 @@ class LanguageIntelligence:
     def _relation_for_verb(self, clause: str, lemma: str) -> str | None:
         explicit = {
             "atacar": "attacks",
+            "agredir": "attacks",
             "comer": "eats",
             "ver": "sees",
             "usar": "uses",

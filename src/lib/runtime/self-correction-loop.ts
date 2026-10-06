@@ -97,10 +97,10 @@ export async function executeWithSelfCorrection(
       break;
     }
 
-    // Se falhou e ainda tem tentativas, planeia correção cirúrgica
+    // Se falhou e ainda tem tentativas, classifica a falha e adapta a estratégia
     if (iteration < maxAttempts) {
       if (syntaxIssue) {
-        // Tentativa de autocorreção de fechamento de chave/parêntese órfão
+        // Correção de fechamento de chave/parêntese órfão
         const targetPath = syntaxIssue.match(/\[(.*?)\]/)?.[1];
         if (targetPath) {
           const fileToFix = files.find((f) => f.path === targetPath);
@@ -112,13 +112,59 @@ export async function executeWithSelfCorrection(
               saveWorkspaceFile(targetPath, fixedContent, workspaceId);
               attempts[attempts.length - 1].appliedFixDescription =
                 `Fechamento automático de ${count} chave(s) ausente(s) em ${targetPath}`;
+              // Próxima ação: diagnosticar o ficheiro reparado
+              currentAction = {
+                id: `verify-syntax-${Date.now()}`,
+                type: "code.diagnose",
+                category: "code",
+                risk: "safe",
+                requiresApproval: false,
+                params: { path: targetPath },
+                createdAt: new Date().toISOString(),
+                status: "pending",
+              };
+              continue;
             }
           }
         }
-      } else {
-        attempts[attempts.length - 1].appliedFixDescription =
-          `Re-tentativa com isolamento de contexto e parâmetros sanitizados`;
       }
+
+      // 2. Classificação de Dependência Ausente
+      const stderr = currentResult?.stderr || "";
+      const modMatch = stderr.match(/(?:Cannot find module ['"]([^'"]+)['"]|ModuleNotFoundError: No module named ['"]([^'"]+)['"])/i);
+      const missingMod = modMatch ? (modMatch[1] || modMatch[2]) : null;
+
+      if (missingMod && !missingMod.startsWith(".") && !missingMod.startsWith("/")) {
+        attempts[attempts.length - 1].appliedFixDescription =
+          `Deteção de dependência ausente '${missingMod}'. Sintetizando ação de instalação.`;
+        currentAction = {
+          id: `auto-install-${Date.now()}`,
+          type: "shell.install",
+          category: "shell",
+          risk: "safe",
+          requiresApproval: false,
+          params: { package: missingMod },
+          createdAt: new Date().toISOString(),
+          status: "pending",
+        };
+        continue;
+      }
+
+      // 3. Bloqueio Estrito de Ações Repetidas sem Alteração
+      const currentSignature = `${currentAction.type}::${JSON.stringify(currentAction.params)}`;
+      const isRepeated = attempts.some(
+        (a, idx) => idx < attempts.length - 1 && `${a.action.type}::${JSON.stringify(a.action.params)}` === currentSignature,
+      );
+
+      if (isRepeated) {
+        attempts[attempts.length - 1].appliedFixDescription =
+          "REPEATED_ACTION_BLOCKED: Ação idêntica bloqueada para evitar loop estéril. Não houve alteração de parâmetros nem resolução da causa raiz.";
+        break; // Interrompe para rollback atômico imediato
+      }
+
+      attempts[attempts.length - 1].appliedFixDescription =
+        "Sem correção determinística viável no cliente. Finalizando para rollback protetor.";
+      break;
     }
   }
 

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import type { ExecutionAdapter, ExecutionCommand, ExecutionResult } from './execution.js';
+import type { ExecutionAdapter, ExecutionCommand, ExecutionResult, ExecutionPlaneDescriptor } from './execution.js';
 
 /** Backwards-compatible aliases. The canonical SHEOL contract lives in execution.ts. */
 export type SandboxCommand = ExecutionCommand;
@@ -9,10 +9,10 @@ export interface SandboxExecutor {
 }
 
 export class LocalSandboxExecutor implements SandboxExecutor, ExecutionAdapter {
-  public readonly descriptor = {
+  public readonly descriptor: ExecutionPlaneDescriptor = {
     id: 'local',
-    kind: 'local' as const,
-    capabilities: ['command', 'workspace', 'filesystem', 'process'] as const,
+    kind: 'local',
+    capabilities: ['command', 'workspace', 'filesystem', 'process'],
     reliability: 0.9,
     latencyMsP50: 20,
     costPerExecution: 0,

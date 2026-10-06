@@ -10,6 +10,8 @@
 import { executeReActLoop, type ReActExecutionStep } from "./react-loop";
 import { runWorkspaceDiagnostics, formatDiagnosticReport } from "./code-diagnostician";
 import { getCompactArchitectureMap } from "./symbol-indexer";
+import { getWorkspaceFiles } from "./local-harness";
+import { defaultExecutor } from "./executors";
 import type { StreamCallbacks } from "@/lib/ai-client";
 
 export interface SubTask {
@@ -120,7 +122,7 @@ DIRETRIZES DE ENGENHARIA DE TOPO:
   callbacks?.onTaskCompleted?.(engineerTask);
   executionOutputs.push(reactResult.finalAnswer);
 
-  // Executa Task 3: Auditoria Estática de QA
+  // Executa Task 3: Auditoria Estática & Execução de Testes de QA
   const auditTask = initialPlan.tasks[2];
   auditTask.status = "running";
   callbacks?.onTaskStart?.(auditTask);
@@ -128,19 +130,47 @@ DIRETRIZES DE ENGENHARIA DE TOPO:
   const diagnostics = runWorkspaceDiagnostics(workspaceId);
   const formattedDiag = formatDiagnosticReport(diagnostics);
 
-  auditTask.status = diagnostics.isClean ? "completed" : "failed";
-  auditTask.output = formattedDiag;
+  const files = getWorkspaceFiles(workspaceId);
+  const hasTests = files.some(
+    (f) =>
+      f.path.includes(".test.") ||
+      f.path.includes(".spec.") ||
+      f.path.startsWith("tests/") ||
+      f.path.startsWith("test/"),
+  );
+
+  let testSummary = "";
+  let testsPassed = true;
+
+  if (hasTests) {
+    const testResult = await defaultExecutor.execute({
+      id: `qa-test-${Date.now()}`,
+      type: "test.run",
+      category: "test",
+      risk: "safe",
+      requiresApproval: false,
+      params: {},
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    });
+    testsPassed = testResult.status === "success" && testResult.exitCode === 0;
+    testSummary = `\n\n--- Execução de Testes Unitários ---\n${testResult.stdout || testResult.stderr || "Sem saídas"}\nResultado: ${testsPassed ? "APROVADO (Exit code: 0)" : `REPROVADO (Exit code: ${testResult.exitCode})`}`;
+  }
+
+  const overallSuccess = diagnostics.isClean && testsPassed;
+  auditTask.status = overallSuccess ? "completed" : "failed";
+  auditTask.output = `${formattedDiag}${testSummary}`;
   callbacks?.onTaskCompleted?.(auditTask);
 
   let finalReport = reactResult.finalAnswer;
-  if (!diagnostics.isClean) {
-    finalReport += `\n\n⚠️ **Alerta de Auditoria QA**:\n${formattedDiag}`;
+  if (!overallSuccess) {
+    finalReport += `\n\n⚠️ **Alerta de Auditoria QA**:\n${formattedDiag}${testSummary}`;
   } else {
-    finalReport += `\n\n✅ **Certificação de QA**: Workspace verificado e livre de erros sintáticos (${diagnostics.totalFilesScanned} ficheiros auditados).`;
+    finalReport += `\n\n✅ **Certificação de QA**: Workspace auditado com sucesso (${diagnostics.totalFilesScanned} ficheiros verificados, 0 erros sintáticos${hasTests ? ", testes unitários executados e validados no sandbox" : ""}).`;
   }
 
   return {
-    success: diagnostics.isClean,
+    success: overallSuccess,
     plan: initialPlan,
     finalReport,
     diagnosticSummary: diagnostics.summary,

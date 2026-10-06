@@ -10,8 +10,8 @@ android {
         applicationId "com.griot.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 98
-        versionName "1.0.98"
+        versionCode 99
+        versionName "1.0.99"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [ADMOB_APP_ID: admobAppId]
         resValue "string", "admob_native_ad_unit_id", admobNativeAdUnitId
@@ -43,9 +43,9 @@ android {
                 keyPassword System.getenv("KEY_PASSWORD")
             } else if (releaseKeyStore.exists()) {
                 storeFile releaseKeyStore
-                storePassword "GriotMobileApp2026!"
-                keyAlias "griot-release"
-                keyPassword "GriotMobileApp2026!"
+                storePassword System.getenv("KEYSTORE_PASSWORD") ?: "GriotMobileApp2026!"
+                keyAlias System.getenv("KEY_ALIAS") ?: "griot-release"
+                keyPassword System.getenv("KEY_PASSWORD") ?: "GriotMobileApp2026!"
             }
             v1SigningEnabled true
             v2SigningEnabled true

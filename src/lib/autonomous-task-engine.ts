@@ -20,6 +20,9 @@ import { getConnectedPlugins, getAvailableSecretReferences } from "@/lib/plugins
 import { notifyIfBackgrounded } from "@/lib/native-notifications";
 import { executeReActLoop, type ReActExecutionStep } from "@/lib/runtime/react-loop";
 import { validateSyntaxBalance } from "@/lib/runtime/semantic-patcher";
+import { runWorkspaceDiagnostics } from "@/lib/runtime/code-diagnostician";
+import { getWorkspaceFiles } from "@/lib/runtime/local-harness";
+import { executeInGriotSandbox } from "@/lib/runtime/sandbox-executor";
 import { getUserSavedApis } from "@/lib/user-apis";
 import { toast } from "sonner";
 
@@ -178,7 +181,7 @@ class AutonomousTaskEngineService {
       const isConfigured =
         availableSecrets.includes(secKey) ||
         Object.values(connectedPlugins).some(
-          (p) => p.connected && (p.apiKey || p.label.toUpperCase().includes(secKey)),
+          (p) => p.connected && (p.apiKey || p.id.toUpperCase().includes(secKey) || (p.accountName && p.accountName.toUpperCase().includes(secKey))),
         );
 
       if (isConfigured) {
@@ -423,23 +426,72 @@ class AutonomousTaskEngineService {
         });
         this.notify(progress);
 
-        // Simulação de validação sintática estrita
-        const testOk = validateSyntaxBalance("function verify() { return true; }");
+        // Verificação real e determinística de integridade do workspace
+        const wsFiles = getWorkspaceFiles(projectId);
+        for (const file of wsFiles) {
+          if (
+            file.path.endsWith(".ts") ||
+            file.path.endsWith(".tsx") ||
+            file.path.endsWith(".js") ||
+            file.path.endsWith(".jsx")
+          ) {
+            const balance = validateSyntaxBalance(file.content);
+            if (!balance.valid) {
+              throw new Error(`Falha sintática no ficheiro '${file.path}': ${balance.error || "Estrutura de chaves ou parênteses desbalanceada"}`);
+            }
+          }
+          if (file.path.endsWith(".json")) {
+            try {
+              JSON.parse(file.content);
+            } catch (jsonErr: any) {
+              throw new Error(`Ficheiro JSON inválido '${file.path}': ${jsonErr?.message || String(jsonErr)}`);
+            }
+          }
+        }
 
-        if (!testOk) {
-          throw new Error("Falha na validação sintática do código gerado.");
+        const diagReport = runWorkspaceDiagnostics(projectId);
+        if (!diagReport.isClean) {
+          const firstErr = diagReport.diagnostics.find((d) => d.severity === "error");
+          throw new Error(`Diagnóstico estático reprovado (${diagReport.errorCount} erro(s)): ${firstErr ? `[${firstErr.filePath}:${firstErr.line}] ${firstErr.message}` : "Erros detetados no workspace"}`);
+        }
+
+        // Se existirem ficheiros de teste no workspace, executa validação real no Sandbox
+        const hasTestFiles = wsFiles.some(
+          (f) =>
+            f.path.includes(".test.") ||
+            f.path.includes(".spec.") ||
+            f.path.startsWith("tests/") ||
+            f.path.startsWith("test/"),
+        );
+        if (hasTestFiles) {
+          const testRes = await executeInGriotSandbox(
+            {
+              id: `test-stage-${Date.now()}`,
+              type: "test.run",
+              category: "test",
+              risk: "safe",
+              requiresApproval: false,
+              params: {},
+              createdAt: new Date().toISOString(),
+              status: "pending",
+            },
+            { workspaceId: projectId, files: wsFiles },
+          );
+          if (testRes.exitCode !== 0) {
+            throw new Error(`Falha na execução dos testes do projeto (código ${testRes.exitCode}):\n${testRes.stderr || testRes.stdout}`);
+          }
         }
 
         progress.stageProgress = 85;
         progress.logs.push({
           timestamp: new Date().toLocaleTimeString(),
           stage: "test",
-          message: "Integridade de código e testes validados com 100% de sucesso.",
+          message: `Integridade validada com sucesso: ${diagReport.totalFilesScanned} ficheiros auditados, 0 erros sintáticos${hasTestFiles ? ", suite de testes aprovada no sandbox" : ""}.`,
           type: "success",
         });
         this.notify(progress);
 
-        await this.recordOpbEvent(projectId, "task_test_passed", { taskId });
+        await this.recordOpbEvent(projectId, "task_test_passed", { taskId, scannedFiles: diagReport.totalFilesScanned });
       }
 
       // 4. ETAPA PUBLISH
@@ -487,8 +539,9 @@ class AutonomousTaskEngineService {
 
       // Emite notificação nativa se o utilizador estiver noutra janela ou aba
       void notifyIfBackgrounded({
+        type: "task",
         title: "Autonomous Task Concluída!",
-        body: `O GRIOT concluiu o trabalho autónomo: "${payload.instruction.slice(0, 60)}"`,
+        message: `O GRIOT concluiu o trabalho autónomo: "${payload.instruction.slice(0, 60)}"`,
       });
 
       toast.success("Autonomous Task concluída com sucesso!");

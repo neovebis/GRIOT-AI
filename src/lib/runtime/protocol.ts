@@ -48,7 +48,17 @@ export type ObserverEvent = {
   metadata?: Record<string, unknown>;
 };
 
-export type GriotActionCategory = "fs" | "git" | "shell" | "test" | "search" | "connector" | "project" | "workspace" | "code";
+export type GriotActionCategory =
+  | "fs"
+  | "git"
+  | "shell"
+  | "test"
+  | "search"
+  | "connector"
+  | "project"
+  | "workspace"
+  | "code"
+  | "sandbox";
 
 export type GriotActionType =
   // File System
@@ -69,11 +79,23 @@ export type GriotActionType =
   | "git.commit"
   | "git.push"
   | "git.log"
+  | "git.branch"
+  | "git.add"
   // Terminal / Shell
   | "shell.exec"
   | "shell.install"
   | "shell.build"
   | "shell.status"
+  | "build.run"
+  // Code & Script Execution (Sandbox)
+  | "code.run"
+  | "code.execute"
+  | "python.run"
+  | "python.execute"
+  | "bash.run"
+  | "bash.exec"
+  | "sandbox.run"
+  | "sandbox.execute"
   // Test Runner
   | "test.run"
   | "test.verify"

@@ -50,3 +50,7 @@ supabase/.env.*
 
 *.apk
 *-apk/
+
+# Python caches
+__pycache__/
+*.py[cod]

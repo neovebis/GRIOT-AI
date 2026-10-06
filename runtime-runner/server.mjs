@@ -179,8 +179,17 @@ function commandFor(action) {
       return `git push origin ${quoteArg(String(p.branch || "main"))}`;
     case "git.log":
       return "git log -20 --oneline --decorate";
-    case "shell.install":
-      return `npm install ${String(p.package || "").trim()}`.trim();
+    case "shell.install": {
+      const rawPkg = String(p.package || "").trim();
+      if (!rawPkg) return "true";
+      const tokens = rawPkg.split(/\s+/).filter(Boolean);
+      for (const tok of tokens) {
+        if (!/^(@[a-zA-Z0-9_.-]+\/)?[a-zA-Z0-9_.-]+(@[a-zA-Z0-9_.~^><=-]+)?$/.test(tok) && !/^--?[a-zA-Z0-9_-]+$/.test(tok)) {
+          throw new Error(`Invalid package name or unsafe argument in shell.install: ${tok}`);
+        }
+      }
+      return `npm install ${tokens.map(quoteArg).join(" ")}`;
+    }
     case "shell.build":
       return String(p.command || "npm run build");
     case "shell.status":

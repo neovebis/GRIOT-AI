@@ -20,6 +20,7 @@ export const Route = createFileRoute("/api/chat")({
         }
 
         const authUser = await authenticateApiRequest(request);
+        const authorization = request.headers.get("authorization") || request.headers.get("Authorization") || "";
         if (!authUser) {
           return new Response(
             JSON.stringify({ error: "Sessão não autenticada. Inicia sessão novamente." }),
@@ -133,7 +134,7 @@ export const Route = createFileRoute("/api/chat")({
                   method: "POST",
                   headers: {
                     "content-type": "application/json",
-                    authorization,
+                    ...(authorization ? { authorization } : {}),
                     apikey: GRIOT_SUPABASE_ANON_KEY,
                   },
                   body: JSON.stringify({

@@ -12,6 +12,9 @@ import { defaultExecutor } from "./executors";
 import { parseGriotActions } from "./parser";
 import type { GriotAction, GriotExecutionResult } from "./protocol";
 import { validateSyntaxBalance } from "./semantic-patcher";
+import { PolicyGuard } from "./policy";
+
+const centralPolicyGuard = new PolicyGuard();
 
 export interface ReActExecutionStep {
   stepIndex: number;
@@ -210,8 +213,34 @@ export async function executeReActLoop(options: ReActLoopOptions): Promise<ReAct
         observationText += `\n[ALERTA DE ANTI-STALLING DO HARNESS]: Esta exata ação com os mesmos parâmetros já foi executada 2 vezes no loop. NÃO repitas a mesma chamada. Altera a estratégia, tenta outros ficheiros ou explica o impedimento ao utilizador.\n`;
       }
 
-      // Se a ação requer confirmação do utilizador (Human-in-the-Loop para ações de risco / destrutivas)
-      if (action.requiresApproval && callbacks?.onActionApprovalRequired) {
+      // 2. Avaliação de Segurança Obrigatória pelo PolicyGuard Central
+      const policyEvaluation = centralPolicyGuard.evaluate(action);
+      if (!policyEvaluation.allowed) {
+        const rejectResult: GriotExecutionResult = {
+          actionId: action.id,
+          actionType: action.type,
+          status: "failed",
+          exitCode: 126,
+          stdout: "",
+          stderr: `[POLICY GUARD VIOLATION]: Ação '${action.type}' bloqueada pelo Policy Engine central: ${policyEvaluation.reason || "Operação não permitida pelas diretrizes de segurança"}.`,
+          durationMs: 0,
+          timestamp: new Date().toISOString(),
+        };
+        callbacks?.onActionCompleted?.(action, rejectResult);
+        stepRecord.action = action;
+        stepRecord.result = rejectResult;
+        observationText += `\n[BLOQUEIO DE SEGURANÇA MANDATÓRIO]: ${rejectResult.stderr}\n`;
+        continue;
+      }
+
+      // 3. Human-in-the-Loop Gate para Ações Sensíveis ou com Requisito de Aprovação
+      const requiresApproval =
+        action.requiresApproval ||
+        policyEvaluation.requiresUserApproval ||
+        action.risk === "dangerous" ||
+        action.risk === "sensitive";
+
+      if (requiresApproval && callbacks?.onActionApprovalRequired) {
         const approved = await callbacks.onActionApprovalRequired(action);
         if (!approved) {
           const rejectResult: GriotExecutionResult = {
@@ -220,14 +249,14 @@ export async function executeReActLoop(options: ReActLoopOptions): Promise<ReAct
             status: "failed",
             exitCode: 1,
             stdout: "",
-            stderr: "Ação cancelada: O utilizador não autorizou a execução deste plugin/comando.",
+            stderr: `Ação cancelada: O utilizador não autorizou a execução da operação sensível '${action.type}'.`,
             durationMs: 0,
             timestamp: new Date().toISOString(),
           };
           callbacks?.onActionCompleted?.(action, rejectResult);
           stepRecord.action = action;
           stepRecord.result = rejectResult;
-          observationText += `\n[Permissão Recusada]: O utilizador não autorizou a execução de ${action.type}. Por favor informa o utilizador sobre a recusa e formula uma alternativa ou continua sem executar esta ação.\n`;
+          observationText += `\n[Permissão Recusada]: O utilizador não autorizou a execução de ${action.type}. Por favor formula uma alternativa segura ou continua sem executar esta ação.\n`;
           continue;
         }
       }

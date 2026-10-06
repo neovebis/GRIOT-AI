@@ -711,16 +711,37 @@ class Simulator:
         return {"mean": mean, "variance": sum((x-mean)**2 for x in values)/len(values), "min": min(values), "max": max(values)}
 
 
-@dataclass(slots=True)
+@dataclass
 class GRIOT:
-    kernel: NumericKernel
-    quids: QUIDRegistry
-    graph: KnowledgeGraph
-    interpreter: SemanticInterpreter
-    learner: TextLearner
-    scenes: SceneBuilder
-    simulator: Simulator
+    kernel: NumericKernel = None  # type: ignore
+    quids: QUIDRegistry = None  # type: ignore
+    graph: KnowledgeGraph = None  # type: ignore
+    interpreter: SemanticInterpreter = None  # type: ignore
+    learner: TextLearner = None  # type: ignore
+    scenes: SceneBuilder = None  # type: ignore
+    simulator: Simulator = None  # type: ignore
     version: str = "0.1.0"
+    context: dict[str, Any] = field(default_factory=dict)
+    discourse: list[Any] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        dim = 64
+        if isinstance(self.kernel, dict):
+            dim = self.kernel.get("dimension", 64)
+            self.kernel = None
+        if self.kernel is None:
+            created = GRIOT.create(dim)
+            self.kernel = created.kernel
+            self.quids = created.quids
+            self.graph = created.graph
+            self.interpreter = created.interpreter
+            self.learner = created.learner
+            self.scenes = created.scenes
+            self.simulator = created.simulator
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {"dimension": getattr(self.kernel, "dimension", 64)}
 
     @classmethod
     def create(cls, dimension: int = 64) -> "GRIOT":
@@ -733,6 +754,15 @@ class GRIOT:
         graph.add_rule("causal_chain", "causes", "causes", "causes")
         interpreter = SemanticInterpreter(registry, kernel)
         return cls(kernel, registry, graph, interpreter, TextLearner(registry, graph, interpreter), SceneBuilder(registry, graph), Simulator())
+
+    def analisar(self, text: str) -> Any:
+        from griot_semantic_ir import SemanticGRIOT
+        semantic = SemanticGRIOT(self)
+        meaning = semantic.understand(text)
+        @dataclass
+        class AnalysisResult:
+            gir: Any
+        return AnalysisResult(gir=meaning)
 
     def understand(self, text: str) -> SemanticFrame:
         return self.interpreter.intent(text)

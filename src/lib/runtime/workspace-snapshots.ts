@@ -28,9 +28,36 @@ export interface WorkspaceSnapshot {
 }
 
 const snapshotsCache = new Map<string, WorkspaceSnapshot[]>();
+const SNAPSHOT_STORAGE_PREFIX = "griot_ws_snapshots_";
+
+function getSnapshotStorageKey(workspaceId: string): string {
+  const cleanId = (workspaceId || "default").replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `${SNAPSHOT_STORAGE_PREFIX}${cleanId}`;
+}
+
+function loadPersistedSnapshots(workspaceId: string): WorkspaceSnapshot[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(getSnapshotStorageKey(workspaceId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSnapshots(workspaceId: string, snapshots: WorkspaceSnapshot[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(getSnapshotStorageKey(workspaceId), JSON.stringify(snapshots.slice(0, 20)));
+  } catch (err) {
+    console.warn("[Snapshots Engine] Falha ao persistir snapshot em storage:", err);
+  }
+}
 
 /**
- * Cria um snapshot instantâneo do workspace atual.
+ * Cria um snapshot instantâneo do workspace atual com garantia de persistência durável.
  */
 export function createWorkspaceSnapshot(
   label: string = "Automatic checkpoint",
@@ -52,20 +79,25 @@ export function createWorkspaceSnapshot(
     })),
   };
 
-  const list = snapshotsCache.get(workspaceId) || [];
-  // Mantém no máximo os últimos 20 snapshots por workspace
+  const list = getWorkspaceSnapshots(workspaceId);
   list.unshift(snapshot);
   if (list.length > 20) list.pop();
   snapshotsCache.set(workspaceId, list);
+  persistSnapshots(workspaceId, list);
 
   return snapshot;
 }
 
 /**
- * Obtém todos os snapshots de um workspace.
+ * Obtém todos os snapshots de um workspace (da cache e do armazenamento durável).
  */
 export function getWorkspaceSnapshots(workspaceId: string = "default"): WorkspaceSnapshot[] {
-  return snapshotsCache.get(workspaceId) || [];
+  let list = snapshotsCache.get(workspaceId);
+  if (!list || list.length === 0) {
+    list = loadPersistedSnapshots(workspaceId);
+    snapshotsCache.set(workspaceId, list);
+  }
+  return list;
 }
 
 /**

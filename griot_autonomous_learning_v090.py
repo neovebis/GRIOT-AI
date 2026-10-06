@@ -49,9 +49,9 @@ class AutonomousLearner:
     """
 
     def __init__(self, engine: GRIOT | None = None) -> None:
+        from griot_semantic_ir import SemanticGRIOT
         self.engine = engine or GRIOT()
-        self.inducer = KnowledgeInducer()
-        self.inducer.semantic.engine = self.engine
+        self.inducer = KnowledgeInducer(SemanticGRIOT(self.engine))
         self._staging: list[CandidateFact] = []
 
     def observe(self, text: str, source: str = "text") -> tuple[CandidateFact, ...]:

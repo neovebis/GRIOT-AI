@@ -84,6 +84,7 @@ export async function fetchUserGcuWallet(userId?: string): Promise<GcuWalletStat
             reserved_gcu: 0,
             debt_gcu: 0,
             version: 1,
+            updated_at: new Date().toISOString(),
           })
           .select("balance_gcu, lifetime_used_gcu")
           .maybeSingle();

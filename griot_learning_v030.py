@@ -181,9 +181,10 @@ class KnowledgeInducer:
         return facts
 
     def _simple_property(self, expression: str, subject: str) -> list[Fact]:
-        expression = self.semantic.compiler.clean(expression)
+        cleaned_expr = re.sub(r"^(?:tem|possui|contém|cobre)\s+(?:um|uma|o|a|os|as)?\s*", "", expression.strip(), flags=re.I)
+        cleaned_expr = self.semantic.compiler.clean(cleaned_expr)
         sq = self._quid(subject)
-        oq = self._quid(expression, family=2)
+        oq = self._quid(cleaned_expr, family=2)
         return [Fact(sq.symbol, "has", oq.symbol, 0.9, False, "induction", expression)]
 
     def _quid(self, label: str, family: int = 1):

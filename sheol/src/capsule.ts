@@ -5,10 +5,10 @@ export interface CapsuleCompilationInput {
   readonly phase: PhaseContract;
   readonly committedArtifacts: readonly Artifact[];
   readonly gates: readonly GateResult[];
-  readonly declaredDecisions?: readonly string[];
-  readonly interfaces?: readonly string[];
-  readonly architectureFacts?: readonly string[];
-  readonly unresolved?: readonly string[];
+  readonly declaredDecisions?: readonly string[] | undefined;
+  readonly interfaces?: readonly string[] | undefined;
+  readonly architectureFacts?: readonly string[] | undefined;
+  readonly unresolved?: readonly string[] | undefined;
 }
 
 export class ContinuityCapsuleCompiler {
