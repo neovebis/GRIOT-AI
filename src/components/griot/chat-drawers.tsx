@@ -3,12 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { relativeTime } from "@/lib/griot";
 import { MessageCircle, Zap, Pin, Plus, X } from "lucide-react";
 import { useT } from "@/lib/i18n";
+import type { GriotEngineId } from "@/lib/engine-client";
 
 export type Conversation = {
   id: string;
   scope: string;
   title: string | null;
   model: string;
+  engine: GriotEngineId;
   pinned: boolean;
   archived: boolean;
   updated_at: string;
@@ -35,7 +37,7 @@ export async function listConversations(): Promise<Conversation[]> {
   try {
     const { data } = await (supabase as any)
       .from("griot_conversations")
-      .select("id, title, updated_at")
+      .select("id, title, updated_at, project_id, engine_id")
       .order("updated_at", { ascending: false })
       .limit(60);
     dbRows = data ?? [];
@@ -58,9 +60,11 @@ export async function listConversations(): Promise<Conversation[]> {
       scope: inferredScope,
       title,
       model: loc.model || "ModelOS",
+      engine: (loc.engine === "sheol" || c.engine_id === "sheol" ? "sheol" : "orchestrator"),
       pinned: Boolean(loc.pinned),
       archived: Boolean(loc.archived),
       updated_at: c.updated_at || loc.updated_at || new Date().toISOString(),
+      project_id: c.project_id || loc.project_id || null,
     });
   }
 
