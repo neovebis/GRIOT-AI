@@ -65,6 +65,11 @@ async function attachNativeRuntime(c:Ctx,projectId:string,input:Row){
   const binding=await c.db.from("griot_studio_repository_bindings").select("repository_full_name,ref,status").eq("workspace_id",c.workspaceId).eq("project_id",projectId).eq("status","verified").order("verified_at",{ascending:false}).limit(1).maybeSingle();
   if(binding.error) throw new ApiError(500,"Could not load verified repository binding");
   if(!binding.data) throw new ApiError(409,"A verified repository binding is required before attaching the Native runtime");
+  const existingRun=await c.db.from("griot_studio_compute_runs").select("internal_run_id,runtime_id,connection_id,provider,status,repository_full_name,repository_ref,source_commit_sha,source_tree_sha").eq("workspace_id",c.workspaceId).eq("project_id",projectId).eq("user_id",c.user.id).eq("provider","native").eq("status","ready").eq("source_commit_sha",sourceCommitSha).eq("source_tree_sha",sourceTreeSha).order("updated_at",{ascending:false}).limit(1).maybeSingle();
+  if(existingRun.error) throw new ApiError(500,"Could not resolve existing Native runtime run");
+  if(existingRun.data){
+    return {run:{id:existingRun.data.internal_run_id,runtimeId:existingRun.data.runtime_id,connectionId:existingRun.data.connection_id,provider:"native",state:"ready",repository:existingRun.data.repository_full_name,ref:existingRun.data.repository_ref,sourceCommitSha,sourceTreeSha,sourceTrust:"device-git-evidence"}};
+  }
   const now=new Date().toISOString();
   let connection=await c.db.from("griot_studio_compute_connections").select("id,internal_connection_id").eq("workspace_id",c.workspaceId).eq("user_id",c.user.id).eq("provider","native").eq("status","active").order("updated_at",{ascending:false}).limit(1).maybeSingle();
   if(connection.error) throw new ApiError(500,"Could not load Native compute connection");
