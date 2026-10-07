@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
-def admobAppId = System.getenv("ADMOB_APP_ID") ?: "ca-app-pub-3940256099942544~3347511713"
-def admobNativeAdUnitId = System.getenv("ADMOB_NATIVE_AD_UNIT_ID") ?: "ca-app-pub-3940256099942544/2247696110"
+def admobAppId = System.getenv("ADMOB_APP_ID") ?: "ca-app-pub-5366468248686411~4486445388"
+def admobNativeAdUnitId = System.getenv("ADMOB_NATIVE_AD_UNIT_ID") ?: "ca-app-pub-5366468248686411/4636373215"
 
 android {
     namespace = "com.griot.app"
@@ -10,8 +10,8 @@ android {
         applicationId "com.griot.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 101
-        versionName "1.1.01"
+        versionCode 102
+        versionName "1.1.02"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [ADMOB_APP_ID: admobAppId]
         resValue "string", "admob_native_ad_unit_id", admobNativeAdUnitId

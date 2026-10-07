@@ -81,6 +81,9 @@ jobs:
 
       - name: Build Release APK
         working-directory: android
+        env:
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID || 'ca-app-pub-5366468248686411~4486445388' }}
+          ADMOB_NATIVE_AD_UNIT_ID: ${{ secrets.ADMOB_NATIVE_AD_UNIT_ID || 'ca-app-pub-5366468248686411/4636373215' }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
@@ -119,7 +122,7 @@ jobs:
           sha256sum GRIOT-Mobile*.apk
 
           GRADLE_VER=$(grep 'versionName' android/app/build.gradle | head -n 1 | sed -E 's/.*"([^"]+)".*/\1/')
-          TAG_TO_USE="v${GRADLE_VER:-1.1.01}"
+          TAG_TO_USE="v${GRADLE_VER:-1.1.02}"
           if [ "${{ github.ref_type }}" = "tag" ]; then
             TAG_TO_USE="${{ github.ref_name }}"
           fi
