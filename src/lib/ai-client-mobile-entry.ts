@@ -5,6 +5,8 @@ import type { ChatMessage, StreamCallbacks, AIResponse } from "./ai-client";
 import {
   GEMINI_TOOL_DECLARATIONS,
   OPENAI_TOOLS,
+  ANTHROPIC_TOOLS,
+  GRIOT_PLATFORM_CAPABILITIES_PROMPT,
   getSavedApiKey,
   getAnyConfiguredApiKey,
   resolveProviderAndModel,
@@ -22,6 +24,8 @@ export type { ChatMessage, StreamCallbacks, AIResponse };
 export {
   GEMINI_TOOL_DECLARATIONS,
   OPENAI_TOOLS,
+  ANTHROPIC_TOOLS,
+  GRIOT_PLATFORM_CAPABILITIES_PROMPT,
   getSavedApiKey,
   getAnyConfiguredApiKey,
   resolveProviderAndModel,
