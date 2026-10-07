@@ -46,7 +46,10 @@ export const Route = createFileRoute("/api/runtime/execute")({
           import.meta.env.VITE_GRIOT_RUNTIME_EXECUTOR_URL ||
           "";
         const sharedSecret =
-          customSecret || process.env.GRIOT_RUNTIME_SHARED_SECRET || "default-griot-secret";
+          customSecret || process.env.GRIOT_RUNTIME_SHARED_SECRET || "";
+        if (!sharedSecret) {
+          return json({ error: "GRIOT runtime shared secret is not configured." }, 503);
+        }
         if (!executorUrl) {
           return json(
             {
