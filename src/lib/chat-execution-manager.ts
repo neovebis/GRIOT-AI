@@ -32,6 +32,7 @@ import {
   markSheolTrialUsed,
 } from "@/lib/gcu-service";
 import { GRIOT_PLATFORM_CAPABILITIES_PROMPT } from "@/lib/ai-client";
+import { runOrchestratorEngine } from "@/lib/engine-client";
 
 export interface ExecutionStepItem {
   id: string;
@@ -93,6 +94,7 @@ export interface ExecutionState {
 }
 
 export interface StartExecutionParams {
+  engineId?: "orchestrator" | "sheol";
   conversationId: string;
   scope: "main" | "quick";
   userId: string;
@@ -208,6 +210,171 @@ class ChatExecutionManager {
       reasoning: "",
       steps: 0,
     });
+  }
+
+  /**
+   * Caminho production do chat normal.
+   * Todos os providers/modelos passam pelo Orchestrator v6; as ferramentas pertencem
+   * à engine e são executadas pelo Studio Compute, nunca pelo provider individual.
+   */
+  public async startOrchestratorExecution(params: StartExecutionParams): Promise<void> {
+    const {
+      conversationId,
+      scope,
+      userId,
+      modelId,
+      userPrompt,
+      effort = "medium",
+      currentProject,
+    } = params;
+    if (params.engineId === "sheol") {
+      throw new Error("SHEOL é uma engine de missão. Usa o painel Mission/Phase/Gate, não o chat normal.");
+    }
+
+    const existing = this.activeExecutions.get(conversationId);
+    if (existing) {
+      try { existing.controller.abort(new Error("Substituída por nova execução")); } catch {}
+      this.activeExecutions.delete(conversationId);
+    }
+
+    const controller = new AbortController();
+    const stepsList: ExecutionStepItem[] = [{
+      id: crypto.randomUUID(),
+      type: "thinking",
+      label: "Orchestrator: Working",
+      detail: "A preparar contexto, provider e ferramentas do projeto",
+      status: "running",
+      timestamp: Date.now(),
+    }];
+    const active: ActiveExecution = {
+      controller,
+      state: {
+        conversationId,
+        scope,
+        busy: true,
+        streaming: "",
+        reasoning: "Engine: Orchestrator\nStatus: Working",
+        steps: 1,
+        currentPhase: "thinking",
+        currentActionDetail: "Orchestrator: Working",
+        stepsList: [...stepsList],
+      },
+      listeners: new Set(),
+      startedAt: Date.now(),
+    };
+    this.activeExecutions.set(conversationId, active);
+    this.notify(conversationId, { ...active.state });
+
+    const userMsg: ChatMessageRow = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: userPrompt,
+      created_at: new Date().toISOString(),
+      feedback: null,
+      metadata: { engineId: "orchestrator" },
+    };
+    this.appendMessageLocally(conversationId, userMsg);
+
+    try {
+      const result = await runOrchestratorEngine({
+        userId,
+        conversationId,
+        projectId: currentProject?.id || null,
+        modelId,
+        prompt: userPrompt,
+        effort,
+        signal: controller.signal,
+      });
+
+      for (const item of result.toolTrace) {
+        const tool = String(item.tool || "tool");
+        stepsList.push({
+          id: crypto.randomUUID(),
+          type: tool.startsWith("workspace.read") || tool === "workspace.list" ? "reading"
+            : tool.startsWith("workspace.") || tool === "archive.extract" ? "editing"
+            : "editing",
+          label: item.approvalRequired ? `${tool}: Waiting for approval`
+            : item.ok === false ? `${tool}: Failed`
+            : `${tool}: Done`,
+          detail: `HTTP ${item.status ?? "?"} · state=${item.executionState ?? "n/a"} · exit=${item.exitCode ?? "n/a"} · executionId=${item.executionId ?? "n/a"}`,
+          status: item.approvalRequired ? "running" : item.ok === false ? "error" : "done",
+          timestamp: Date.now(),
+        });
+      }
+      stepsList[0].status = "done";
+      const verificationLabel =
+        result.verificationState === "waiting_for_approval" ? "Waiting for approval"
+        : result.verificationState === "verification_required" ? "Verification required"
+        : result.verificationState === "verification_passed" ? "Verification passed"
+        : result.verificationState === "verification_failed" ? "Verification failed"
+        : "Unverified";
+      stepsList.push({
+        id: crypto.randomUUID(),
+        type: "thinking",
+        label: verificationLabel,
+        detail: "Estado derivado de receipts do Orchestrator/Studio Compute",
+        status: result.verificationState === "verification_failed" ? "error"
+          : result.verificationState === "waiting_for_approval" || result.verificationState === "verification_required" ? "running"
+          : "done",
+        timestamp: Date.now(),
+      });
+
+      const answer = result.text || "O Orchestrator terminou sem conteúdo textual.";
+      active.state.streaming = answer;
+      active.state.reasoning = `Engine: Orchestrator\nStatus: ${verificationLabel}`;
+      active.state.stepsList = [...stepsList];
+      active.state.steps = stepsList.length;
+      active.state.currentPhase = "writing";
+      active.state.currentActionDetail = verificationLabel;
+      this.notify(conversationId, { ...active.state });
+
+      await this.finalizeAssistantMessage(
+        conversationId,
+        answer,
+        userId,
+        modelId,
+        stepsList,
+        active.state.reasoning,
+        {
+          engineId: "orchestrator",
+          orchestratorRequestId: result.requestId,
+          verificationState: result.verificationState,
+          verification: result.verification,
+          studioToolTrace: result.toolTrace,
+        },
+      );
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      const message = error instanceof Error ? error.message : String(error);
+      stepsList[0].status = "error";
+      active.state.error = message;
+      active.state.currentActionDetail = "Orchestrator unavailable";
+      active.state.stepsList = [...stepsList];
+      this.notify(conversationId, { ...active.state });
+      await this.finalizeAssistantMessage(
+        conversationId,
+        `⚠️ **Orchestrator indisponível**\n\n${message}\n\nNão foi usado nenhum fallback silencioso para outro motor/modelo.`,
+        userId,
+        modelId,
+        stepsList,
+        "Engine: Orchestrator\nStatus: Unavailable",
+        { engineId: "orchestrator", unavailable: true },
+      );
+    } finally {
+      this.activeExecutions.delete(conversationId);
+      this.notify(conversationId, {
+        conversationId,
+        scope,
+        busy: false,
+        streaming: "",
+        reasoning: "",
+        steps: 0,
+        stepsList: [],
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("griot_conversations_changed"));
+      }
+    }
   }
 
   /** Inicia a geração de mensagem em background */
@@ -927,8 +1094,9 @@ class ChatExecutionManager {
     modelId: string,
     stepsList?: ExecutionStepItem[],
     reasoning?: string,
+    extraMetadata?: Record<string, unknown>,
   ): Promise<void> {
-    const asstId = `asst-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const asstId = crypto.randomUUID();
     const asstMsg: ChatMessageRow = {
       id: asstId,
       role: "assistant",
@@ -939,6 +1107,7 @@ class ChatExecutionManager {
       stepsList: stepsList && stepsList.length > 0 ? stepsList : undefined,
       reasoning: reasoning?.trim() || undefined,
       steps: stepsList?.length || 0,
+      metadata: extraMetadata,
     };
 
     // 1. Gravação local imediata (disponível instantaneamente mesmo offline ou ao navegar)
@@ -959,6 +1128,7 @@ class ChatExecutionManager {
             model: modelId,
             stepsList: stepsList && stepsList.length > 0 ? stepsList : undefined,
             reasoning: reasoning?.trim() || undefined,
+            ...(extraMetadata || {}),
           },
         });
 
