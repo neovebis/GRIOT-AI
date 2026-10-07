@@ -42,9 +42,9 @@ export function isGpuModel(id?: string): boolean {
 export const BASE_CHAT_MODELS: ModelOption[] = [];
 export const QUICK_CHAT_MODELS: ModelOption[] = [];
 
-// BASE (ModelGPU) e SHEOL (GriotGPU v2) estão sempre no topo da seleção
+// Engine e provider/model são estados separados. O modelo default é a primeira API real ligada.
 export function getDefaultModel(): string {
-  return BASE_MODEL_ID;
+  return getUserSavedApis()[0]?.id || "";
 }
 
 export const DEFAULT_MODEL = getDefaultModel();
@@ -62,21 +62,7 @@ export function isModelOS(id?: string): boolean {
 }
 
 export function getAvailableModels(_prefs?: Record<string, unknown>): ModelOption[] {
-  const options: ModelOption[] = [
-    {
-      id: BASE_MODEL_ID,
-      label: "BASE",
-      hint: "GriotGPU · Motor de 3 Ondas (Edge)",
-      vendor: "base",
-    },
-    {
-      id: SHEOL_MODEL_ID,
-      label: "SHEOL",
-      hint: "SHEOL · Motor Cognitivo Edge",
-      vendor: "sheol",
-    },
-  ];
-
+  const options: ModelOption[] = [];
   const userApis = getUserSavedApis();
   for (const api of userApis) {
     options.push({
@@ -86,12 +72,11 @@ export function getAvailableModels(_prefs?: Record<string, unknown>): ModelOptio
       vendor: api.providerId,
     });
   }
-
   return options;
 }
 
 export function modelLabel(id: string) {
-  if (!id) return "BASE";
+  if (!id) return "Selecionar API";
   if (isBaseModel(id)) return "BASE";
   if (isSheolModel(id)) return "SHEOL";
   if (isModelOS(id)) return "ModelOS";
