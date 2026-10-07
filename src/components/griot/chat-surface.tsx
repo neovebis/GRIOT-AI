@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_MODEL, getAvailableModels, modelLabel, isModelOS, isSheolModel } from "@/lib/griot";
+import type { GriotEngineId } from "@/lib/engine-client";
 import { getUserSavedApis, syncUserApisWithRemote } from "@/lib/user-apis";
 import { getPrimaryWorkspaceId } from "@/lib/griot-api";
 import { resolveProviderAndModel, getSavedApiKey } from "@/lib/ai-client";
@@ -113,6 +114,8 @@ import { runQuickDeliberation } from "@/lib/runtime/quick-deliberation-engine";
 import type { MessageReaction } from "@/lib/chat-execution-manager";
 import { PluginsView } from "@/components/griot/plugins-view";
 import { AutonomousTaskModal } from "@/components/griot/autonomous-task-modal";
+import { SheolMissionPanel } from "@/components/griot/sheol-mission-panel";
+import { startNativeStudioWorker } from "@/lib/runtime/native-studio-broker";
 
 import {
   captureAsText,
@@ -156,7 +159,7 @@ const EFFORTS = [
 ] as const;
 
 type Effort = (typeof EFFORTS)[number]["id"];
-type Sheet = null | "plus" | "model" | "actions" | "projects" | "captures";
+type Sheet = null | "plus" | "model" | "engine" | "actions" | "projects" | "captures";
 
 /** Vozes das Definições → vozes reais de síntese. */
 const TTS_VOICES: Record<string, string> = {
@@ -405,6 +408,10 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [scope, setScope] = useState<"main" | "quick">("main");
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const conversationId = conversation?.id ?? null;
+  const [engine, setEngine] = useState<GriotEngineId>(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("griot-default-engine") === "sheol") return "sheol";
+    return "orchestrator";
+  });
   const [messages, setMessages] = useState<Row[]>([]);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState("");
@@ -430,6 +437,7 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [activeProject, setActiveProjectState] = useState<GriotProject | null>(() =>
     getActiveProjectSync(),
   );
+  const engineProjectId = conversation?.project_id || activeProject?.id || null;
   const [autonomousTaskModalOpen, setAutonomousTaskModalOpen] = useState(false);
   const [autonomousTaskInstruction, setAutonomousTaskInstruction] = useState("");
   const [captures, setCaptures] = useState<CaptureRow[]>([]);
@@ -475,6 +483,19 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isMessagePreviewActive, setIsMessagePreviewActive] = useState(false);
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
+
+  useEffect(() => {
+    if (!engineProjectId || !userId || userId === "anonymous") return;
+    return startNativeStudioWorker({
+      userId,
+      projectId: engineProjectId,
+      onStatus: (status) => {
+        if (status.state === "unavailable" || status.state === "error") {
+          console.warn("[Native Studio Worker]", status.detail);
+        }
+      },
+    });
+  }, [engineProjectId, userId]);
 
   useEffect(() => {
     const onPreviewState = (e: any) => {
@@ -733,6 +754,7 @@ export function ChatSurface({ userId }: { userId: string }) {
         if (!cancelled) {
           setConversation(localConv);
           setModel(localConv.model || DEFAULT_MODEL);
+          setEngine(localConv.engine || "orchestrator");
         }
         return;
       }
@@ -741,7 +763,7 @@ export function ChatSurface({ userId }: { userId: string }) {
       try {
         const { data: existing } = await (supabase as any)
           .from("griot_conversations")
-          .select("id, title, updated_at")
+          .select("id, title, updated_at, project_id, engine_id")
           .order("updated_at", { ascending: false })
           .limit(15);
 
@@ -769,6 +791,7 @@ export function ChatSurface({ userId }: { userId: string }) {
               scope: "main",
               title: candidate.title || "Conversa Principal",
               model: DEFAULT_MODEL,
+              engine: candidate.engine_id === "sheol" ? "sheol" : "orchestrator",
               pinned: false,
               archived: false,
               updated_at: candidate.updated_at,
@@ -780,6 +803,7 @@ export function ChatSurface({ userId }: { userId: string }) {
           if (!cancelled) {
             setConversation(matched);
             setModel(matched.model || DEFAULT_MODEL);
+            setEngine(matched.engine || "orchestrator");
             saveConversationLocally(matched);
           }
           return;
@@ -1189,6 +1213,10 @@ export function ChatSurface({ userId }: { userId: string }) {
   ) {
     if (!conversationId) return;
     const activeEffort = options?.effort ?? effort;
+    if (scope !== "quick" && engine === "sheol") {
+      toast.info(t("SHEOL usa missões estruturadas. Configura e inicia a missão no painel SHEOL."));
+      return;
+    }
     const voiceMode = options?.voice === true;
 
     // Identificar o projeto associado à conversa ou o projeto ativo global
@@ -1419,7 +1447,8 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
 
     setBusy(true);
     try {
-      await chatExecutionManager.startExecution({
+      await chatExecutionManager.startOrchestratorExecution({
+        engineId: "orchestrator",
         conversationId: targetConvId,
         scope: targetScope,
         userId,
@@ -1964,12 +1993,13 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
 
   async function newConversation(next: "main" | "quick") {
     const defaultTitle = next === "quick" ? "Novo Quick" : "Nova Conversa";
-    const localId = `conv_${next}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const localId = crypto.randomUUID();
     const createdConv: Conversation = {
       id: localId,
       scope: next,
       title: defaultTitle,
       model,
+      engine,
       pinned: false,
       archived: false,
       updated_at: new Date().toISOString(),
@@ -1996,11 +2026,31 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
           owner_id: userId && userId !== "anonymous" ? userId : null,
           created_by: userId && userId !== "anonymous" ? userId : null,
           title: defaultTitle,
+          engine_id: engine,
         });
       } catch {
         // ignore
       }
     })();
+  }
+
+  async function changeEngine(nextEngine: GriotEngineId) {
+    setEngine(nextEngine);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("griot-default-engine", nextEngine);
+    }
+    if (!conversation) return;
+    const updated = { ...conversation, engine: nextEngine, updated_at: new Date().toISOString() };
+    setConversation(updated);
+    saveConversationLocally(updated);
+    try {
+      await (supabase as any)
+        .from("griot_conversations")
+        .update({ engine_id: nextEngine, updated_at: new Date().toISOString() })
+        .eq("id", conversation.id);
+    } catch (error) {
+      console.warn("[GRIOT] Falha ao persistir engine da conversa:", error);
+    }
   }
 
   async function switchScope(targetScope: "main" | "quick") {
@@ -3090,6 +3140,42 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
             </div>
           ) : null}
 
+          {sheet === "engine" ? (
+            <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
+              <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                {t("ENGINE")}
+              </p>
+              {(["orchestrator", "sheol"] as GriotEngineId[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    void changeEngine(option);
+                    setSheet(null);
+                  }}
+                  className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-secondary"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <span className="grid size-7 place-items-center rounded-full bg-secondary">
+                      {option === "orchestrator" ? <Brain className="size-4" /> : <ShieldAlert className="size-4" />}
+                    </span>
+                    <span>
+                      <span className="block text-[13px] font-semibold">
+                        {option === "orchestrator" ? "Orchestrator" : "SHEOL"}
+                      </span>
+                      <span className="block text-[10.5px] text-muted-foreground">
+                        {option === "orchestrator"
+                          ? "Chat/agente flexível com provider/model"
+                          : "Missão rígida com phases, receipts e gates"}
+                      </span>
+                    </span>
+                  </span>
+                  {engine === option ? <Check className="size-4" /> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {sheet === "model" ? (
             <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
               <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -3196,6 +3282,19 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                   </button>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {scope !== "quick" && engine === "sheol" ? (
+            <div className="mb-2.5">
+              <SheolMissionPanel
+                userId={userId}
+                projectId={engineProjectId}
+                initialObjective={draft}
+                onResult={(result) => {
+                  setActionDetail(`SHEOL: ${result.state}`);
+                }}
+              />
             </div>
           ) : null}
 
@@ -3382,6 +3481,18 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                     <Plus className="size-[18px]" />
                   </button>
                   {scope !== "quick" && (
+                    <button
+                      type="button"
+                      onClick={() => setSheet(sheet === "engine" ? null : "engine")}
+                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-secondary px-2.5 text-[11.5px] font-semibold text-foreground"
+                      aria-label={t("Selecionar engine")}
+                    >
+                      {engine === "orchestrator" ? <Brain className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+                      <span>{engine === "orchestrator" ? "ORCH" : "SHEOL"}</span>
+                      <ChevronDown className="size-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                  {scope !== "quick" && engine === "orchestrator" && (
                     <button
                       onClick={() => {
                         if (availableModels.length === 0) {
