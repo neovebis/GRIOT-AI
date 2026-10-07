@@ -328,21 +328,25 @@ class ChatExecutionManager {
       active.state.currentActionDetail = verificationLabel;
       this.notify(conversationId, { ...active.state });
 
-      await this.finalizeAssistantMessage(
-        conversationId,
-        answer,
-        userId,
-        modelId,
+      this.appendMessageLocally(conversationId, {
+        id: result.raw?.message?.id || crypto.randomUUID(),
+        role: "assistant",
+        content: answer,
+        created_at: result.raw?.message?.created_at || new Date().toISOString(),
+        feedback: null,
+        model: modelId,
         stepsList,
-        active.state.reasoning,
-        {
+        reasoning: active.state.reasoning,
+        steps: stepsList.length,
+        metadata: {
           engineId: "orchestrator",
           orchestratorRequestId: result.requestId,
           verificationState: result.verificationState,
           verification: result.verification,
           studioToolTrace: result.toolTrace,
+          backendPersisted: true,
         },
-      );
+      });
     } catch (error) {
       if (controller.signal.aborted) return;
       const message = error instanceof Error ? error.message : String(error);
