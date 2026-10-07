@@ -38,6 +38,9 @@ function preparePreviewHtml(code, language = "html") {
   if (trimmed.includes("<!DOCTYPE html>") || (trimmed.includes("<html") && trimmed.includes("</html>"))) {
     let completeHtml = trimmed;
 
+    completeHtml = completeHtml.replace(/<link[^>]*href=["'](?:style\.css|styles\.css|\.\/[^"']+\.css)["'][^>]*>/gi, "");
+    completeHtml = completeHtml.replace(/<script[^>]*src=["'](?:script\.js|app\.js|main\.js|\.\/[^"']+\.js)["'][^>]*>\s*<\/script>/gi, "");
+
     if (!completeHtml.includes('name="viewport"')) {
       if (completeHtml.includes("<head>")) {
         completeHtml = completeHtml.replace("<head>", '<head>\n  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">');
@@ -122,14 +125,29 @@ function preparePreviewHtml(code, language = "html") {
       }
     }
 
+    let detectedDefaultExport = "";
+    const exportFnMatch = trimmed.match(/export\s+default\s+function\s+([A-Za-z0-9_$]+)/);
+    if (exportFnMatch) detectedDefaultExport = exportFnMatch[1];
+    const exportIdMatch = trimmed.match(/export\s+default\s+([A-Za-z0-9_$]+)\s*;?/);
+    if (exportIdMatch && !detectedDefaultExport) detectedDefaultExport = exportIdMatch[1];
+    const exportConstMatch = trimmed.match(/export\s+default\s+const\s+([A-Za-z0-9_$]+)/);
+    if (exportConstMatch && !detectedDefaultExport) detectedDefaultExport = exportConstMatch[1];
+
     let cleanCode = trimmed
       .replace(/import\s+[\s\S]*?from\s+['"][^'"]+['"];?/g, "")
       .replace(/import\s+['"][^'"]+['"];?/g, "")
-      .replace(/export\s+default\s+function\s+([A-Za-z0-9_$]+)/g, "function $1;\nwindow.__GRIOT_ENTRY_COMPONENT__ = $1;")
+      .replace(/export\s+default\s+function\s+([A-Za-z0-9_$]+)/g, "function $1")
+      .replace(/export\s+default\s+function\s*\(/g, "window.__GRIOT_ENTRY_COMPONENT__ = function(")
       .replace(/export\s+default\s+const\s+([A-Za-z0-9_$]+)/g, "const $1")
-      .replace(/export\s+default\s+([A-Za-z0-9_$]+);?/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1;")
-      .replace(/export\s+default\s+(function\s*\([^)]*\)\s*\{|\([^)]*\)\s*=>|\w+\s*=>)/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1")
-      .replace(/export\s+(function|const|let|var|class|type|interface)\s+/g, "$1 ");
+      .replace(/export\s+default\s+([A-Za-z0-9_$]+)\s*;?/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1;")
+      .replace(/export\s+default\s+(\([^)]*\)\s*=>|[A-Za-z0-9_$]+\s*=>)/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1")
+      .replace(/export\s+default\s+class\s+([A-Za-z0-9_$]+)/g, "class $1")
+      .replace(/export\s+(function|const|let|var|class|type|interface)\s+/g, "$1 ")
+      .replace(/export\s*\{[^}]*\}\s*;?/g, "");
+
+    if (detectedDefaultExport) {
+      cleanCode += `\ntry { if (typeof ${detectedDefaultExport} !== 'undefined') window.__GRIOT_ENTRY_COMPONENT__ = ${detectedDefaultExport}; } catch(e){}`;
+    }
 
     const candidateMatches = [
       ...cleanCode.matchAll(/(?:function\s+([A-Z][A-Za-z0-9_$]*)|(?:const|let|var)\s+([A-Z][A-Za-z0-9_$]*)\s*=\s*(?:\([^)]*\)|props|\(\))\s*=>)/g)
@@ -152,6 +170,10 @@ function preparePreviewHtml(code, language = "html") {
   <script type="text/babel" data-presets="react,typescript">
     (function() {
       const { useState, useEffect } = React;
+      window.Button = function Button() {};
+      window.Card = function Card() {};
+      window.Input = function Input() {};
+      window.Badge = function Badge() {};
       ${cleanCode}
       let Target = window.__GRIOT_ENTRY_COMPONENT__;
       const candidates = ${candidatesJson};
@@ -281,3 +303,30 @@ Pode testar acima.
   assert.equal(extracted.fileName, "App.tsx");
   assert.ok(extracted.html.includes("GRIOT Live Preview"));
 });
+
+test("Preview Engine: Syntax Balance & No Unexpected Semicolon SyntaxError", () => {
+  const tsxSample = `
+export default function WeatherDashboard() {
+  const [temp, setTemp] = React.useState(22);
+  return (
+    <Card className="p-4">
+      <CardTitle>Lisboa</CardTitle>
+      <Button onClick={() => setTemp(temp + 1)}>Atualizar: {temp}C</Button>
+    </Card>
+  );
+}
+`;
+  const html = preparePreviewHtml(tsxSample, "tsx");
+  assert.ok(!html.includes("function WeatherDashboard;"), "Não deve gerar sintaxe inválida 'function WeatherDashboard;'");
+  assert.ok(html.includes("function WeatherDashboard"), "Deve manter declaração de função válida");
+  assert.ok(html.includes("window.Button = function"), "Deve incluir stub universal para Button");
+  assert.ok(html.includes("window.Card = function"), "Deve incluir stub universal para Card");
+});
+
+test("Preview Engine: Neutralize broken relative CSS links", () => {
+  const brokenHtml = `<!DOCTYPE html><html><head><link rel="stylesheet" href="style.css"><title>App</title></head><body><h1>Test</h1></body></html>`;
+  const html = preparePreviewHtml(brokenHtml, "html");
+  assert.ok(!html.includes('href="style.css"'), "Deve remover link para style.css local que geraria erro 404");
+  assert.ok(html.includes("tailwindcss.com"), "Deve incluir Tailwind CSS");
+});
+

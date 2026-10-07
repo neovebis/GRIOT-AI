@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Play, Globe, RotateCw, Smartphone, Monitor, X, ExternalLink, FileCode, FileText, Code2, Copy, Check } from "lucide-react";
 import { useT } from "@/lib/i18n";
@@ -52,6 +52,10 @@ export function preparePreviewHtml(code: string, language = "html"): string {
   // 2. Se for documento HTML completo
   if (trimmed.includes("<!DOCTYPE html>") || (trimmed.includes("<html") && trimmed.includes("</html>"))) {
     let completeHtml = trimmed;
+
+    // Neutralizar links para ficheiros relativos externos inexistentes que bloqueariam o preview
+    completeHtml = completeHtml.replace(/<link[^>]*href=["'](?:style\.css|styles\.css|\.\/[^"']+\.css)["'][^>]*>/gi, "");
+    completeHtml = completeHtml.replace(/<script[^>]*src=["'](?:script\.js|app\.js|main\.js|\.\/[^"']+\.js)["'][^>]*>\s*<\/script>/gi, "");
 
     // Injetar viewport se não existir
     if (!completeHtml.includes('name="viewport"')) {
@@ -141,20 +145,38 @@ export function preparePreviewHtml(code: string, language = "html"): string {
       }
     }
 
-    // Sanitizar código React
+    let detectedDefaultExport = "";
+    const exportFnMatch = trimmed.match(/export\s+default\s+function\s+([A-Za-z0-9_$]+)/);
+    if (exportFnMatch) detectedDefaultExport = exportFnMatch[1];
+    const exportIdMatch = trimmed.match(/export\s+default\s+([A-Za-z0-9_$]+)\s*;?/);
+    if (exportIdMatch && !detectedDefaultExport) detectedDefaultExport = exportIdMatch[1];
+    const exportConstMatch = trimmed.match(/export\s+default\s+const\s+([A-Za-z0-9_$]+)/);
+    if (exportConstMatch && !detectedDefaultExport) detectedDefaultExport = exportConstMatch[1];
+
+    // Sanitizar código React garantindo que a sintaxe seja 100% válida e preservando nomes de funções
     let cleanCode = trimmed
       // Remover imports
       .replace(/import\s+[\s\S]*?from\s+['"][^'"]+['"];?/g, "")
       .replace(/import\s+['"][^'"]+['"];?/g, "")
-      // Capturar export default function Nome(...)
-      .replace(/export\s+default\s+function\s+([A-Za-z0-9_$]+)/g, "function $1;\nwindow.__GRIOT_ENTRY_COMPONENT__ = $1;")
-      // Capturar export default const Nome = ... ou export default Nome;
+      // Capturar export default function Nome(...) -> transformando em function Nome(...)
+      .replace(/export\s+default\s+function\s+([A-Za-z0-9_$]+)/g, "function $1")
+      // Capturar export default function(...) anónima
+      .replace(/export\s+default\s+function\s*\(/g, "window.__GRIOT_ENTRY_COMPONENT__ = function(")
+      // Capturar export default const Nome = ...
       .replace(/export\s+default\s+const\s+([A-Za-z0-9_$]+)/g, "const $1")
-      .replace(/export\s+default\s+([A-Za-z0-9_$]+);?/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1;")
+      // Capturar export default Nome;
+      .replace(/export\s+default\s+([A-Za-z0-9_$]+)\s*;?/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1;")
       // Capturar export default () => ...
-      .replace(/export\s+default\s+(function\s*\([^)]*\)\s*\{|\([^)]*\)\s*=>|\w+\s*=>)/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1")
+      .replace(/export\s+default\s+(\([^)]*\)\s*=>|[A-Za-z0-9_$]+\s*=>)/g, "window.__GRIOT_ENTRY_COMPONENT__ = $1")
+      // Capturar export default class Nome
+      .replace(/export\s+default\s+class\s+([A-Za-z0-9_$]+)/g, "class $1")
       // Limpar exports nomeados
-      .replace(/export\s+(function|const|let|var|class|type|interface)\s+/g, "$1 ");
+      .replace(/export\s+(function|const|let|var|class|type|interface)\s+/g, "$1 ")
+      .replace(/export\s*\{[^}]*\}\s*;?/g, "");
+
+    if (detectedDefaultExport) {
+      cleanCode += `\ntry { if (typeof ${detectedDefaultExport} !== 'undefined') window.__GRIOT_ENTRY_COMPONENT__ = ${detectedDefaultExport}; } catch(e){}`;
+    }
 
     // Descobrir candidatos a componente PascalCase declarados no código
     const candidateMatches = [
@@ -224,7 +246,11 @@ export function preparePreviewHtml(code: string, language = "html"): string {
         createRef, forwardRef, isValidElement, memo
       } = React;
 
-      // 2. Icon Generator & Proxy compatível com Lucide
+      // 2. Utilitários comuns de estilo
+      window.clsx = (...args) => args.filter(Boolean).join(' ');
+      window.cn = (...args) => args.filter(Boolean).join(' ');
+
+      // 3. Icon Generator & Proxy compatível com Lucide
       function createIcon(name) {
         return function DynamicIcon(props) {
           const { size = 20, className = "", color = "currentColor", strokeWidth = 2, ...rest } = props || {};
@@ -277,7 +303,70 @@ export function preparePreviewHtml(code: string, language = "html"): string {
       const explicitlyImported = ${iconsJson};
       explicitlyImported.forEach(iconName => { window[iconName] = createIcon(iconName); });
 
-      // Stubs seguros de bibliotecas
+      window.Lucide = new Proxy({}, { get: (_, n) => createIcon(String(n)) });
+      window.lucideReact = window.Lucide;
+
+      // 4. Stubs Universais de Componentes de UI (shadcn / Radix / bibliotecas populares)
+      window.Button = function Button({ className = "", children, ...props }) {
+        return React.createElement('button', {
+          className: 'px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-all active:scale-95 inline-flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 ' + className,
+          ...props
+        }, children);
+      };
+      window.Card = function Card({ className = "", children, ...props }) {
+        return React.createElement('div', {
+          className: 'rounded-2xl border border-slate-800 bg-slate-900/80 p-5 shadow-xl text-slate-100 backdrop-blur-sm ' + className,
+          ...props
+        }, children);
+      };
+      window.CardHeader = function CardHeader({ className = "", children, ...props }) {
+        return React.createElement('div', { className: 'flex flex-col space-y-1.5 pb-3 ' + className, ...props }, children);
+      };
+      window.CardTitle = function CardTitle({ className = "", children, ...props }) {
+        return React.createElement('h3', { className: 'text-lg font-semibold leading-none tracking-tight text-white ' + className, ...props }, children);
+      };
+      window.CardDescription = function CardDescription({ className = "", children, ...props }) {
+        return React.createElement('p', { className: 'text-sm text-slate-400 ' + className, ...props }, children);
+      };
+      window.CardContent = function CardContent({ className = "", children, ...props }) {
+        return React.createElement('div', { className: 'pt-1 ' + className, ...props }, children);
+      };
+      window.CardFooter = function CardFooter({ className = "", children, ...props }) {
+        return React.createElement('div', { className: 'flex items-center pt-4 ' + className, ...props }, children);
+      };
+      window.Input = function Input({ className = "", ...props }) {
+        return React.createElement('input', {
+          className: 'flex h-10 w-full rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 ' + className,
+          ...props
+        });
+      };
+      window.Badge = function Badge({ className = "", children, ...props }) {
+        return React.createElement('span', {
+          className: 'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 ' + className,
+          ...props
+        }, children);
+      };
+      window.Separator = function Separator({ className = "", ...props }) {
+        return React.createElement('div', { className: 'shrink-0 bg-slate-800 h-[1px] w-full my-3 ' + className, ...props });
+      };
+
+      // Stubs para Gráficos Recharts
+      const dummyChart = ({ children, className = "" }) => React.createElement('div', { className: 'w-full h-44 bg-slate-900/60 rounded-xl flex items-center justify-center text-slate-400 text-xs border border-slate-800 p-2 ' + className }, children || 'Gráfico Interativo');
+      window.ResponsiveContainer = ({ children }) => React.createElement('div', { className: 'w-full h-full min-h-[160px]' }, children);
+      window.LineChart = dummyChart;
+      window.BarChart = dummyChart;
+      window.AreaChart = dummyChart;
+      window.PieChart = dummyChart;
+      window.XAxis = () => null;
+      window.YAxis = () => null;
+      window.Tooltip = () => null;
+      window.Legend = () => null;
+      window.Line = () => null;
+      window.Bar = () => null;
+      window.Area = () => null;
+      window.Pie = () => null;
+
+      // Stubs de animações e utilidades
       window.motion = new Proxy({}, {
         get: (_, tag) => (props) => {
           const { initial, animate, exit, transition, whileHover, whileTap, ...rest } = props || {};
@@ -325,18 +414,31 @@ export function preparePreviewHtml(code: string, language = "html"): string {
         ${cleanCode}
 
         let Target = window.__GRIOT_ENTRY_COMPONENT__;
-        if (!Target && typeof App !== 'undefined') Target = App;
-        if (!Target && typeof Component !== 'undefined') Target = Component;
-        if (!Target && typeof Main !== 'undefined') Target = Main;
-        if (!Target && typeof Page !== 'undefined') Target = Page;
-        if (!Target && typeof Dashboard !== 'undefined') Target = Dashboard;
-
+        if (!Target && ${JSON.stringify(detectedDefaultExport)}) {
+          try {
+            const d = eval(${JSON.stringify(detectedDefaultExport)});
+            if (typeof d === 'function' || (typeof d === 'object' && d !== null)) Target = d;
+          } catch(e) {}
+        }
+        if (!Target) {
+          const commonNames = ['App', 'Component', 'Main', 'Page', 'Dashboard', 'Root', 'Container', 'Application', 'View', 'Widget', 'Card', 'Screen', 'Calculator', 'Game', 'Tool'];
+          for (const name of commonNames) {
+            try {
+              const fn = eval(name);
+              if (typeof fn === 'function' || (typeof fn === 'object' && fn !== null)) {
+                Target = fn;
+                break;
+              }
+            } catch(e) {}
+          }
+        }
         if (!Target) {
           const candidates = ${candidatesJson};
           for (const name of candidates) {
             try {
-              if (typeof window[name] === 'function') {
-                Target = window[name];
+              const fn = eval(name);
+              if (typeof fn === 'function' || (typeof fn === 'object' && fn !== null)) {
+                Target = fn;
                 break;
               }
             } catch(e) {}
@@ -351,13 +453,13 @@ export function preparePreviewHtml(code: string, language = "html"): string {
             </GriotErrorBoundary>
           );
         } else if (rootEl) {
-          rootEl.innerHTML = '<div class="p-6 text-amber-400 border border-amber-500/30 bg-amber-500/10 rounded-2xl font-mono text-xs m-4">Aguardando exportação de componente React (ex: export default function App() { ... })</div>';
+          rootEl.innerHTML = '<div class="p-6 text-amber-400 border border-amber-500/30 bg-amber-500/10 rounded-2xl font-mono text-xs m-4"><strong>Aviso do GRIOT Live Preview:</strong><br/><br/>Aguardando declaração de componente React principal (ex: <code>export default function App() { ... }</code>).</div>';
         }
       } catch (err) {
         console.error("Griot Script Error:", err);
         const rootEl = document.getElementById('root');
         if (rootEl) {
-          rootEl.innerHTML = '<div class="p-6 text-red-400 border border-red-500/30 bg-red-500/10 rounded-2xl font-mono text-xs m-4"><strong>Erro no código React:</strong><br/><br/>' + (err.message || String(err)) + '</div>';
+          rootEl.innerHTML = '<div class="p-6 text-red-400 border border-red-500/30 bg-red-500/10 rounded-2xl font-mono text-xs m-4"><strong>Erro no código React:</strong><br/><br/><pre class="whitespace-pre-wrap font-mono text-xs mt-2 text-red-300">' + (err.message || String(err)) + '</pre></div>';
         }
       }
     })();
@@ -580,6 +682,11 @@ export function FunctionalPreviewModal({
   const [reloadKey, setReloadKey] = useState(0);
   const [viewport, setViewport] = useState<"mobile" | "responsive">("responsive");
   const [mounted, setMounted] = useState(false);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     setMounted(true);
@@ -593,22 +700,24 @@ export function FunctionalPreviewModal({
       document.activeElement.blur();
     }
 
-    // 2. Travar o scroll da página de fundo e sinalizar que o preview está ativo
+    // 2. Travar o scroll da página de fundo e sinalizar que o preview está ativo (via DOM e evento global)
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.body.setAttribute("data-griot-preview-active", "true");
+    window.dispatchEvent(new CustomEvent("griot:preview-state", { detail: { open: true } }));
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current?.();
     };
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.body.style.overflow = originalOverflow;
       document.body.removeAttribute("data-griot-preview-active");
+      window.dispatchEvent(new CustomEvent("griot:preview-state", { detail: { open: false } }));
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open || !mounted) return null;
 
@@ -628,7 +737,7 @@ export function FunctionalPreviewModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[99999] flex flex-col bg-background animate-in fade-in duration-150"
+      className="fixed inset-0 z-[99999] flex flex-col bg-background animate-in fade-in duration-150 select-none pb-[calc(env(safe-area-inset-bottom,0px)+8px)]"
       style={{
         position: "fixed",
         top: 0,
@@ -639,11 +748,11 @@ export function FunctionalPreviewModal({
       }}
     >
       {/* Top bar com o design elegante do GRIOT */}
-      <div className="flex items-center justify-between gap-2 border-b border-hairline px-3.5 py-2.5 pt-[calc(env(safe-area-inset-top,0px)+10px)] bg-surface/90 backdrop-blur-xl">
+      <div className="flex items-center justify-between gap-2 border-b border-hairline px-3.5 py-2.5 pt-[calc(env(safe-area-inset-top,0px)+10px)] bg-surface/90 backdrop-blur-xl shrink-0">
         <div className="flex items-center gap-2 min-w-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => onCloseRef.current?.()}
             aria-label={t("Fechar")}
             className="rounded-xl border border-hairline bg-secondary/60 p-2 text-muted-foreground hover:text-foreground active:scale-90 transition-transform"
           >

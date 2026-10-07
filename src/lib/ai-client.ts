@@ -239,6 +239,49 @@ export const OPENAI_TOOLS = GEMINI_TOOL_DECLARATIONS.map((t) => ({
   },
 }));
 
+/** Declarações de Ferramentas Nativas para Anthropic Claude */
+export const ANTHROPIC_TOOLS = GEMINI_TOOL_DECLARATIONS.map((t) => ({
+  name: t.name,
+  description: t.description,
+  input_schema: {
+    type: "object" as const,
+    properties: Object.fromEntries(
+      Object.entries(t.parameters.properties).map(([k, v]) => [
+        k,
+        {
+          type: (v as { type: string }).type.toLowerCase(),
+          description: (v as { description: string }).description,
+        },
+      ]),
+    ),
+    required: t.parameters.required || [],
+  },
+}));
+
+/** Prompt de Capacidades Nativas da Plataforma GRIOT (Live Preview e Sandbox) */
+export const GRIOT_PLATFORM_CAPABILITIES_PROMPT = `[PLATAFORMA GRIOT — AMBIENTE DE EXECUÇÃO REAL & LIVE PREVIEW NATIVO]
+Tu estás a operar no ecossistema GRIOT Mobile/Desktop com capacidades nativas e ferramentas 100% ativas:
+
+1. MOTOR DE LIVE PREVIEW NATIVO (NO DISPOSITIVO DO UTILIZADOR):
+- A interface do GRIOT possui um motor de Live Preview nativo em tempo real diretamente no ecrã do utilizador.
+- Sempre que o utilizador pedir para criar um website, página web, app interativa, dashboard, jogo, calculadora, ferramenta visual ou componente de interface:
+  * Escreve SEMPRE o código COMPLETO, autossuficiente e funcional dentro de blocos de código markdown \`\`\`html ou \`\`\`tsx.
+  * O GRIOT deteta automaticamente o código e disponibiliza instantaneamente a barra e o modal de Live Preview interativo no dispositivo do utilizador, com suporte total a Tailwind CSS, ícones Lucide e React 18.
+  * Se for HTML: inclui todos os estilos e scripts embutidos (inline <style> e <script> ou classes Tailwind). NUNCA uses links para ficheiros relativos locais como <link rel="stylesheet" href="style.css"> ou <script src="script.js"> pois o preview é em documento único.
+  * Se for React/TSX: exporta o componente principal com 'export default function App() { ... }'.
+  * REGRA FUNDAMENTAL: NUNCA digas ao utilizador que não tens como publicar, que não tens como mostrar o preview, que não tens ponte de visualização ou que o utilizador tem de guardar ficheiros manualmente para ver o resultado. O Live Preview é 100% automático e nativo na UI do GRIOT!
+
+2. AMBIENTE DE EXECUÇÃO ISOLADO (SANDBOX GVISOR NO CLOUD RUN):
+- Tu tens acesso direto, verificado e conectado ao sandbox gVisor no Cloud Run para executar código real (Python e Bash).
+- Ferramenta nativa disponível: 'sandbox_execute' com parâmetros: { "language": "python" | "bash", "code": "..." }.
+- Podes também emitir blocos de ação: <griot_action type="sandbox.execute">{"language":"python","code":"..."}</griot_action>.
+- Sempre que o utilizador pedir para rodar scripts, analisar dados, testar algoritmos ou verificar comandos: EXECUTA a ferramenta imediatamente.
+- REGRA FUNDAMENTAL: NUNCA afirmes "não há ponte de execução conectada", "não consigo executar nada neste pedido", "nenhum resultado de ferramenta auditado foi retornado" ou "o sandbox não está exposto a mim". O ambiente está ativo, conectado e pronto para uso imediato.
+
+3. FERRAMENTAS DE WORKSPACE E CONECTORES:
+- Tens ferramentas de inspeção e edição de ficheiros ('fs_read_file', 'fs_patch', 'fs_write_file', 'code_search', 'find_files', 'shell_exec').
+- Tens 30 conectores de serviços ('call_connector') para GitHub, GitLab, Vercel, Supabase, Firebase, Stripe, etc.`;
+
 import { findApiByIdOrProvider, getUserSavedApis } from "@/lib/user-apis";
 
 /** Procura chave guardada localmente exclusivamente para o provedor solicitado */
@@ -609,7 +652,13 @@ export async function streamDirectAI(params: {
   const isMobile = isMobileOrCapacitor();
   console.log("[GRIOT_DEBUG] streamDirectAI: entrou", { modelId: params.modelId, isMobile });
 
-  const { modelId, messages, systemInstruction, callbacks, signal } = params;
+  const { modelId, messages, callbacks, signal } = params;
+  let systemInstruction = params.systemInstruction || "";
+  if (!systemInstruction.includes("[PLATAFORMA GRIOT — AMBIENTE DE EXECUÇÃO")) {
+    systemInstruction = systemInstruction
+      ? `${systemInstruction}\n\n${GRIOT_PLATFORM_CAPABILITIES_PROMPT}`
+      : GRIOT_PLATFORM_CAPABILITIES_PROMPT;
+  }
   const resolved = resolveProviderAndModel(modelId);
   let activeProvider = resolved.provider;
   let activeModelName = resolved.modelName;
@@ -2169,11 +2218,23 @@ async function fetchAnthropicDirectSync(params: {
   systemInstruction?: string;
   callbacks?: StreamCallbacks;
   signal?: AbortSignal;
+  withoutTools?: boolean;
 }): Promise<AIResponse> {
-  const { apiKey, modelName, messages, systemInstruction, callbacks, signal } = params;
+  const { apiKey, modelName, messages, systemInstruction, callbacks, signal, withoutTools } = params;
   const endpoint = "https://api.anthropic.com/v1/messages";
 
   const anthropicMessages = await sanitizeAnthropicMessagesMultimodal(messages);
+
+  const reqBody: Record<string, unknown> = {
+    model: modelName,
+    max_tokens: 4096,
+    ...(systemInstruction ? { system: systemInstruction } : {}),
+    messages: anthropicMessages,
+  };
+
+  if (!withoutTools) {
+    reqBody.tools = ANTHROPIC_TOOLS;
+  }
 
   const { signal: safeSignal, cleanup } = createSafeTimeoutSignal(3600000, signal);
   let res: Response;
@@ -2186,12 +2247,7 @@ async function fetchAnthropicDirectSync(params: {
         "anthropic-version": "2023-06-01",
         "anthropic-dangerous-direct-browser-access": "true",
       },
-      body: JSON.stringify({
-        model: modelName,
-        max_tokens: 4096,
-        ...(systemInstruction ? { system: systemInstruction } : {}),
-        messages: anthropicMessages,
-      }),
+      body: JSON.stringify(reqBody),
       signal: safeSignal,
       timeoutMs: 120000,
     });
@@ -2201,14 +2257,37 @@ async function fetchAnthropicDirectSync(params: {
 
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    if (res.status === 400 && !withoutTools) {
+      console.warn("[GRIOT] Anthropic retornou 400 com ferramentas. Re-tentando sem ferramentas...");
+      return fetchAnthropicDirectSync({ ...params, withoutTools: true });
+    }
     throw new Error(`Anthropic Claude erro ${res.status}: ${errText.slice(0, 180)}`);
   }
 
   const data = await res.json();
-  const fullText = (data.content || [])
-    .filter((b: any) => b.type === "text")
-    .map((b: any) => b.text)
-    .join("");
+  const textBlocks = (data.content || []).filter((b: any) => b.type === "text");
+  const fullText = textBlocks.map((b: any) => b.text).join("");
+  const toolCalls: GriotAction[] = [];
+
+  for (const block of data.content || []) {
+    if (block.type === "tool_use" && block.name) {
+      callbacks?.onStep?.();
+      const mappedType = mapFunctionNameToActionType(block.name);
+      toolCalls.push({
+        id: block.id || `act_${Date.now()}`,
+        type: mappedType,
+        category: mappedType.split(".")[0] as any,
+        risk:
+          mappedType.startsWith("fs.write") || mappedType.startsWith("shell.")
+            ? "sensitive"
+            : "safe",
+        params: typeof block.input === "object" && block.input !== null ? block.input : {},
+        requiresApproval: mappedType.startsWith("fs.write") || mappedType.startsWith("shell."),
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      });
+    }
+  }
 
   if (fullText) {
     const tokens = fullText.split(/(\s+)/);
@@ -2221,7 +2300,7 @@ async function fetchAnthropicDirectSync(params: {
     }
   }
 
-  return { text: fullText, reasoning: "", toolCalls: [] };
+  return { text: fullText, reasoning: "", toolCalls };
 }
 
 /** Streaming nativo Anthropic Claude */
@@ -2278,6 +2357,7 @@ async function streamAnthropicDirect(params: {
         max_tokens: 4096,
         ...(systemInstruction ? { system: systemInstruction } : {}),
         messages: anthropicMessages,
+        tools: ANTHROPIC_TOOLS,
         stream: true,
       }),
       signal: streamAbortController.signal,
@@ -2303,6 +2383,8 @@ async function streamAnthropicDirect(params: {
   }
 
   let fullText = "";
+  const sseToolCalls: GriotAction[] = [];
+  let currentToolCall: { id: string; name: string; json: string } | null = null;
   const reader = response.body?.getReader();
   if (!reader) {
     if (signal) signal.removeEventListener("abort", onParentAbort);
@@ -2348,19 +2430,52 @@ async function streamAnthropicDirect(params: {
 
         try {
           const payload = JSON.parse(dataStr);
-          if (payload.type === "content_block_delta" && payload.delta?.type === "text_delta") {
-            const tok = payload.delta.text || "";
-            if (tok) {
-              if (!receivedAnyToken) {
-                receivedAnyToken = true;
-                if (watchdogTimer) {
-                  clearTimeout(watchdogTimer);
-                  watchdogTimer = null;
+          if (payload.type === "content_block_start" && payload.content_block?.type === "tool_use") {
+            currentToolCall = {
+              id: payload.content_block.id || `act_${Date.now()}`,
+              name: payload.content_block.name || "",
+              json: "",
+            };
+          } else if (payload.type === "content_block_delta") {
+            if (payload.delta?.type === "text_delta") {
+              const tok = payload.delta.text || "";
+              if (tok) {
+                if (!receivedAnyToken) {
+                  receivedAnyToken = true;
+                  if (watchdogTimer) {
+                    clearTimeout(watchdogTimer);
+                    watchdogTimer = null;
+                  }
                 }
+                fullText += tok;
+                callbacks?.onToken?.(tok);
               }
-              fullText += tok;
-              callbacks?.onToken?.(tok);
+            } else if (payload.delta?.type === "input_json_delta" && currentToolCall) {
+              currentToolCall.json += payload.delta.partial_json || "";
             }
+          } else if (payload.type === "content_block_stop" && currentToolCall) {
+            callbacks?.onStep?.();
+            const mappedType = mapFunctionNameToActionType(currentToolCall.name);
+            let parsedArgs = {};
+            try {
+              parsedArgs = currentToolCall.json ? JSON.parse(currentToolCall.json) : {};
+            } catch {
+              parsedArgs = { raw: currentToolCall.json };
+            }
+            sseToolCalls.push({
+              id: currentToolCall.id,
+              type: mappedType,
+              category: mappedType.split(".")[0] as any,
+              risk:
+                mappedType.startsWith("fs.write") || mappedType.startsWith("shell.")
+                  ? "sensitive"
+                  : "safe",
+              params: parsedArgs,
+              requiresApproval: mappedType.startsWith("fs.write") || mappedType.startsWith("shell."),
+              status: "pending",
+              createdAt: new Date().toISOString(),
+            });
+            currentToolCall = null;
           }
         } catch {}
       }
@@ -2369,7 +2484,7 @@ async function streamAnthropicDirect(params: {
     if (signal?.aborted) {
       throw new DOMException("Operação cancelada.", "AbortError");
     }
-    if (!fullText.trim()) {
+    if (!fullText.trim() && sseToolCalls.length === 0) {
       console.warn(
         "[GRIOT_DEBUG] Stream SSE Anthropic interrompido, recorrendo ao endpoint REST padrão:",
         streamErr,
@@ -2388,11 +2503,11 @@ async function streamAnthropicDirect(params: {
     } catch {}
   }
 
-  if (!fullText.trim() && !signal?.aborted) {
+  if (!fullText.trim() && sseToolCalls.length === 0 && !signal?.aborted) {
     return fetchAnthropicDirectSync(params);
   }
 
-  return { text: fullText, reasoning: "", toolCalls: [] };
+  return { text: fullText, reasoning: "", toolCalls: sseToolCalls };
 }
 
 /** Fallback para o Supabase Edge Function se nenhuma chave local foi encontrada */

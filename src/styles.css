@@ -367,10 +367,13 @@ html[data-text-size="large"] {
 }
 
 /* GRIOT Live Preview Nativo — isolamento total contra sobreposição da barra de texto */
-body[data-griot-preview-active="true"] .griot-chat-input-dock {
+body[data-griot-preview-active="true"] .griot-chat-input-dock,
+body[data-griot-preview-active="true"] [data-griot-chat-dock="true"],
+body[data-griot-preview-active="true"] #griot-chat-dock {
   display: none !important;
   visibility: hidden !important;
   pointer-events: none !important;
+  opacity: 0 !important;
 }
 
 body[data-griot-preview-active="true"] {

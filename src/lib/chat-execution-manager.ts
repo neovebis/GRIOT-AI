@@ -31,6 +31,7 @@ import {
   canUseSheol,
   markSheolTrialUsed,
 } from "@/lib/gcu-service";
+import { GRIOT_PLATFORM_CAPABILITIES_PROMPT } from "@/lib/ai-client";
 
 export interface ExecutionStepItem {
   id: string;
@@ -396,16 +397,8 @@ class ChatExecutionManager {
       effectiveSystemInstruction = `${effectiveSystemInstruction || ""}\n\n${GRIOT_OPB_SYSTEM_PROMPT}`;
     }
 
-    const GRIOT_SANDBOX_SYSTEM_PROMPT = `[AMBIENTE DE EXECUÇÃO ISOLADO (SANDBOX GVISOR NO CLOUD RUN)]
-Tu tens acesso direto ao sandbox gVisor no Cloud Run para executar código real.
-Ferramenta nativa disponível: 'sandbox_execute' com parâmetros: { "language": "python" | "bash", "code": "..." }.
-Sempre que o utilizador pedir para rodar scripts em Python, comandos Bash, validar algoritmos ou testar código:
-- Executa IMEDIATAMENTE a ferramenta 'sandbox_execute' ou emite o bloco <griot_action type="sandbox.execute">{"language":"python","code":"..."}</griot_action>.
-- O sandbox está 100% verificado, ativo e conectado ao teu harness.
-- NUNCA digas que não tens ferramentas de execução ou que não há ponte conectada.`;
-
-    if (!effectiveSystemInstruction?.includes("[AMBIENTE DE EXECUÇÃO ISOLADO")) {
-      effectiveSystemInstruction = `${effectiveSystemInstruction || ""}\n\n${GRIOT_SANDBOX_SYSTEM_PROMPT}`;
+    if (!effectiveSystemInstruction?.includes("[PLATAFORMA GRIOT — AMBIENTE DE EXECUÇÃO")) {
+      effectiveSystemInstruction = `${effectiveSystemInstruction || ""}\n\n${GRIOT_PLATFORM_CAPABILITIES_PROMPT}`;
     }
 
     // Prepara mensagens garantindo que o prompt do utilizador está presente sem duplicar

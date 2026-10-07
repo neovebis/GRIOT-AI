@@ -473,7 +473,16 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [cloudShellCmd, setCloudShellCmd] = useState("");
   const [connectingGoogle, setConnectingGoogle] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [isMessagePreviewActive, setIsMessagePreviewActive] = useState(false);
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
+
+  useEffect(() => {
+    const onPreviewState = (e: any) => {
+      setIsMessagePreviewActive(Boolean(e.detail?.open));
+    };
+    window.addEventListener("griot:preview-state", onPreviewState);
+    return () => window.removeEventListener("griot:preview-state", onPreviewState);
+  }, []);
 
   useEffect(() => {
     const wsId = conversation?.id || "default";
@@ -1142,6 +1151,7 @@ export function ChatSurface({ userId }: { userId: string }) {
     drawer ||
     sheet !== null ||
     previewOpen ||
+    isMessagePreviewActive ||
     quickRoomDrawerOpen ||
     addApiModalOpen ||
     cloudShellRequired ||
@@ -2879,7 +2889,12 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
         />
       ) : null}
 
-      <div className="fixed inset-x-0 bottom-0 z-50 griot-chat-input-dock">
+      <div
+        data-griot-chat-dock="true"
+        className={`fixed inset-x-0 bottom-0 z-50 griot-chat-input-dock transition-opacity duration-150 ${
+          previewOpen || isMessagePreviewActive ? "hidden pointer-events-none opacity-0" : ""
+        }`}
+      >
         <div className="mx-auto w-full max-w-lg px-4 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
           {sheet === "actions" ? (
             <div className="sheet-up mb-2 overflow-hidden rounded-[26px] border border-hairline bg-surface/95 backdrop-blur-2xl">
