@@ -115,7 +115,8 @@ import type { MessageReaction } from "@/lib/chat-execution-manager";
 import { PluginsView } from "@/components/griot/plugins-view";
 import { AutonomousTaskModal } from "@/components/griot/autonomous-task-modal";
 import { SheolMissionPanel } from "@/components/griot/sheol-mission-panel";
-import { startNativeStudioWorker } from "@/lib/runtime/native-studio-broker";
+import { selectStudioRuntime, startNativeStudioWorker } from "@/lib/runtime/native-studio-broker";
+import { getRuntimeMode, setRuntimeMode, isNativeAndroidPlatform, type RuntimeMode } from "@/lib/runtime/native-terminal-bridge";
 
 import {
   captureAsText,
@@ -159,7 +160,7 @@ const EFFORTS = [
 ] as const;
 
 type Effort = (typeof EFFORTS)[number]["id"];
-type Sheet = null | "plus" | "model" | "engine" | "actions" | "projects" | "captures";
+type Sheet = null | "plus" | "model" | "engine" | "runtime" | "actions" | "projects" | "captures";
 
 /** Vozes das Definições → vozes reais de síntese. */
 const TTS_VOICES: Record<string, string> = {
@@ -408,6 +409,7 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [scope, setScope] = useState<"main" | "quick">("main");
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const conversationId = conversation?.id ?? null;
+  const [runtimeMode, setRuntimeModeState] = useState<RuntimeMode>(() => getRuntimeMode());
   const [engine, setEngine] = useState<GriotEngineId>(() => {
     if (typeof window !== "undefined" && localStorage.getItem("griot-default-engine") === "sheol") return "sheol";
     return "orchestrator";
@@ -1337,16 +1339,8 @@ NOTA CRÍTICA: Tu estás explicitamente a operar no contexto do projeto "${curre
 Nenhum projeto específico está associado a esta sessão (conversa geral).`;
     }
 
-    sysInstruction += `\n\n[CAPACIDADES OPERACIONAIS DE TERMINAL, SANDBOX E PROJETOS]
-Tu tens acesso a um runtime ativo com ferramentas nativas: 'sandbox_execute', 'shell_exec', 'project_list', 'fs_read_file', 'fs_write_file', 'fs_patch', 'code_search', 'call_connector'.
-1. AMBIENTE DE EXECUÇÃO ISOLADO (SANDBOX GVISOR NO CLOUD RUN):
-   Sempre que o utilizador pedir para executar, validar ou testar scripts em Python, comandos Bash, código de sandbox ou cálculos:
-   - Chama IMEDIATAMENTE a ferramenta nativa 'sandbox_execute' com { language: "python" | "bash", code: "..." } (ou emite <griot_action type="sandbox.execute">{"language":"python","code":"..."}</griot_action>).
-   - O sandbox gVisor no Cloud Run está 100% ativo, verificado e conectado a este chat.
-   - NUNCA digas que não tens ferramentas de execução ou que não consegues rodar comandos ou que não há ponte conectada.
-2. Quando o utilizador pedir 'projectList', 'projectlist', 'listar projetos' ou perguntar que projetos existem, chama IMEDIATAMENTE a ferramenta 'project_list' (ou emite <griot_action type="project.list"></griot_action>).
-3. Quando o utilizador pedir para executar comandos de terminal, shell, scripts, testes ou inspeções (ex: ls, pwd, cat, date, curl, git, npm, etc.), chama IMEDIATAMENTE a ferramenta 'shell_exec' (ou emite <griot_action type="shell.exec"><command>...</command></griot_action>).
-4. Age com rigor sénior (VERDADE > CORREÇÃO > SEGURANÇA > FUNCIONALIDADE). Baseia as tuas respostas nos dados reais devolvidos pelas ferramentas.`;
+    sysInstruction += `\n\n[EXECUÇÃO GRIOT]
+A execução real pertence ao Studio Compute e ao runtime explicitamente selecionado no projeto. Nunca assumes Cloud Run, Native ou qualquer ferramenta como disponível sem receipt real. Se uma capacidade não estiver ligada, reporta indisponibilidade em vez de inventar sucesso. VERDADE > CORREÇÃO > SEGURANÇA > FUNCIONALIDADE.`;
 
     sysInstruction += `\n\n${GRIOT_CHART_SYSTEM_PROMPT}`;
 
@@ -2032,6 +2026,25 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
         // ignore
       }
     })();
+  }
+
+  async function changeRuntime(nextRuntime: RuntimeMode) {
+    if (nextRuntime === "native" && !isNativeAndroidPlatform()) {
+      toast.error(t("Native runtime só está disponível no Android."));
+      return;
+    }
+    setRuntimeMode(nextRuntime);
+    setRuntimeModeState(nextRuntime);
+    if (engineProjectId && userId && userId !== "anonymous") {
+      try {
+        await selectStudioRuntime(userId, engineProjectId, nextRuntime);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(message);
+        return;
+      }
+    }
+    setSheet(null);
   }
 
   async function changeEngine(nextEngine: GriotEngineId) {
@@ -3140,6 +3153,34 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
             </div>
           ) : null}
 
+          {sheet === "runtime" ? (
+            <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
+              <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                {t("RUNTIME")}
+              </p>
+              {(["sandbox", "native"] as RuntimeMode[]).map((option) => {
+                const unavailable = option === "native" && !isNativeAndroidPlatform();
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    disabled={unavailable}
+                    onClick={() => void changeRuntime(option)}
+                    className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-secondary disabled:opacity-40"
+                  >
+                    <span>
+                      <span className="block text-[13px] font-semibold">{option === "sandbox" ? "Sandbox / Cloud" : "Native"}</span>
+                      <span className="block text-[10.5px] text-muted-foreground">
+                        {option === "sandbox" ? "Studio Compute usa o run cloud selecionado" : "Studio Compute usa o worker Android e receipts reais"}
+                      </span>
+                    </span>
+                    {runtimeMode === option ? <Check className="size-4" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
           {sheet === "engine" ? (
             <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
               <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -3480,6 +3521,17 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                   >
                     <Plus className="size-[18px]" />
                   </button>
+                  {scope !== "quick" && (
+                    <button
+                      type="button"
+                      onClick={() => setSheet(sheet === "runtime" ? null : "runtime")}
+                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-secondary px-2.5 text-[11px] font-medium text-foreground"
+                      aria-label={t("Selecionar runtime")}
+                    >
+                      <Terminal className="size-3.5" />
+                      <span>{runtimeMode === "native" ? "NATIVE" : "SANDBOX"}</span>
+                    </button>
+                  )}
                   {scope !== "quick" && (
                     <button
                       type="button"
