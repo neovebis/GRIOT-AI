@@ -92,3 +92,17 @@ alter table public.griot_studio_native_jobs enable row level security;
 -- The authenticated device worker goes through griot-studio-compute, which performs
 -- auth/workspace/project authorization before service-role reads/writes.
 revoke all on table public.griot_studio_native_jobs from anon, authenticated;
+
+
+create table if not exists public.griot_studio_runtime_preferences (
+  workspace_id uuid not null references public.griot_workspaces(id) on delete cascade,
+  project_id uuid not null references public.griot_studio_projects(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  runtime_mode text not null default 'sandbox'
+    check (runtime_mode = any (array['sandbox'::text, 'native'::text])),
+  updated_at timestamptz not null default now(),
+  primary key (workspace_id, project_id, user_id)
+);
+
+alter table public.griot_studio_runtime_preferences enable row level security;
+revoke all on table public.griot_studio_runtime_preferences from anon, authenticated;
