@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useNavigate, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_MODEL, getAvailableModels, modelLabel, isModelOS, isSheolModel } from "@/lib/griot";
+import type { GriotEngineId } from "@/lib/engine-client";
 import { getUserSavedApis, syncUserApisWithRemote } from "@/lib/user-apis";
 import { getPrimaryWorkspaceId } from "@/lib/griot-api";
 import { resolveProviderAndModel, getSavedApiKey } from "@/lib/ai-client";
@@ -113,6 +114,9 @@ import { runQuickDeliberation } from "@/lib/runtime/quick-deliberation-engine";
 import type { MessageReaction } from "@/lib/chat-execution-manager";
 import { PluginsView } from "@/components/griot/plugins-view";
 import { AutonomousTaskModal } from "@/components/griot/autonomous-task-modal";
+import { SheolMissionPanel } from "@/components/griot/sheol-mission-panel";
+import { selectStudioRuntime, startNativeStudioWorker } from "@/lib/runtime/native-studio-broker";
+import { getRuntimeMode, setRuntimeMode, isNativeAndroidPlatform, type RuntimeMode } from "@/lib/runtime/native-terminal-bridge";
 
 import {
   captureAsText,
@@ -156,7 +160,7 @@ const EFFORTS = [
 ] as const;
 
 type Effort = (typeof EFFORTS)[number]["id"];
-type Sheet = null | "plus" | "model" | "actions" | "projects" | "captures";
+type Sheet = null | "plus" | "model" | "engine" | "runtime" | "actions" | "projects" | "captures";
 
 /** Vozes das Definições → vozes reais de síntese. */
 const TTS_VOICES: Record<string, string> = {
@@ -405,6 +409,11 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [scope, setScope] = useState<"main" | "quick">("main");
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const conversationId = conversation?.id ?? null;
+  const [runtimeMode, setRuntimeModeState] = useState<RuntimeMode>(() => getRuntimeMode());
+  const [engine, setEngine] = useState<GriotEngineId>(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("griot-default-engine") === "sheol") return "sheol";
+    return "orchestrator";
+  });
   const [messages, setMessages] = useState<Row[]>([]);
   const [draft, setDraft] = useState("");
   const [streaming, setStreaming] = useState("");
@@ -430,6 +439,7 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [activeProject, setActiveProjectState] = useState<GriotProject | null>(() =>
     getActiveProjectSync(),
   );
+  const engineProjectId = conversation?.project_id || activeProject?.id || null;
   const [autonomousTaskModalOpen, setAutonomousTaskModalOpen] = useState(false);
   const [autonomousTaskInstruction, setAutonomousTaskInstruction] = useState("");
   const [captures, setCaptures] = useState<CaptureRow[]>([]);
@@ -475,6 +485,19 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isMessagePreviewActive, setIsMessagePreviewActive] = useState(false);
   const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
+
+  useEffect(() => {
+    if (!engineProjectId || !userId || userId === "anonymous") return;
+    return startNativeStudioWorker({
+      userId,
+      projectId: engineProjectId,
+      onStatus: (status) => {
+        if (status.state === "unavailable" || status.state === "error") {
+          console.warn("[Native Studio Worker]", status.detail);
+        }
+      },
+    });
+  }, [engineProjectId, userId]);
 
   useEffect(() => {
     const onPreviewState = (e: any) => {
@@ -733,6 +756,7 @@ export function ChatSurface({ userId }: { userId: string }) {
         if (!cancelled) {
           setConversation(localConv);
           setModel(localConv.model || DEFAULT_MODEL);
+          setEngine(localConv.engine || "orchestrator");
         }
         return;
       }
@@ -741,7 +765,7 @@ export function ChatSurface({ userId }: { userId: string }) {
       try {
         const { data: existing } = await (supabase as any)
           .from("griot_conversations")
-          .select("id, title, updated_at")
+          .select("id, title, updated_at, project_id, engine_id")
           .order("updated_at", { ascending: false })
           .limit(15);
 
@@ -769,6 +793,7 @@ export function ChatSurface({ userId }: { userId: string }) {
               scope: "main",
               title: candidate.title || "Conversa Principal",
               model: DEFAULT_MODEL,
+              engine: candidate.engine_id === "sheol" ? "sheol" : "orchestrator",
               pinned: false,
               archived: false,
               updated_at: candidate.updated_at,
@@ -780,6 +805,7 @@ export function ChatSurface({ userId }: { userId: string }) {
           if (!cancelled) {
             setConversation(matched);
             setModel(matched.model || DEFAULT_MODEL);
+            setEngine(matched.engine || "orchestrator");
             saveConversationLocally(matched);
           }
           return;
@@ -1189,6 +1215,10 @@ export function ChatSurface({ userId }: { userId: string }) {
   ) {
     if (!conversationId) return;
     const activeEffort = options?.effort ?? effort;
+    if (scope !== "quick" && engine === "sheol") {
+      toast.info(t("SHEOL usa missões estruturadas. Configura e inicia a missão no painel SHEOL."));
+      return;
+    }
     const voiceMode = options?.voice === true;
 
     // Identificar o projeto associado à conversa ou o projeto ativo global
@@ -1309,16 +1339,8 @@ NOTA CRÍTICA: Tu estás explicitamente a operar no contexto do projeto "${curre
 Nenhum projeto específico está associado a esta sessão (conversa geral).`;
     }
 
-    sysInstruction += `\n\n[CAPACIDADES OPERACIONAIS DE TERMINAL, SANDBOX E PROJETOS]
-Tu tens acesso a um runtime ativo com ferramentas nativas: 'sandbox_execute', 'shell_exec', 'project_list', 'fs_read_file', 'fs_write_file', 'fs_patch', 'code_search', 'call_connector'.
-1. AMBIENTE DE EXECUÇÃO ISOLADO (SANDBOX GVISOR NO CLOUD RUN):
-   Sempre que o utilizador pedir para executar, validar ou testar scripts em Python, comandos Bash, código de sandbox ou cálculos:
-   - Chama IMEDIATAMENTE a ferramenta nativa 'sandbox_execute' com { language: "python" | "bash", code: "..." } (ou emite <griot_action type="sandbox.execute">{"language":"python","code":"..."}</griot_action>).
-   - O sandbox gVisor no Cloud Run está 100% ativo, verificado e conectado a este chat.
-   - NUNCA digas que não tens ferramentas de execução ou que não consegues rodar comandos ou que não há ponte conectada.
-2. Quando o utilizador pedir 'projectList', 'projectlist', 'listar projetos' ou perguntar que projetos existem, chama IMEDIATAMENTE a ferramenta 'project_list' (ou emite <griot_action type="project.list"></griot_action>).
-3. Quando o utilizador pedir para executar comandos de terminal, shell, scripts, testes ou inspeções (ex: ls, pwd, cat, date, curl, git, npm, etc.), chama IMEDIATAMENTE a ferramenta 'shell_exec' (ou emite <griot_action type="shell.exec"><command>...</command></griot_action>).
-4. Age com rigor sénior (VERDADE > CORREÇÃO > SEGURANÇA > FUNCIONALIDADE). Baseia as tuas respostas nos dados reais devolvidos pelas ferramentas.`;
+    sysInstruction += `\n\n[EXECUÇÃO GRIOT]
+A execução real pertence ao Studio Compute e ao runtime explicitamente selecionado no projeto. Nunca assumes Cloud Run, Native ou qualquer ferramenta como disponível sem receipt real. Se uma capacidade não estiver ligada, reporta indisponibilidade em vez de inventar sucesso. VERDADE > CORREÇÃO > SEGURANÇA > FUNCIONALIDADE.`;
 
     sysInstruction += `\n\n${GRIOT_CHART_SYSTEM_PROMPT}`;
 
@@ -1419,7 +1441,8 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
 
     setBusy(true);
     try {
-      await chatExecutionManager.startExecution({
+      await chatExecutionManager.startOrchestratorExecution({
+        engineId: "orchestrator",
         conversationId: targetConvId,
         scope: targetScope,
         userId,
@@ -1964,12 +1987,13 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
 
   async function newConversation(next: "main" | "quick") {
     const defaultTitle = next === "quick" ? "Novo Quick" : "Nova Conversa";
-    const localId = `conv_${next}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const localId = crypto.randomUUID();
     const createdConv: Conversation = {
       id: localId,
       scope: next,
       title: defaultTitle,
       model,
+      engine,
       pinned: false,
       archived: false,
       updated_at: new Date().toISOString(),
@@ -1996,11 +2020,50 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
           owner_id: userId && userId !== "anonymous" ? userId : null,
           created_by: userId && userId !== "anonymous" ? userId : null,
           title: defaultTitle,
+          engine_id: engine,
         });
       } catch {
         // ignore
       }
     })();
+  }
+
+  async function changeRuntime(nextRuntime: RuntimeMode) {
+    if (nextRuntime === "native" && !isNativeAndroidPlatform()) {
+      toast.error(t("Native runtime só está disponível no Android."));
+      return;
+    }
+    setRuntimeMode(nextRuntime);
+    setRuntimeModeState(nextRuntime);
+    if (engineProjectId && userId && userId !== "anonymous") {
+      try {
+        await selectStudioRuntime(userId, engineProjectId, nextRuntime);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error(message);
+        return;
+      }
+    }
+    setSheet(null);
+  }
+
+  async function changeEngine(nextEngine: GriotEngineId) {
+    setEngine(nextEngine);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("griot-default-engine", nextEngine);
+    }
+    if (!conversation) return;
+    const updated = { ...conversation, engine: nextEngine, updated_at: new Date().toISOString() };
+    setConversation(updated);
+    saveConversationLocally(updated);
+    try {
+      await (supabase as any)
+        .from("griot_conversations")
+        .update({ engine_id: nextEngine, updated_at: new Date().toISOString() })
+        .eq("id", conversation.id);
+    } catch (error) {
+      console.warn("[GRIOT] Falha ao persistir engine da conversa:", error);
+    }
   }
 
   async function switchScope(targetScope: "main" | "quick") {
@@ -3090,6 +3153,70 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
             </div>
           ) : null}
 
+          {sheet === "runtime" ? (
+            <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
+              <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                {t("RUNTIME")}
+              </p>
+              {(["sandbox", "native"] as RuntimeMode[]).map((option) => {
+                const unavailable = option === "native" && !isNativeAndroidPlatform();
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    disabled={unavailable}
+                    onClick={() => void changeRuntime(option)}
+                    className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-secondary disabled:opacity-40"
+                  >
+                    <span>
+                      <span className="block text-[13px] font-semibold">{option === "sandbox" ? "Sandbox / Cloud" : "Native"}</span>
+                      <span className="block text-[10.5px] text-muted-foreground">
+                        {option === "sandbox" ? "Studio Compute usa o run cloud selecionado" : "Studio Compute usa o worker Android e receipts reais"}
+                      </span>
+                    </span>
+                    {runtimeMode === option ? <Check className="size-4" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {sheet === "engine" ? (
+            <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
+              <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
+                {t("ENGINE")}
+              </p>
+              {(["orchestrator", "sheol"] as GriotEngineId[]).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => {
+                    void changeEngine(option);
+                    setSheet(null);
+                  }}
+                  className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-secondary"
+                >
+                  <span className="flex items-center gap-2.5">
+                    <span className="grid size-7 place-items-center rounded-full bg-secondary">
+                      {option === "orchestrator" ? <Brain className="size-4" /> : <ShieldAlert className="size-4" />}
+                    </span>
+                    <span>
+                      <span className="block text-[13px] font-semibold">
+                        {option === "orchestrator" ? "Orchestrator" : "SHEOL"}
+                      </span>
+                      <span className="block text-[10.5px] text-muted-foreground">
+                        {option === "orchestrator"
+                          ? "Chat/agente flexível com provider/model"
+                          : "Missão rígida com phases, receipts e gates"}
+                      </span>
+                    </span>
+                  </span>
+                  {engine === option ? <Check className="size-4" /> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           {sheet === "model" ? (
             <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
               <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
@@ -3196,6 +3323,19 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                   </button>
                 ))}
               </div>
+            </div>
+          ) : null}
+
+          {scope !== "quick" && engine === "sheol" ? (
+            <div className="mb-2.5">
+              <SheolMissionPanel
+                userId={userId}
+                projectId={engineProjectId}
+                initialObjective={draft}
+                onResult={(result) => {
+                  setActionDetail(`SHEOL: ${result.state}`);
+                }}
+              />
             </div>
           ) : null}
 
@@ -3382,6 +3522,29 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                     <Plus className="size-[18px]" />
                   </button>
                   {scope !== "quick" && (
+                    <button
+                      type="button"
+                      onClick={() => setSheet(sheet === "runtime" ? null : "runtime")}
+                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-secondary px-2.5 text-[11px] font-medium text-foreground"
+                      aria-label={t("Selecionar runtime")}
+                    >
+                      <Terminal className="size-3.5" />
+                      <span>{runtimeMode === "native" ? "NATIVE" : "SANDBOX"}</span>
+                    </button>
+                  )}
+                  {scope !== "quick" && (
+                    <button
+                      type="button"
+                      onClick={() => setSheet(sheet === "engine" ? null : "engine")}
+                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-secondary px-2.5 text-[11.5px] font-semibold text-foreground"
+                      aria-label={t("Selecionar engine")}
+                    >
+                      {engine === "orchestrator" ? <Brain className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+                      <span>{engine === "orchestrator" ? "ORCH" : "SHEOL"}</span>
+                      <ChevronDown className="size-3.5 text-muted-foreground" />
+                    </button>
+                  )}
+                  {scope !== "quick" && engine === "orchestrator" && (
                     <button
                       onClick={() => {
                         if (availableModels.length === 0) {

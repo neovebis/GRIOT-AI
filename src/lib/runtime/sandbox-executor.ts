@@ -15,7 +15,7 @@ import { getWorkspaceFiles, type WorkspaceFile } from "./local-harness";
 export const DEFAULT_CLOUD_RUN_SANDBOX_ENDPOINT =
   "https://griot-studio-gateway-canary-997890752468.europe-west1.run.app/execute";
 
-export const DEFAULT_CLOUD_RUN_SANDBOX_TOKEN = "esdras@123123";
+export const DEFAULT_CLOUD_RUN_SANDBOX_TOKEN = "";
 
 export interface CloudRunExecutePayload {
   language: "python" | "bash";
@@ -65,19 +65,9 @@ export function getCloudRunSandboxEndpoint(): string {
  * Obtém o token de autorização do Cloud Run Sandbox.
  */
 export function getCloudRunSandboxToken(): string {
-  if (typeof window !== "undefined") {
-    const customToken =
-      window.localStorage.getItem("griot_gcp_runner_secret") ||
-      window.localStorage.getItem("griot_cloud_run_sandbox_token");
-    if (customToken) {
-      return customToken.trim();
-    }
-  }
-  const envToken = (import.meta as any)?.env?.VITE_GRIOT_SANDBOX_TOKEN;
-  if (envToken) {
-    return String(envToken).trim();
-  }
-  return DEFAULT_CLOUD_RUN_SANDBOX_TOKEN;
+  // Direct browser-held execution secrets are intentionally disabled.
+  // Production engine execution must go through griot-studio-compute.
+  return "";
 }
 
 /**

@@ -138,6 +138,25 @@ export async function checkNativeDiskSpace(): Promise<DiskSpaceInfo> {
   };
 }
 
+
+/**
+ * Execução estritamente nativa. Nunca faz fallback para Cloud Run.
+ * Usado pelo Studio Compute native worker para preservar a identidade do runtime.
+ */
+export async function executeStrictNativeCommand(
+  command: string,
+  options?: { cwd?: string; timeoutMs?: number },
+): Promise<NativeExecResult> {
+  if (!isNativeAndroidPlatform()) {
+    throw new Error("Native runtime is unavailable on this platform.");
+  }
+  return GriotTerminalPlugin.execCommand({
+    command,
+    cwd: options?.cwd,
+    timeoutMs: options?.timeoutMs || 60000,
+  });
+}
+
 /**
  * Executa comandos na shell do terminal:
  * - No Android nativo: executa no rootfs Linux ARM64 do dispositivo (com fallback para Cloud Run se comando não existir).
