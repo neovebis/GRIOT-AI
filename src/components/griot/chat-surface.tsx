@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { Thinking } from "@/components/griot/thinking";
 import { UserActions, AssistantActions } from "@/components/griot/message-actions";
 import { ChatMessageItem } from "./chat-message-item";
+import { NativeAdSlot } from "./native-ad-slot";
+import { planShowsAds } from "@/lib/gcu-service";
 import { MarkdownContent } from "./markdown-content";
 import { PreviewBar, FunctionalPreviewModal, preparePreviewHtml } from "./preview-bar";
 import { ConversationDrawer, type Conversation } from "@/components/griot/chat-drawers";
@@ -615,6 +617,7 @@ export function ChatSurface({ userId }: { userId: string }) {
   scopeRef.current = scope;
   const sendRef = useRef<typeof send | null>(null);
   const runRef = useRef<typeof run | null>(null);
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   const audioRef = useRef<{
     ctx: AudioContext;
@@ -1134,16 +1137,16 @@ export function ChatSurface({ userId }: { userId: string }) {
   }
 
   const empty = messages.length === 0 && !streaming && !reasoning;
-  const adMessageIds = useMemo(() => {
-    let completedAssistantReplies = 0;
-    const ids = new Set<string>();
-    for (const message of messages) {
-      if (message.role !== "assistant" || !message.content.trim()) continue;
-      completedAssistantReplies += 1;
-      if (completedAssistantReplies % 2 === 0) ids.add(message.id);
-    }
-    return ids;
-  }, [messages]);
+  const showsAds = useMemo(() => planShowsAds(), []);
+  const isAnyOverlayActive = Boolean(
+    drawer ||
+    sheet !== null ||
+    previewOpen ||
+    quickRoomDrawerOpen ||
+    addApiModalOpen ||
+    cloudShellRequired ||
+    isInputFocused
+  );
 
   const history = useMemo(
     () => messages.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
@@ -2485,9 +2488,27 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
         </div>
       )}
 
+      {/* Dock Fixo e Estável de Anúncio Nativo para Plano Free (Zero oscilação, fixo, 100% estável) */}
+      {showsAds && (
+        <div
+          data-griot-ad-dock="true"
+          className="fixed inset-x-0 top-[calc(max(env(safe-area-inset-top,0px),24px)+48px)] z-30 px-4 pointer-events-none"
+        >
+          <div className="pointer-events-auto mx-auto max-w-lg">
+            <NativeAdSlot slotId="chat-stationary-dock" hidden={isAnyOverlayActive} />
+          </div>
+        </div>
+      )}
+
       {/* Feed da conversa */}
       <div className="no-scrollbar h-full overflow-y-auto overflow-x-hidden w-full max-w-full overscroll-contain">
-        <div className="mx-auto flex w-full max-w-lg flex-col space-y-5 px-5 pt-[calc(max(env(safe-area-inset-top,0px),24px)+52px)] pb-52 overflow-x-hidden max-w-full">
+        <div
+          className={`mx-auto flex w-full max-w-lg flex-col space-y-5 px-5 pb-52 overflow-x-hidden max-w-full ${
+            showsAds
+              ? "pt-[calc(max(env(safe-area-inset-top,0px),24px)+126px)]"
+              : "pt-[calc(max(env(safe-area-inset-top,0px),24px)+52px)]"
+          }`}
+        >
           {/* No feed de mensagens, a barra de missão desaparece após o envio da mensagem */}
 
           {empty ? (
@@ -2519,7 +2540,6 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
               parseQuickSegments={parseQuickSegments}
               getPersonaConfig={getPersonaConfig}
               modelLabel={(m) => modelLabel(m ?? model)}
-              showAdAfter={adMessageIds.has(message.id)}
             />
           ))}
 
@@ -3301,7 +3321,8 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                 ) : null}
                 <textarea
                   ref={textareaRef}
-
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
                   rows={1}
                   value={draft}
                   onChange={(event) => {

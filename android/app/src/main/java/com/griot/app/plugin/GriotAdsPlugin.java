@@ -21,6 +21,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.android.gms.ads.AdLoader;
 import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.nativead.AdChoicesView;
 import com.google.android.gms.ads.nativead.MediaView;
 import com.google.android.gms.ads.nativead.NativeAd;
 import com.google.android.gms.ads.nativead.NativeAdView;
@@ -101,6 +102,8 @@ public class GriotAdsPlugin extends Plugin {
             if (slot == null) {
                 slot = new AdSlot();
                 slot.host = new FrameLayout(activity);
+                slot.host.setBackgroundColor(Color.TRANSPARENT);
+                slot.host.setElevation(0);
                 slot.host.setClipToOutline(true);
                 slot.host.setVisibility(View.INVISIBLE);
                 activity.addContentView(slot.host, new ViewGroup.LayoutParams(1, 1));
@@ -217,32 +220,38 @@ public class GriotAdsPlugin extends Plugin {
         params.leftMargin = webViewLocation[0] - contentLocation[0] + cssToPx(cssX);
         params.topMargin = webViewLocation[1] - contentLocation[1] + cssToPx(cssY);
         slot.host.setLayoutParams(params);
-        slot.host.setElevation(cssToPx(2));
+        slot.host.setElevation(0);
     }
 
     private void renderAd(AdSlot slot, NativeAd ad) {
         NativeAdView adView = new NativeAdView(getContext());
-        adView.setPadding(cssToPx(10), cssToPx(8), cssToPx(10), cssToPx(8));
+        adView.setPadding(cssToPx(10), cssToPx(6), cssToPx(10), cssToPx(6));
         adView.setBackground(roundedBackground(slot.darkMode));
 
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
-        if (ad.getIcon() != null) {
+        if (ad.getIcon() != null && ad.getIcon().getDrawable() != null) {
             ImageView icon = new ImageView(getContext());
             icon.setImageDrawable(ad.getIcon().getDrawable());
             icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
             GradientDrawable iconBg = new GradientDrawable();
+            iconBg.setColor(Color.rgb(28, 28, 32));
             iconBg.setCornerRadius(cssToPx(10));
             icon.setBackground(iconBg);
             icon.setClipToOutline(true);
-            row.addView(icon, new LinearLayout.LayoutParams(cssToPx(40), cssToPx(40)));
+            row.addView(icon, new LinearLayout.LayoutParams(cssToPx(38), cssToPx(38)));
             adView.setIconView(icon);
         } else {
             MediaView media = new MediaView(getContext());
             media.setImageScaleType(ImageView.ScaleType.CENTER_CROP);
-            row.addView(media, new LinearLayout.LayoutParams(cssToPx(50), MATCH));
+            GradientDrawable mediaBg = new GradientDrawable();
+            mediaBg.setColor(Color.rgb(28, 28, 32));
+            mediaBg.setCornerRadius(cssToPx(10));
+            media.setBackground(mediaBg);
+            media.setClipToOutline(true);
+            row.addView(media, new LinearLayout.LayoutParams(cssToPx(42), cssToPx(38)));
             adView.setMediaView(media);
         }
 
@@ -255,39 +264,46 @@ public class GriotAdsPlugin extends Plugin {
         TextView advertiser = textView(9, slot.darkMode, false, 1);
         String sponsor = ad.getAdvertiser() == null ? "Patrocinado" : ad.getAdvertiser();
         advertiser.setText(sponsor + "  ·  Anúncio");
-        advertiser.setAlpha(0.6f);
+        advertiser.setTextColor(Color.rgb(156, 156, 163));
         textColumn.addView(advertiser);
         adView.setAdvertiserView(advertiser);
 
         TextView headline = textView(12, slot.darkMode, true, 1);
         headline.setText(ad.getHeadline() == null ? "" : ad.getHeadline());
+        headline.setTextColor(Color.WHITE);
         textColumn.addView(headline);
         adView.setHeadlineView(headline);
 
-        TextView body = textView(10, slot.darkMode, false, 1);
-        body.setAlpha(0.7f);
-        body.setText(ad.getBody() == null ? "" : ad.getBody());
-        body.setVisibility(ad.getBody() == null ? View.GONE : View.VISIBLE);
-        textColumn.addView(body);
-        adView.setBodyView(body);
+        if (ad.getBody() != null && !ad.getBody().trim().isEmpty()) {
+            TextView body = textView(10, slot.darkMode, false, 1);
+            body.setTextColor(Color.rgb(130, 130, 138));
+            body.setText(ad.getBody());
+            textColumn.addView(body);
+            adView.setBodyView(body);
+        }
 
         Button cta = new Button(getContext());
         cta.setAllCaps(false);
-        cta.setTextSize(10);
+        cta.setTextSize(10.5f);
         cta.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         cta.setMinWidth(0);
         cta.setMinimumWidth(0);
         cta.setPadding(cssToPx(12), 0, cssToPx(12), 0);
         cta.setText(ad.getCallToAction() == null ? "Abrir" : ad.getCallToAction());
         GradientDrawable ctaBg = new GradientDrawable();
-        ctaBg.setColor(slot.darkMode ? Color.rgb(240, 240, 240) : Color.rgb(24, 24, 27));
-        ctaBg.setCornerRadius(cssToPx(10));
+        ctaBg.setColor(Color.rgb(240, 240, 245));
+        ctaBg.setCornerRadius(cssToPx(14));
         cta.setBackground(ctaBg);
-        cta.setTextColor(slot.darkMode ? Color.rgb(20, 20, 20) : Color.WHITE);
+        cta.setTextColor(Color.rgb(15, 15, 18));
         cta.setElevation(0);
         cta.setStateListAnimator(null);
-        row.addView(cta, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, cssToPx(32)));
+        LinearLayout.LayoutParams ctaParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, cssToPx(28));
+        ctaParams.gravity = Gravity.CENTER_VERTICAL;
+        row.addView(cta, ctaParams);
         adView.setCallToActionView(cta);
+
+        AdChoicesView adChoicesView = new AdChoicesView(getContext());
+        adView.setAdChoicesView(adChoicesView);
 
         adView.addView(row, new FrameLayout.LayoutParams(MATCH, MATCH));
         adView.setNativeAd(ad);
@@ -307,9 +323,9 @@ public class GriotAdsPlugin extends Plugin {
 
     private GradientDrawable roundedBackground(boolean darkMode) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(darkMode ? Color.rgb(24, 24, 27) : Color.rgb(250, 250, 250));
+        background.setColor(Color.rgb(20, 20, 23));
         background.setCornerRadius(cssToPx(16));
-        background.setStroke(cssToPx(1), darkMode ? Color.rgb(45, 45, 48) : Color.rgb(228, 228, 231));
+        background.setStroke(cssToPx(1), Color.rgb(38, 38, 42));
         return background;
     }
 

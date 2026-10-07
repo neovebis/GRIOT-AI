@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.03
+- Native Ads: Replaced in-scroll message overlays with a stationary fixed ad dock, eliminating all scroll lag, bouncing, and shaking.
+- Native Ads Design: Enforced dark monochromatic palette matching GRIOT's design system, removed white bounding boxes and elevation shadows, and restyled CTA to a clean pill button.
+- Native Ads Overlay Guard: Ensured ads hide immediately when modals, drawers, action sheets, preview windows, or keyboard are active.
+- Android AdMob: Added dedicated AdChoicesView to prevent default SDK white dismiss bar and set host background to transparent.
+
 ## 0.9.0
 - Added two-phase autonomous knowledge acquisition.
 - Added staging ledger separated from durable memory.

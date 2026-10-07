@@ -18,7 +18,6 @@ import { Thinking } from "./thinking";
 import type { ExecutionStepItem, MessageReaction } from "@/lib/chat-execution-manager";
 import { getAiLogo, getModelDisplayName } from "./brand-icons";
 import { getUserSavedApis } from "@/lib/user-apis";
-import { NativeAdSlot } from "./native-ad-slot";
 import { PreviewBar, FunctionalPreviewModal, extractWebSiteFromContent } from "./preview-bar";
 
 function getAttachmentDisplay(meta: AttachmentMetadata) {
@@ -304,7 +303,6 @@ export const ChatMessageItem = React.memo(
               onFeedback={(value) => onFeedback(message.id, value)}
               onRegenerate={() => onRegenerate(message.id)}
             />
-            {showAdAfter ? <NativeAdSlot slotId={`quick-${message.id}`} /> : null}
           </div>
         );
       }
@@ -362,7 +360,6 @@ export const ChatMessageItem = React.memo(
               onFeedback={(value) => onFeedback(message.id, value)}
               onRegenerate={() => onRegenerate(message.id)}
             />
-            {showAdAfter ? <NativeAdSlot slotId={`quick-${message.id}`} /> : null}
             {showBottomPreviewBar ? (
               <FunctionalPreviewModal
                 open={previewModalOpen}
@@ -419,7 +416,6 @@ export const ChatMessageItem = React.memo(
           onFeedback={(value) => onFeedback(message.id, value)}
           onRegenerate={() => onRegenerate(message.id)}
         />
-        {showAdAfter ? <NativeAdSlot slotId={`main-${message.id}`} /> : null}
         {showBottomPreviewBar ? (
           <FunctionalPreviewModal
             open={previewModalOpen}
