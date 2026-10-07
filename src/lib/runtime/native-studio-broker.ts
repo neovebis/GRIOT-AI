@@ -179,6 +179,26 @@ async function executeJob(job: NativeJob, workspacePath: string) {
   return { state: "failed", exitCode: 2, result: { error: `Unsupported native tool: ${tool}` } };
 }
 
+export async function selectStudioRuntime(
+  userId: string,
+  projectId: string,
+  runtimeMode: "sandbox" | "native",
+) {
+  const response = await fetch(
+    `${GRIOT_SUPABASE_URL}/functions/v1/griot-studio-compute/projects/${encodeURIComponent(projectId)}/runtime-selection`,
+    {
+      method: "PUT",
+      headers: await sessionHeaders(userId),
+      body: JSON.stringify({ runtimeMode }),
+    },
+  );
+  const raw = await response.text();
+  let payload: any = {};
+  try { payload = raw ? JSON.parse(raw) : {}; } catch {}
+  if (!response.ok) throw new Error(String(payload?.error || `Runtime selection HTTP ${response.status}`));
+  return payload as { runtimeMode: "sandbox" | "native" };
+}
+
 export function startNativeStudioWorker(input: {
   userId: string;
   projectId: string;
