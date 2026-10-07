@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { DEFAULT_MODEL, getAvailableModels, modelLabel, isModelOS, isSheolModel } from "@/lib/griot";
+import { DEFAULT_MODEL, getAvailableModels, modelLabel, isModelOS } from "@/lib/griot";
 import type { GriotEngineId } from "@/lib/engine-client";
 import { getUserSavedApis, syncUserApisWithRemote } from "@/lib/user-apis";
 import { getPrimaryWorkspaceId } from "@/lib/griot-api";
@@ -116,7 +116,7 @@ import { PluginsView } from "@/components/griot/plugins-view";
 import { AutonomousTaskModal } from "@/components/griot/autonomous-task-modal";
 import { SheolMissionPanel } from "@/components/griot/sheol-mission-panel";
 import { selectStudioRuntime, startNativeStudioWorker } from "@/lib/runtime/native-studio-broker";
-import { getRuntimeMode, setRuntimeMode, isNativeAndroidPlatform, type RuntimeMode } from "@/lib/runtime/native-terminal-bridge";
+import { getRuntimeMode } from "@/lib/runtime/native-terminal-bridge";
 
 import {
   captureAsText,
@@ -160,7 +160,7 @@ const EFFORTS = [
 ] as const;
 
 type Effort = (typeof EFFORTS)[number]["id"];
-type Sheet = null | "plus" | "model" | "engine" | "runtime" | "actions" | "projects" | "captures";
+type Sheet = null | "plus" | "model" | "actions" | "projects" | "captures";
 
 /** Vozes das Definições → vozes reais de síntese. */
 const TTS_VOICES: Record<string, string> = {
@@ -409,7 +409,6 @@ export function ChatSurface({ userId }: { userId: string }) {
   const [scope, setScope] = useState<"main" | "quick">("main");
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const conversationId = conversation?.id ?? null;
-  const [runtimeMode, setRuntimeModeState] = useState<RuntimeMode>(() => getRuntimeMode());
   const [engine, setEngine] = useState<GriotEngineId>(() => {
     if (typeof window !== "undefined" && localStorage.getItem("griot-default-engine") === "sheol") return "sheol";
     return "orchestrator";
@@ -497,6 +496,18 @@ export function ChatSurface({ userId }: { userId: string }) {
         }
       },
     });
+  }, [engineProjectId, userId]);
+
+  useEffect(() => {
+    if (!engineProjectId || !userId || userId === "anonymous") return;
+    const syncExistingRuntimeSelection = () => {
+      void selectStudioRuntime(userId, engineProjectId, getRuntimeMode()).catch((error) => {
+        console.warn("[GRIOT] Falha ao sincronizar runtime existente com Studio Compute:", error);
+      });
+    };
+    syncExistingRuntimeSelection();
+    window.addEventListener("griot_runtime_mode_changed", syncExistingRuntimeSelection);
+    return () => window.removeEventListener("griot_runtime_mode_changed", syncExistingRuntimeSelection);
   }, [engineProjectId, userId]);
 
   useEffect(() => {
@@ -1264,7 +1275,7 @@ export function ChatSurface({ userId }: { userId: string }) {
       return;
     }
 
-    // 2. Verificação rigorosa do Saldo de GCU no Supabase (bloqueia BASE e SHEOL quando atinge 0 GCU)
+    // 2. Verificação rigorosa do Saldo de GCU no Supabase (bloqueia Orchestrator e SHEOL quando atinge 0 GCU)
     const userWallet = await fetchUserGcuWallet(userId);
     const allowance = checkGcuAllowance(userWallet, 1);
     if (!allowance.allowed) {
@@ -1274,7 +1285,7 @@ export function ChatSurface({ userId }: { userId: string }) {
       const limitMsg: Row = {
         id: `asst-gcu-${Date.now()}`,
         role: "assistant",
-        content: `⚠️ **Limite de GCU Atingido (0 GCU)**\n\n${allowance.reason || "Esgotaste o teu saldo de computação GCU."}\n\nO acesso aos modos **BASE** e **SHEOL** está temporariamente suspenso.\n\n👉 Acede a **Planos & GCU** para carregar a tua carteira ou assinar um plano.`,
+        content: `⚠️ **Limite de GCU Atingido (0 GCU)**\n\n${allowance.reason || "Esgotaste o teu saldo de computação GCU."}\n\nO acesso aos modos **Orchestrator** e **SHEOL** está temporariamente suspenso.\n\n👉 Acede a **Planos & GCU** para carregar a tua carteira ou assinar um plano.`,
         created_at: new Date().toISOString(),
         feedback: null,
       };
@@ -2026,25 +2037,6 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
         // ignore
       }
     })();
-  }
-
-  async function changeRuntime(nextRuntime: RuntimeMode) {
-    if (nextRuntime === "native" && !isNativeAndroidPlatform()) {
-      toast.error(t("Native runtime só está disponível no Android."));
-      return;
-    }
-    setRuntimeMode(nextRuntime);
-    setRuntimeModeState(nextRuntime);
-    if (engineProjectId && userId && userId !== "anonymous") {
-      try {
-        await selectStudioRuntime(userId, engineProjectId, nextRuntime);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        toast.error(message);
-        return;
-      }
-    }
-    setSheet(null);
   }
 
   async function changeEngine(nextEngine: GriotEngineId) {
@@ -2926,6 +2918,7 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
           const targetScope = row.scope === "quick" ? "quick" : "main";
           setScope(targetScope);
           setConversation(row);
+          setEngine(row.engine || "orchestrator");
           setModel(row.model || DEFAULT_MODEL);
           saveConversationLocally(row);
           if (typeof window !== "undefined") {
@@ -3153,76 +3146,47 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
             </div>
           ) : null}
 
-          {sheet === "runtime" ? (
-            <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
-              <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                {t("RUNTIME")}
-              </p>
-              {(["sandbox", "native"] as RuntimeMode[]).map((option) => {
-                const unavailable = option === "native" && !isNativeAndroidPlatform();
-                return (
-                  <button
-                    key={option}
-                    type="button"
-                    disabled={unavailable}
-                    onClick={() => void changeRuntime(option)}
-                    className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-secondary disabled:opacity-40"
-                  >
-                    <span>
-                      <span className="block text-[13px] font-semibold">{option === "sandbox" ? "Sandbox / Cloud" : "Native"}</span>
-                      <span className="block text-[10.5px] text-muted-foreground">
-                        {option === "sandbox" ? "Studio Compute usa o run cloud selecionado" : "Studio Compute usa o worker Android e receipts reais"}
-                      </span>
-                    </span>
-                    {runtimeMode === option ? <Check className="size-4" /> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {sheet === "engine" ? (
-            <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
-              <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
-                {t("ENGINE")}
-              </p>
-              {(["orchestrator", "sheol"] as GriotEngineId[]).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => {
-                    void changeEngine(option);
-                    setSheet(null);
-                  }}
-                  className="flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left active:bg-secondary"
-                >
-                  <span className="flex items-center gap-2.5">
-                    <span className="grid size-7 place-items-center rounded-full bg-secondary">
-                      {option === "orchestrator" ? <Brain className="size-4" /> : <ShieldAlert className="size-4" />}
-                    </span>
-                    <span>
-                      <span className="block text-[13px] font-semibold">
-                        {option === "orchestrator" ? "Orchestrator" : "SHEOL"}
-                      </span>
-                      <span className="block text-[10.5px] text-muted-foreground">
-                        {option === "orchestrator"
-                          ? "Chat/agente flexível com provider/model"
-                          : "Missão rígida com phases, receipts e gates"}
-                      </span>
-                    </span>
-                  </span>
-                  {engine === option ? <Check className="size-4" /> : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
-
           {sheet === "model" ? (
             <div className="sheet-up mx-auto mb-2 w-full max-w-[300px] overflow-hidden rounded-[20px] border border-hairline bg-surface/95 backdrop-blur-2xl">
               <p className="px-3.5 pt-2.5 pb-1 text-[9.5px] font-medium tracking-[0.16em] text-muted-foreground uppercase">
                 {t("APIs de IA")}
               </p>
               <div className="max-h-[50vh] overflow-y-auto no-scrollbar">
+                {(["orchestrator", "sheol"] as GriotEngineId[]).map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      void changeEngine(option);
+                      setSheet(null);
+                    }}
+                    className="flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left active:bg-secondary transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="grid size-6 shrink-0 place-items-center rounded-full border border-hairline/60 bg-surface">
+                        {option === "orchestrator" ? (
+                          <Brain className="size-3.5 text-foreground" />
+                        ) : (
+                          <ShieldAlert className="size-3.5 text-foreground" />
+                        )}
+                      </div>
+                      <span className="min-w-0">
+                        <span className="block truncate text-[13px] font-medium leading-tight">
+                          {option === "orchestrator" ? "ORCHESTRATOR" : "SHEOL"}
+                        </span>
+                        <span className="block truncate text-[10.5px] leading-tight text-muted-foreground">
+                          {option === "orchestrator"
+                            ? "Motor orquestrador"
+                            : "Motor de missão rígida"}
+                        </span>
+                      </span>
+                    </div>
+                    {engine === option ? (
+                      <Check className="size-[14px] shrink-0 text-foreground" />
+                    ) : null}
+                  </button>
+                ))}
+                <div className="border-t border-hairline/60" />
                 {availableModels.length === 0 ? (
                   <div className="px-4 py-5 text-center">
                     <p className="text-[13px] font-medium text-foreground">
@@ -3260,6 +3224,7 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                     <button
                       key={option.id}
                       onClick={async () => {
+                        await changeEngine("orchestrator");
                         setModel(option.id);
                         setSheet(null);
                         if (conversationId && !conversationId.startsWith("local-conv-")) {
@@ -3523,64 +3488,18 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                   </button>
                   {scope !== "quick" && (
                     <button
-                      type="button"
-                      onClick={() => setSheet(sheet === "runtime" ? null : "runtime")}
-                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-secondary px-2.5 text-[11px] font-medium text-foreground"
-                      aria-label={t("Selecionar runtime")}
+                      onClick={() => setSheet(sheet === "model" ? null : "model")}
+                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-3 text-[13px] font-medium text-foreground transition-all hover:bg-secondary/80 border border-hairline/60"
                     >
-                      <Terminal className="size-3.5" />
-                      <span>{runtimeMode === "native" ? "NATIVE" : "SANDBOX"}</span>
-                    </button>
-                  )}
-                  {scope !== "quick" && (
-                    <button
-                      type="button"
-                      onClick={() => setSheet(sheet === "engine" ? null : "engine")}
-                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-hairline/60 bg-secondary px-2.5 text-[11.5px] font-semibold text-foreground"
-                      aria-label={t("Selecionar engine")}
-                    >
-                      {engine === "orchestrator" ? <Brain className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
-                      <span>{engine === "orchestrator" ? "ORCH" : "SHEOL"}</span>
-                      <ChevronDown className="size-3.5 text-muted-foreground" />
-                    </button>
-                  )}
-                  {scope !== "quick" && engine === "orchestrator" && (
-                    <button
-                      onClick={() => {
-                        if (availableModels.length === 0) {
-                          setAddApiModalOpen(true);
-                        } else {
-                          setSheet(sheet === "model" ? null : "model");
-                        }
-                      }}
-                      className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-all ${
-                        availableModels.length === 0
-                          ? "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15"
-                          : "bg-secondary text-foreground hover:bg-secondary/80 border border-hairline/60"
-                      }`}
-                    >
-                      {availableModels.length > 0 &&
-                        (() => {
-                          const savedApis = getUserSavedApis();
-                          const found = savedApis.find((a) => a.id === model);
-                          const provId = found?.providerId || model.split(":")[0];
-                          const Logo = isModelOS(model)
-                            ? GriotAiLogo
-                            : getAiLogo(provId);
-                          return <Logo className="size-3.5 shrink-0 text-foreground" />;
-                        })()}
+                      {engine === "orchestrator" ? (
+                        <Brain className="size-3.5 shrink-0 text-foreground" />
+                      ) : (
+                        <ShieldAlert className="size-3.5 shrink-0 text-foreground" />
+                      )}
                       <span className="truncate">
-                        {(() => {
-                          if (availableModels.length === 0) return t("+ Adicionar API");
-                          const raw = modelLabel(model);
-                          return raw.length > 12 ? `${raw.slice(0, 12)}…` : raw;
-                        })()}
+                        {engine === "orchestrator" ? "ORCHESTRATOR" : "SHEOL"}
                       </span>
-                      <ChevronDown
-                        className={`size-4 ${
-                          availableModels.length === 0 ? "text-primary/70" : "text-muted-foreground"
-                        }`}
-                      />
+                      <ChevronDown className="size-4 text-muted-foreground" />
                     </button>
                   )}
 
