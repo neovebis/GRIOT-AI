@@ -1,0 +1,47 @@
+name: GRIOT Engine Integration Validation
+
+on:
+  push:
+    branches:
+      - fix/unified-engine-runtime
+    paths:
+      - "src/**"
+      - "supabase/functions/griot-orchestrator/**"
+      - "supabase/functions/griot-sheol/**"
+      - "supabase/functions/griot-studio-compute/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/validate-engine-integration.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "supabase/functions/griot-orchestrator/**"
+      - "supabase/functions/griot-sheol/**"
+      - "supabase/functions/griot-studio-compute/**"
+      - "supabase/migrations/**"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Web production build
+        env:
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: test-publishable-key
+        run: npm run build
+      - name: Verify engine boundaries
+        run: |
+          grep -q 'griot-orchestrator/ask' src/lib/engine-client.ts
+          grep -q 'griot-sheol' src/lib/engine-client.ts
+          grep -q 'griot-studio-compute' supabase/functions/griot-sheol/index.ts
+          grep -q 'verificationPending' supabase/functions/griot-orchestrator/agent-runtime.ts
+          grep -q 'griot_studio_native_jobs' supabase/functions/griot-studio-compute/index.ts
