@@ -77,6 +77,7 @@ export async function listConversations(): Promise<Conversation[]> {
         scope: loc.scope === "quick" ? "quick" : "main",
         title,
         model: loc.model || "ModelOS",
+        engine: loc.engine === "sheol" ? "sheol" : "orchestrator",
         pinned: Boolean(loc.pinned),
         archived: Boolean(loc.archived),
         updated_at: loc.updated_at || new Date().toISOString(),
