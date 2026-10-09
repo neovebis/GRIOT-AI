@@ -42,6 +42,10 @@ export function useCurrentUser(): UserProfileState {
 
     async function syncAuth() {
       try {
+        if (typeof window !== "undefined" && localStorage.getItem("griot_active_oauth_plugin")) {
+          return;
+        }
+
         const { data: authData } = await supabase.auth.getUser();
         const currentUser = authData?.user ?? null;
 
@@ -49,7 +53,7 @@ export function useCurrentUser(): UserProfileState {
         setUser(currentUser);
 
         if (currentUser) {
-          if (currentUser.email && typeof window !== "undefined") {
+          if (currentUser.email && typeof window !== "undefined" && !localStorage.getItem("griot_active_oauth_plugin")) {
             localStorage.setItem("griot_user_email", currentUser.email);
           }
 
@@ -90,7 +94,7 @@ export function useCurrentUser(): UserProfileState {
 
           if (chosenName) {
             setDisplayName(chosenName);
-            if (typeof window !== "undefined") {
+            if (typeof window !== "undefined" && !localStorage.getItem("griot_active_oauth_plugin")) {
               localStorage.setItem("griot_user_name", chosenName);
             }
           }
@@ -102,7 +106,7 @@ export function useCurrentUser(): UserProfileState {
 
           if (chosenAvatar) {
             setAvatarUrl(chosenAvatar);
-            if (typeof window !== "undefined") {
+            if (typeof window !== "undefined" && !localStorage.getItem("griot_active_oauth_plugin")) {
               localStorage.setItem("griot_user_avatar", chosenAvatar);
             }
           }
@@ -118,6 +122,9 @@ export function useCurrentUser(): UserProfileState {
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
+      if (typeof window !== "undefined" && localStorage.getItem("griot_active_oauth_plugin")) {
+        return;
+      }
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
@@ -125,7 +132,7 @@ export function useCurrentUser(): UserProfileState {
           .then(() => grantFreeAllowance())
           .catch(() => undefined);
         void syncUserApisWithRemote().catch(() => undefined);
-        if (currentUser.email && typeof window !== "undefined") {
+        if (currentUser.email && typeof window !== "undefined" && !localStorage.getItem("griot_active_oauth_plugin")) {
           localStorage.setItem("griot_user_email", currentUser.email);
         }
         const name =
@@ -135,7 +142,7 @@ export function useCurrentUser(): UserProfileState {
           (currentUser.email ? currentUser.email.split("@")[0] : "");
         if (name) {
           setDisplayName(name);
-          if (typeof window !== "undefined") {
+          if (typeof window !== "undefined" && !localStorage.getItem("griot_active_oauth_plugin")) {
             localStorage.setItem("griot_user_name", name);
           }
         }
@@ -146,8 +153,8 @@ export function useCurrentUser(): UserProfileState {
 
         // Só assume a foto do metadata/e-mail se não houver foto de perfil personalizada definida
         if (!existingAvatar && metaAvatar) {
-          setAvatarUrl(metaAvatar);
-          if (typeof window !== "undefined") {
+          if (typeof window !== "undefined" && !localStorage.getItem("griot_active_oauth_plugin")) {
+            setAvatarUrl(metaAvatar);
             localStorage.setItem("griot_user_avatar", metaAvatar);
           }
         }

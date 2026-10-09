@@ -2,6 +2,7 @@ import { App } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Capacitor } from "@capacitor/core";
 import { supabase } from "@/integrations/supabase/client";
+import { ensurePrimaryGriotSessionRestored } from "./plugin-oauth";
 
 let isInitialized = false;
 
@@ -40,6 +41,17 @@ export function initNativeAuthDeepLink(onSuccess?: () => void) {
 
         let authSession: any = null;
 
+        // Detecta se é autorização de plugin ou autenticação principal do app
+        const isPluginCallback = Boolean(
+          url.includes("oauth-callback") ||
+          params.has("plugin") ||
+          (typeof window !== "undefined" && localStorage.getItem("griot_active_oauth_plugin"))
+        );
+        const pluginId =
+          params.get("plugin") ||
+          (typeof window !== "undefined" ? localStorage.getItem("griot_active_oauth_plugin") : null) ||
+          "github";
+
         // 1. Fluxo PKCE moderno (código de autorização)
         if (code) {
           try {
@@ -76,35 +88,71 @@ export function initNativeAuthDeepLink(onSuccess?: () => void) {
           }
         }
 
-        // 3. Persistência de tokens de provedor para plugins
+        // Se for PLUGIN: isolamento total para NUNCA substituir a conta GRIOT
+        if (isPluginCallback) {
+          const effectiveToken = providerToken || accessToken;
+          const externalUser = authSession?.user;
+          const externalUsername =
+            externalUser?.user_metadata?.user_name ||
+            externalUser?.user_metadata?.preferred_username ||
+            externalUser?.user_metadata?.name ||
+            externalUser?.email?.split("@")[0];
+          const externalAvatar =
+            externalUser?.user_metadata?.avatar_url ||
+            externalUser?.user_metadata?.picture;
+          const externalEmail = externalUser?.email;
+
+          // 3. Persistência de tokens para o plugin
+          if (effectiveToken && typeof window !== "undefined") {
+            try {
+              localStorage.setItem(`griot_provider_token_${pluginId}`, effectiveToken);
+              localStorage.setItem("griot_latest_provider_token", effectiveToken);
+            } catch {}
+          }
+
+          // 4. RESTAURAÇÃO CRÍTICA DO PERFIL E SESSÃO PRINCIPAL DO GRIOT:
+          // NUNCA substitui o e-mail, nome ou foto de perfil do utilizador GRIOT pela conta do plugin!
+          await ensurePrimaryGriotSessionRestored();
+
+          // 5. Disparo do evento nativo para plugins que aguardam autorização (com os metadados do plugin)
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("griot-oauth-success", {
+                detail: {
+                  pluginId,
+                  providerToken: effectiveToken,
+                  accessToken: effectiveToken,
+                  username: externalUsername,
+                  avatarUrl: externalAvatar,
+                  email: externalEmail,
+                },
+              }),
+            );
+
+            if (effectiveToken) {
+              localStorage.setItem(
+                "griot_pending_oauth_callback",
+                JSON.stringify({
+                  pluginId,
+                  providerToken: effectiveToken,
+                  accessToken: effectiveToken,
+                  username: externalUsername,
+                  avatarUrl: externalAvatar,
+                  email: externalEmail,
+                  timestamp: Date.now(),
+                }),
+              );
+            }
+          }
+
+          return; // Concluído! Não executa a lógica de login principal do app abaixo.
+        }
+
+        // --- FLUXO DE LOGIN PRINCIPAL DO APP (com.griot.app://home) ---
         if (providerToken && typeof window !== "undefined") {
           try {
             localStorage.setItem("griot_latest_provider_token", providerToken);
           } catch {}
-        }
-
-        // 4. Disparo do evento nativo para plugins que aguardam autorização
-        if (typeof window !== "undefined") {
-          window.dispatchEvent(
-            new CustomEvent("griot-oauth-success", {
-              detail: {
-                providerToken: providerToken || accessToken,
-                accessToken: accessToken || authSession?.access_token,
-                session: authSession,
-              },
-            }),
-          );
-
-          if (providerToken || accessToken) {
-            localStorage.setItem(
-              "griot_pending_oauth_callback",
-              JSON.stringify({
-                providerToken: providerToken || accessToken,
-                accessToken: accessToken || authSession?.access_token,
-                timestamp: Date.now(),
-              }),
-            );
-          }
         }
 
         if (authSession?.user) {
@@ -119,14 +167,10 @@ export function initNativeAuthDeepLink(onSuccess?: () => void) {
           if (user.email) localStorage.setItem("griot_user_email", user.email);
           if (userDisplayName) localStorage.setItem("griot_user_name", userDisplayName);
 
-          // Se for uma autorização de plugin (oauth-callback), NÃO recarrega nem força navegação para /home
-          const isPluginCallback = url.includes("oauth-callback") || params.has("plugin");
-          if (!isPluginCallback) {
-            if (onSuccess) {
-              onSuccess();
-            } else if (window.location.pathname === "/auth" || window.location.pathname === "/") {
-              window.location.href = "/home";
-            }
+          if (onSuccess) {
+            onSuccess();
+          } else if (window.location.pathname === "/auth" || window.location.pathname === "/") {
+            window.location.href = "/home";
           }
         }
       }

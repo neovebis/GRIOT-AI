@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
 import { GriotMark } from "@/components/griot/logo";
 import { supabase } from "@/integrations/supabase/client";
+import { ensurePrimaryGriotSessionRestored } from "@/lib/plugin-oauth";
 
 export const Route = createFileRoute("/oauth-callback")({
   component: OAuthCallbackPage,
@@ -28,7 +29,20 @@ function OAuthCallbackPage() {
         const refreshToken = hashParams.get("refresh_token") || searchParams.get("refresh_token");
         const code = searchParams.get("code");
 
-        // Se o provedor retornou código PKCE, troca pelo token e sessão
+        const isPluginFlow = Boolean(
+          searchParams.get("plugin") ||
+          hashParams.get("plugin") ||
+          (typeof window !== "undefined" && localStorage.getItem("griot_active_oauth_plugin"))
+        );
+        const pluginId =
+          searchParams.get("plugin") ||
+          hashParams.get("plugin") ||
+          (typeof window !== "undefined" ? localStorage.getItem("griot_active_oauth_plugin") : null) ||
+          "github";
+
+        let externalUserMetadata: { username?: string; email?: string; avatarUrl?: string } | null = null;
+
+        // Se o provedor retornou código PKCE, troca pelo token e sessão temporária
         if (code) {
           try {
             const { data: codeData, error: codeErr } = await supabase.auth.exchangeCodeForSession(code);
@@ -39,14 +53,26 @@ function OAuthCallbackPage() {
               if (codeData.session.access_token) {
                 accessToken = codeData.session.access_token;
               }
+              const u = codeData.session.user;
+              if (u) {
+                externalUserMetadata = {
+                  username:
+                    u.user_metadata?.user_name ||
+                    u.user_metadata?.preferred_username ||
+                    u.user_metadata?.name ||
+                    u.email?.split("@")[0],
+                  email: u.email,
+                  avatarUrl: u.user_metadata?.avatar_url || u.user_metadata?.picture,
+                };
+              }
             }
           } catch (codeExErr) {
             console.warn("[OAuthCallback] Falha ao trocar código PKCE:", codeExErr);
           }
         }
 
-        // Se houver access_token do Supabase, restaura a sessão
-        if (accessToken && refreshToken) {
+        // Se houver access_token do Supabase e NÃO for fluxo de plugin, sincroniza sessão normalmente
+        if (!isPluginFlow && accessToken && refreshToken) {
           try {
             const { data } = await supabase.auth.setSession({
               access_token: accessToken,
@@ -60,7 +86,91 @@ function OAuthCallbackPage() {
           }
         }
 
-        // Se ainda não tivermos provider_token, tenta ler da sessão atual
+        // Se for fluxo de autorização de PLUGIN:
+        if (isPluginFlow) {
+          const effectiveToken = providerToken || accessToken;
+          if (effectiveToken && typeof window !== "undefined") {
+            try {
+              localStorage.setItem(`griot_provider_token_${pluginId}`, effectiveToken);
+              localStorage.setItem("griot_latest_provider_token", effectiveToken);
+            } catch {}
+          }
+
+          // Restaura a sessão e perfil primários do GRIOT imediatamente
+          await ensurePrimaryGriotSessionRestored();
+
+          // 2. Se estiver numa janela Popup (window.opener)
+          if (window.opener && window.opener !== window) {
+            try {
+              window.opener.postMessage(
+                {
+                  type: "GRIOT_PLUGIN_OAUTH_CALLBACK",
+                  pluginId,
+                  providerToken: effectiveToken || null,
+                  accessToken: effectiveToken || null,
+                  username: externalUserMetadata?.username,
+                  email: externalUserMetadata?.email,
+                  avatarUrl: externalUserMetadata?.avatarUrl,
+                  hash,
+                  search,
+                },
+                "*",
+              );
+            } catch (postErr) {
+              console.warn("[OAuthCallback] Falha ao enviar postMessage:", postErr);
+            }
+
+            setStatus("success");
+            setStatusMessage("Conta autorizada com sucesso! A fechar janela...");
+
+            setTimeout(() => {
+              try {
+                window.close();
+              } catch {}
+            }, 800);
+            return;
+          }
+
+          // 3. Se for na mesma janela (redirecionamento)
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("griot-oauth-success", {
+                detail: {
+                  pluginId,
+                  providerToken: effectiveToken,
+                  accessToken: effectiveToken,
+                  username: externalUserMetadata?.username,
+                  email: externalUserMetadata?.email,
+                  avatarUrl: externalUserMetadata?.avatarUrl,
+                },
+              }),
+            );
+
+            if (effectiveToken) {
+              localStorage.setItem(
+                "griot_pending_oauth_callback",
+                JSON.stringify({
+                  pluginId,
+                  providerToken: effectiveToken,
+                  accessToken: effectiveToken,
+                  username: externalUserMetadata?.username,
+                  email: externalUserMetadata?.email,
+                  avatarUrl: externalUserMetadata?.avatarUrl,
+                  timestamp: Date.now(),
+                }),
+              );
+            }
+          }
+
+          setStatus("success");
+          setStatusMessage("Autorização concluída! A voltar ao GRIOT...");
+          setTimeout(() => {
+            void navigate({ to: "/settings", replace: true });
+          }, 1000);
+          return;
+        }
+
+        // --- FLUXO DE LOGIN PRINCIPAL DO APP ---
         if (!providerToken) {
           const { data } = await supabase.auth.getSession();
           if (data.session?.provider_token) {
@@ -71,14 +181,12 @@ function OAuthCallbackPage() {
           }
         }
 
-        // Se obtivemos um provider_token, persistir para reaproveitamento nos plugins
         if (providerToken && typeof window !== "undefined") {
           try {
             localStorage.setItem("griot_latest_provider_token", providerToken);
           } catch {}
         }
 
-        // 2. Se estiver numa janela Popup (window.opener)
         if (window.opener && window.opener !== window) {
           try {
             window.opener.postMessage(
@@ -101,14 +209,11 @@ function OAuthCallbackPage() {
           setTimeout(() => {
             try {
               window.close();
-            } catch {
-              // Popup pode não fechar se não foi aberta por script
-            }
+            } catch {}
           }, 800);
           return;
         }
 
-        // 3. Se for ambiente nativo ou redirecionamento na mesma janela
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("griot-oauth-success", {

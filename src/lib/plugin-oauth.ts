@@ -659,7 +659,16 @@ export async function detectActiveUserSessionProvider(pluginId: string): Promise
     if (!user) return null;
 
     const userProvider = (user.app_metadata?.provider || "").toLowerCase();
-    const matched = userProvider === spec.provider;
+    const matched = userProvider === spec.provider.toLowerCase();
+
+    const savedToken =
+      session?.provider_token ||
+      localStorage.getItem(`griot_provider_token_${spec.provider}`) ||
+      (matched ? localStorage.getItem("griot_provider_token_last") : null) ||
+      undefined;
+
+    // Uma sessão só corresponde à plataforma se o utilizador autenticou especificamente com esse provedor no GRIOT
+    const hasMatchingSession = Boolean(matched && (session?.provider_token || savedToken));
 
     const userName =
       user.user_metadata?.user_name ||
@@ -671,23 +680,74 @@ export async function detectActiveUserSessionProvider(pluginId: string): Promise
 
     const avatarUrl = user.user_metadata?.avatar_url || user.user_metadata?.picture || undefined;
 
-    const savedToken =
-      session?.provider_token ||
-      localStorage.getItem(`griot_provider_token_${spec.provider}`) ||
-      (matched ? localStorage.getItem("griot_provider_token_last") : null) ||
-      undefined;
-
     return {
-      hasMatchingSession: matched || Boolean(savedToken),
+      hasMatchingSession,
       providerName: spec.displayName,
-      userEmail: user.email,
-      userName,
-      avatarUrl,
+      userEmail: matched ? user.email : undefined,
+      userName: matched ? userName : undefined,
+      avatarUrl: matched ? avatarUrl : undefined,
       providerToken: savedToken,
     };
   } catch (err) {
     console.warn("[OAuth] Falha ao inspecionar sessão ativa:", err);
     return null;
+  }
+}
+
+/**
+ * Restaura infalivelmente a sessão do Supabase e os metadados do utilizador primário do GRIOT.
+ * Garante que autorizações de plugins externos (ex: GitHub) NUNCA alterem a conta, e-mail,
+ * nome ou foto de perfil padrão da aplicação.
+ */
+export async function ensurePrimaryGriotSessionRestored(): Promise<void> {
+  if (typeof window === "undefined") return;
+
+  try {
+    const backupEmail = localStorage.getItem("griot_primary_backup_email");
+    const backupName = localStorage.getItem("griot_primary_backup_name");
+    const backupAvatar = localStorage.getItem("griot_primary_backup_avatar");
+
+    if (backupEmail) localStorage.setItem("griot_user_email", backupEmail);
+    if (backupName) localStorage.setItem("griot_user_name", backupName);
+    if (backupAvatar) {
+      localStorage.setItem("griot_user_avatar", backupAvatar);
+    } else {
+      // Se o utilizador não possuía avatar antes de conectar o plugin, remove qualquer foto de terceiro vazada
+      const currentAvatar = localStorage.getItem("griot_user_avatar");
+      if (currentAvatar && localStorage.getItem("griot_active_oauth_plugin")) {
+        localStorage.removeItem("griot_user_avatar");
+      }
+    }
+
+    localStorage.removeItem("griot_primary_backup_email");
+    localStorage.removeItem("griot_primary_backup_name");
+    localStorage.removeItem("griot_primary_backup_avatar");
+
+    const savedPrimary = localStorage.getItem("griot_primary_auth_session");
+    if (savedPrimary && savedPrimary !== "anonymous") {
+      try {
+        const parsed = JSON.parse(savedPrimary);
+        if (parsed?.access_token && parsed?.refresh_token) {
+          await supabase.auth.setSession({
+            access_token: parsed.access_token,
+            refresh_token: parsed.refresh_token,
+          });
+        }
+      } catch (err) {
+        console.warn("[OAuth] Falha ao restaurar sessão primária do Supabase:", err);
+      }
+    } else if (savedPrimary === "anonymous") {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) {
+          await supabase.auth.signOut();
+        }
+      } catch {}
+    }
+
+    localStorage.removeItem("griot_primary_auth_session");
+  } finally {
+    localStorage.removeItem("griot_active_oauth_plugin");
   }
 }
 
@@ -714,10 +774,43 @@ export async function startPluginOAuthFlow(
     return;
   }
 
+  // 1. Snapshot de proteção: guarda a sessão e perfil do utilizador GRIOT ativo
+  if (typeof window !== "undefined") {
+    try {
+      const { data: currentSessionData } = await supabase.auth.getSession();
+      const primarySession = currentSessionData?.session;
+      const primaryEmail = localStorage.getItem("griot_user_email");
+      const primaryName = localStorage.getItem("griot_user_name");
+      const primaryAvatar = localStorage.getItem("griot_user_avatar");
+
+      if (primarySession) {
+        localStorage.setItem(
+          "griot_primary_auth_session",
+          JSON.stringify({
+            access_token: primarySession.access_token,
+            refresh_token: primarySession.refresh_token,
+            user_id: primarySession.user.id,
+            email: primarySession.user.email,
+          }),
+        );
+      } else {
+        localStorage.setItem("griot_primary_auth_session", "anonymous");
+      }
+
+      if (primaryEmail) localStorage.setItem("griot_primary_backup_email", primaryEmail);
+      if (primaryName) localStorage.setItem("griot_primary_backup_name", primaryName);
+      if (primaryAvatar) localStorage.setItem("griot_primary_backup_avatar", primaryAvatar);
+
+      localStorage.setItem("griot_active_oauth_plugin", spec.pluginId);
+    } catch (e) {
+      console.warn("[OAuth] Falha ao criar snapshot da sessão primária:", e);
+    }
+  }
+
   const isNative = Capacitor.isNativePlatform();
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const redirectUri = isNative
-    ? "com.griot.app://oauth-callback"
+    ? `com.griot.app://oauth-callback?plugin=${encodeURIComponent(spec.pluginId)}`
     : `${origin}/oauth-callback?plugin=${encodeURIComponent(spec.pluginId)}`;
 
   try {
@@ -767,6 +860,7 @@ export async function startPluginOAuthFlow(
       if (spec.directTokenPresetUrl) {
         authUrl = spec.directTokenPresetUrl;
       } else {
+        await ensurePrimaryGriotSessionRestored();
         throw new Error(`Não foi possível gerar o endereço de autorização para ${spec.displayName}.`);
       }
     }
@@ -783,11 +877,16 @@ export async function startPluginOAuthFlow(
         const detail = event.detail || {};
         const token = detail.providerToken || detail.accessToken;
         if (!token) {
+          await ensurePrimaryGriotSessionRestored();
           callbacks.onError("Não foi recebido nenhum token de autorização da conta.");
           return;
         }
 
-        await processOAuthToken(pluginId, token, spec, callbacks);
+        await processOAuthToken(pluginId, token, spec, callbacks, {
+          username: detail.username,
+          email: detail.email,
+          avatarUrl: detail.avatarUrl,
+        });
       };
 
       window.addEventListener("griot-oauth-success", onDeepLinkEvent as any);
@@ -809,6 +908,7 @@ export async function startPluginOAuthFlow(
     );
 
     if (!popup || popup.closed) {
+      await ensurePrimaryGriotSessionRestored();
       callbacks.onError(
         "A janela de autorização foi bloqueada pelo teu navegador. Por favor permite popups para este site.",
       );
@@ -823,31 +923,38 @@ export async function startPluginOAuthFlow(
 
         const token = event.data.providerToken || event.data.accessToken;
         if (!token) {
+          await ensurePrimaryGriotSessionRestored();
           callbacks.onError("Autorização não concluída: token de acesso ausente.");
           return;
         }
 
-        await processOAuthToken(pluginId, token, spec, callbacks);
+        await processOAuthToken(pluginId, token, spec, callbacks, {
+          username: event.data.username,
+          email: event.data.email,
+          avatarUrl: event.data.avatarUrl,
+        });
       }
     };
 
     window.addEventListener("message", handleMessage);
 
     // Deteta se o utilizador fechou a popup sem concluir
-    const popupCheckInterval = setInterval(() => {
+    const popupCheckInterval = setInterval(async () => {
       if (popup.closed) {
         clearInterval(popupCheckInterval);
         window.removeEventListener("message", handleMessage);
+        await ensurePrimaryGriotSessionRestored();
       }
     }, 1000);
   } catch (err: any) {
     console.error("[OAuth] Erro ao iniciar fluxo:", err);
+    await ensurePrimaryGriotSessionRestored();
     callbacks.onError(err.message || "Falha ao iniciar autorização da conta.");
   }
 }
 
 /**
- * Valida o token recebido contra as APIs oficiais e grava a conexão avançada
+ * Valida o token recebido contra as APIs oficiais e grava a conexão avançada sem alterar a conta GRIOT
  */
 async function processOAuthToken(
   pluginId: string,
@@ -864,24 +971,32 @@ async function processOAuthToken(
     }) => void;
     onError: (errorMessage: string) => void;
   },
+  prefetchedUser?: {
+    username?: string;
+    email?: string;
+    avatarUrl?: string;
+  },
 ) {
   try {
     const validation = await validatePluginCredentials(pluginId, { apiKey: token });
 
     if (!validation.valid) {
+      await ensurePrimaryGriotSessionRestored();
       callbacks.onError(
         validation.message || "A API do fornecedor recusou o token de autorização.",
       );
       return;
     }
 
-    const username = validation.details?.username || undefined;
-    const email = validation.details?.email || undefined;
+    const username = validation.details?.username || prefetchedUser?.username || undefined;
+    const email = validation.details?.email || prefetchedUser?.email || undefined;
+    const avatarUrl =
+      (validation.details as any)?.avatarUrl || prefetchedUser?.avatarUrl || undefined;
     const accountLabel = username
       ? `${spec.displayName} (@${username})`
       : `${spec.displayName} (Conta Conectada)`;
 
-    // Guarda automaticamente a credencial com validação avançada e método oauth
+    // Guarda a credencial com validação avançada associando avatar e username ao PLUGIN
     await connectPluginUnified(pluginId, {
       apiKey: token,
       accountName: username || email,
@@ -895,17 +1010,23 @@ async function processOAuthToken(
       projects: validation.details?.projects,
       projectRef: validation.details?.detectedRef,
       customEndpoint: validation.details?.customEndpoint,
+      avatarUrl,
+      username,
     });
+
+    // Garante restauração absoluta do perfil e da sessão do utilizador GRIOT
+    await ensurePrimaryGriotSessionRestored();
 
     callbacks.onSuccess({
       token,
       username,
       email,
-      avatarUrl: (validation.details as any)?.avatarUrl,
+      avatarUrl,
       scopes: spec.scopes,
       validation,
     });
   } catch (err: any) {
+    await ensurePrimaryGriotSessionRestored();
     callbacks.onError(err.message || "Erro inesperado ao validar a autorização da conta.");
   }
 }
