@@ -48,8 +48,8 @@ jobs:
           echo "Gradle versionCode: $VERSION_CODE"
 
           test "$PACKAGE_VER" = "$GRADLE_VER"
-          test "$GRADLE_VER" = "1.1.07"
-          test "$VERSION_CODE" = "107"
+          test -n "$GRADLE_VER"
+          test -n "$VERSION_CODE"
 
           echo "RELEASE_TAG=v$GRADLE_VER" >> "$GITHUB_ENV"
           echo "RELEASE_NAME=GRIOT Mobile v$GRADLE_VER" >> "$GITHUB_ENV"
