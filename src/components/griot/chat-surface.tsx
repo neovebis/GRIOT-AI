@@ -93,7 +93,6 @@ import {
   Menu,
   MoreVertical,
   Folder,
-  Brain,
   ShieldAlert,
   BarChart2,
   CheckCircle2,
@@ -3152,40 +3151,31 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                 {t("APIs de IA")}
               </p>
               <div className="max-h-[50vh] overflow-y-auto no-scrollbar">
-                {(["orchestrator", "sheol"] as GriotEngineId[]).map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      void changeEngine(option);
-                      setSheet(null);
-                    }}
-                    className="flex w-full items-center justify-between gap-2 px-3.5 py-2 text-left active:bg-secondary transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="grid size-6 shrink-0 place-items-center rounded-full border border-hairline/60 bg-surface">
-                        {option === "orchestrator" ? (
-                          <Brain className="size-3.5 text-foreground" />
-                        ) : (
-                          <ShieldAlert className="size-3.5 text-foreground" />
-                        )}
-                      </div>
-                      <span className="min-w-0">
-                        <span className="block truncate text-[13px] font-medium leading-tight">
-                          {option === "orchestrator" ? "ORCHESTRATOR" : "SHEOL"}
-                        </span>
-                        <span className="block truncate text-[10.5px] leading-tight text-muted-foreground">
-                          {option === "orchestrator"
-                            ? "Motor orquestrador"
-                            : "Motor de missão rígida"}
-                        </span>
-                      </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await changeEngine("sheol");
+                    setSheet(null);
+                  }}
+                  className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left active:bg-secondary transition-colors"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="grid size-6 shrink-0 place-items-center rounded-full border border-hairline/60 bg-surface">
+                      <ShieldAlert className="size-3.5 text-foreground" />
                     </div>
-                    {engine === option ? (
-                      <Check className="size-[14px] shrink-0 text-foreground" />
-                    ) : null}
-                  </button>
-                ))}
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium leading-tight">
+                        SHEOL
+                      </span>
+                      <span className="block truncate text-[10.5px] leading-tight text-muted-foreground">
+                        Motor de missão rígida
+                      </span>
+                    </span>
+                  </div>
+                  {engine === "sheol" ? (
+                    <Check className="size-[14px] shrink-0 text-foreground" />
+                  ) : null}
+                </button>
                 <div className="border-t border-hairline/60" />
                 {availableModels.length === 0 ? (
                   <div className="px-4 py-5 text-center">
@@ -3255,7 +3245,7 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                           </span>
                         </span>
                       </div>
-                      {model === option.id ? (
+                      {engine === "orchestrator" && model === option.id ? (
                         <Check className="size-[14px] shrink-0 text-foreground" />
                       ) : null}
                     </button>
@@ -3488,18 +3478,47 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                   </button>
                   {scope !== "quick" && (
                     <button
-                      onClick={() => setSheet(sheet === "model" ? null : "model")}
-                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-secondary px-3 text-[13px] font-medium text-foreground transition-all hover:bg-secondary/80 border border-hairline/60"
+                      onClick={() => {
+                        if (availableModels.length === 0 && engine !== "sheol") {
+                          setAddApiModalOpen(true);
+                        } else {
+                          setSheet(sheet === "model" ? null : "model");
+                        }
+                      }}
+                      className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium transition-all ${
+                        availableModels.length === 0 && engine !== "sheol"
+                          ? "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/15"
+                          : "bg-secondary text-foreground hover:bg-secondary/80 border border-hairline/60"
+                      }`}
                     >
-                      {engine === "orchestrator" ? (
-                        <Brain className="size-3.5 shrink-0 text-foreground" />
-                      ) : (
+                      {engine === "sheol" ? (
                         <ShieldAlert className="size-3.5 shrink-0 text-foreground" />
+                      ) : (
+                        (() => {
+                          const savedApis = getUserSavedApis();
+                          const found = savedApis.find((a) => a.id === model);
+                          const provId = found?.providerId || model.split(":")[0];
+                          const Logo = isModelOS(model)
+                            ? GriotAiLogo
+                            : getAiLogo(provId);
+                          return <Logo className="size-3.5 shrink-0 text-foreground" />;
+                        })()
                       )}
                       <span className="truncate">
-                        {engine === "orchestrator" ? "ORCHESTRATOR" : "SHEOL"}
+                        {(() => {
+                          if (engine === "sheol") return "SHEOL";
+                          if (availableModels.length === 0) return t("+ Adicionar API");
+                          const raw = modelLabel(model);
+                          return raw.length > 12 ? `${raw.slice(0, 12)}…` : raw;
+                        })()}
                       </span>
-                      <ChevronDown className="size-4 text-muted-foreground" />
+                      <ChevronDown
+                        className={`size-4 ${
+                          availableModels.length === 0 && engine !== "sheol"
+                            ? "text-primary/70"
+                            : "text-muted-foreground"
+                        }`}
+                      />
                     </button>
                   )}
 
