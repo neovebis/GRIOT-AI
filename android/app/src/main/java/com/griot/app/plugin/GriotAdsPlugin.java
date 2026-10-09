@@ -90,7 +90,21 @@ public class GriotAdsPlugin extends Plugin {
             return;
         }
 
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            JSObject result = new JSObject();
+            result.put("shown", false);
+            call.resolve(result);
+            return;
+        }
+
         activity.runOnUiThread(() -> {
+            if (activity.isFinishing() || activity.isDestroyed()) {
+                JSObject result = new JSObject();
+                result.put("shown", false);
+                call.resolve(result);
+                return;
+            }
+
             if (!initialized || (consentInformation != null && !consentInformation.canRequestAds())) {
                 JSObject result = new JSObject();
                 result.put("shown", false);
@@ -114,7 +128,7 @@ public class GriotAdsPlugin extends Plugin {
             slot.height = cssToPx(call.getDouble("height", 0.0));
             slot.darkMode = Boolean.TRUE.equals(call.getBoolean("darkMode", true));
             place(slot, call.getDouble("x", 0.0), call.getDouble("y", 0.0));
-            if (slot.ad != null) slot.host.setVisibility(View.VISIBLE);
+            if (slot.ad != null && slot.host != null) slot.host.setVisibility(View.VISIBLE);
 
             if (slot.ad == null && !slot.loading && System.currentTimeMillis() - slot.lastLoadAttempt > 30_000) loadAd(slot);
             JSObject result = new JSObject();
@@ -126,9 +140,14 @@ public class GriotAdsPlugin extends Plugin {
     @PluginMethod
     public void hideNativeAd(PluginCall call) {
         String slotId = call.getString("slotId", "");
-        getActivity().runOnUiThread(() -> {
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            call.resolve();
+            return;
+        }
+        activity.runOnUiThread(() -> {
             AdSlot slot = slots.get(slotId);
-            if (slot != null) slot.host.setVisibility(View.GONE);
+            if (slot != null && slot.host != null) slot.host.setVisibility(View.GONE);
             call.resolve();
         });
     }
@@ -136,12 +155,32 @@ public class GriotAdsPlugin extends Plugin {
     @PluginMethod
     public void destroyNativeAd(PluginCall call) {
         String slotId = call.getString("slotId", "");
-        getActivity().runOnUiThread(() -> {
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
             AdSlot slot = slots.remove(slotId);
             if (slot != null) {
-                if (slot.ad != null) slot.ad.destroy();
-                ViewGroup parent = (ViewGroup) slot.host.getParent();
-                if (parent != null) parent.removeView(slot.host);
+                if (slot.ad != null) {
+                    slot.ad.destroy();
+                    slot.ad = null;
+                }
+                slot.host = null;
+            }
+            call.resolve();
+            return;
+        }
+        activity.runOnUiThread(() -> {
+            AdSlot slot = slots.remove(slotId);
+            if (slot != null) {
+                if (slot.ad != null) {
+                    slot.ad.destroy();
+                    slot.ad = null;
+                }
+                if (slot.host != null) {
+                    ViewGroup parent = (ViewGroup) slot.host.getParent();
+                    if (parent != null) parent.removeView(slot.host);
+                    slot.host.removeAllViews();
+                    slot.host = null;
+                }
             }
             call.resolve();
         });
@@ -149,8 +188,13 @@ public class GriotAdsPlugin extends Plugin {
 
     @PluginMethod
     public void showAdPrivacyOptions(PluginCall call) {
-        getActivity().runOnUiThread(() -> UserMessagingPlatform.showPrivacyOptionsForm(
-            getActivity(),
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) {
+            call.resolve();
+            return;
+        }
+        activity.runOnUiThread(() -> UserMessagingPlatform.showPrivacyOptionsForm(
+            activity,
             error -> {
                 if (error != null) call.reject(error.getMessage());
                 else call.resolve();
@@ -161,7 +205,18 @@ public class GriotAdsPlugin extends Plugin {
     @Override
     protected void handleOnDestroy() {
         for (AdSlot slot : slots.values()) {
-            if (slot.ad != null) slot.ad.destroy();
+            if (slot.ad != null) {
+                slot.ad.destroy();
+                slot.ad = null;
+            }
+            if (slot.host != null) {
+                ViewGroup parent = (ViewGroup) slot.host.getParent();
+                if (parent != null) {
+                    parent.removeView(slot.host);
+                }
+                slot.host.removeAllViews();
+                slot.host = null;
+            }
         }
         slots.clear();
         super.handleOnDestroy();
@@ -190,17 +245,35 @@ public class GriotAdsPlugin extends Plugin {
         String adUnitId = getContext().getString(com.griot.app.R.string.admob_native_ad_unit_id);
         AdLoader loader = new AdLoader.Builder(getContext(), adUnitId)
             .forNativeAd(ad -> {
-                slot.loading = false;
-                if (slot.ad != null) slot.ad.destroy();
-                slot.ad = ad;
-                renderAd(slot, ad);
-                slot.host.setVisibility(View.VISIBLE);
+                Activity currentActivity = getActivity();
+                if (currentActivity == null || currentActivity.isFinishing() || currentActivity.isDestroyed()) {
+                    ad.destroy();
+                    return;
+                }
+                currentActivity.runOnUiThread(() -> {
+                    slot.loading = false;
+                    if (slot.ad != null) {
+                        slot.ad.destroy();
+                    }
+                    slot.ad = ad;
+                    renderAd(slot, ad);
+                    if (slot.host != null) {
+                        slot.host.setVisibility(View.VISIBLE);
+                    }
+                });
             })
             .withAdListener(new com.google.android.gms.ads.AdListener() {
                 @Override
                 public void onAdFailedToLoad(@NonNull com.google.android.gms.ads.LoadAdError error) {
                     slot.loading = false;
-                    slot.host.setVisibility(View.GONE);
+                    Activity currentActivity = getActivity();
+                    if (currentActivity != null && !currentActivity.isFinishing() && !currentActivity.isDestroyed()) {
+                        currentActivity.runOnUiThread(() -> {
+                            if (slot.host != null) {
+                                slot.host.setVisibility(View.GONE);
+                            }
+                        });
+                    }
                     android.util.Log.w("GRIOT Ads", "Falha ao carregar anúncio: " + error.getMessage());
                 }
             })
@@ -209,11 +282,18 @@ public class GriotAdsPlugin extends Plugin {
     }
 
     private void place(AdSlot slot, double cssX, double cssY) {
+        Activity activity = getActivity();
+        if (activity == null || activity.isFinishing() || activity.isDestroyed()) return;
+        if (getBridge() == null || getBridge().getWebView() == null || slot.host == null) return;
+
+        View content = activity.findViewById(android.R.id.content);
+        if (content == null) return;
+
         int[] webViewLocation = new int[2];
         int[] contentLocation = new int[2];
         getBridge().getWebView().getLocationOnScreen(webViewLocation);
-        View content = getActivity().findViewById(android.R.id.content);
         content.getLocationOnScreen(contentLocation);
+
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             Math.max(slot.width, 1), Math.max(slot.height, 1)
         );

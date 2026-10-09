@@ -331,6 +331,9 @@ public class TerminalBridgeService extends Service {
         for (String id : activeSessions.keySet()) {
             closeSession(id);
         }
+        activeSessions.clear();
+        globalListener = null;
+        executor.shutdownNow();
         super.onDestroy();
     }
 

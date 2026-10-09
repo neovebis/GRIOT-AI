@@ -27,6 +27,7 @@ public class MainActivity extends BridgeActivity {
                 "  return 'exit'; " +
                 "})()",
                 value -> {
+                    if (isFinishing() || isDestroyed()) return;
                     if (value == null || "\"exit\"".equals(value) || "null".equals(value)) {
                         MainActivity.super.onBackPressed();
                     }

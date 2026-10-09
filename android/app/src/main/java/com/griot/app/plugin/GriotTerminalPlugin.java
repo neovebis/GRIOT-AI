@@ -308,11 +308,21 @@ public class GriotTerminalPlugin extends Plugin implements TerminalBridgeService
 
     @Override
     protected void handleOnDestroy() {
+        if (bridgeService != null) {
+            try {
+                bridgeService.setListener(null);
+            } catch (Exception ignored) {}
+            bridgeService = null;
+        }
         if (serviceBound) {
             try {
                 getContext().unbindService(serviceConnection);
             } catch (Exception ignored) {}
             serviceBound = false;
+        }
+        threadPool.shutdownNow();
+        if (instance == this) {
+            instance = null;
         }
         super.handleOnDestroy();
     }

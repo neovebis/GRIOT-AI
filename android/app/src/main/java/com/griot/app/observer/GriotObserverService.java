@@ -814,8 +814,12 @@ public class GriotObserverService extends AccessibilityService {
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
+        automationHandler.removeCallbacksAndMessages(null);
         hideOverlay();
         currentState = ObserverState.IDLE;
+        if (instance == this) {
+            instance = null;
+        }
+        super.onDestroy();
     }
 }

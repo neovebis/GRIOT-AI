@@ -312,4 +312,12 @@ public class GriotPlugin extends Plugin {
     private void permissionsCallback(PluginCall call) {
         checkPermissionsStatus(call);
     }
+
+    @Override
+    protected void handleOnDestroy() {
+        if (instance == this) {
+            instance = null;
+        }
+        super.handleOnDestroy();
+    }
 }
