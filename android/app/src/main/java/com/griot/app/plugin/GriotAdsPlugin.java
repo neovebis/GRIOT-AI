@@ -225,86 +225,154 @@ public class GriotAdsPlugin extends Plugin {
 
     private void renderAd(AdSlot slot, NativeAd ad) {
         NativeAdView adView = new NativeAdView(getContext());
-        adView.setPadding(cssToPx(10), cssToPx(6), cssToPx(10), cssToPx(6));
+        adView.setPadding(cssToPx(8), cssToPx(8), cssToPx(8), cssToPx(8));
         adView.setBackground(roundedBackground(slot.darkMode));
 
         LinearLayout row = new LinearLayout(getContext());
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
 
+        // Lado esquerdo: miniatura quadrada/retangular do anúncio
+        FrameLayout thumbContainer = new FrameLayout(getContext());
+        GradientDrawable thumbBg = new GradientDrawable();
+        thumbBg.setColor(Color.rgb(32, 32, 36));
+        thumbBg.setCornerRadius(cssToPx(10));
+        thumbContainer.setBackground(thumbBg);
+        thumbContainer.setClipToOutline(true);
+
+        MediaView mediaView = new MediaView(getContext());
+        mediaView.setImageScaleType(ImageView.ScaleType.CENTER_CROP);
+        thumbContainer.addView(mediaView, new FrameLayout.LayoutParams(MATCH, MATCH));
+        adView.setMediaView(mediaView);
+
+        if (ad.getMediaContent() == null || ad.getMediaContent().getMainImage() == null) {
+            if (ad.getImages() != null && !ad.getImages().isEmpty() && ad.getImages().get(0).getDrawable() != null) {
+                ImageView img = new ImageView(getContext());
+                img.setImageDrawable(ad.getImages().get(0).getDrawable());
+                img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                thumbContainer.addView(img, new FrameLayout.LayoutParams(MATCH, MATCH));
+            } else if (ad.getIcon() != null && ad.getIcon().getDrawable() != null) {
+                ImageView img = new ImageView(getContext());
+                img.setImageDrawable(ad.getIcon().getDrawable());
+                img.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                thumbContainer.addView(img, new FrameLayout.LayoutParams(MATCH, MATCH));
+            }
+        }
+        LinearLayout.LayoutParams thumbParams = new LinearLayout.LayoutParams(cssToPx(80), cssToPx(62));
+        row.addView(thumbContainer, thumbParams);
+
+        // Lado direito: coluna de informações
+        LinearLayout rightColumn = new LinearLayout(getContext());
+        rightColumn.setOrientation(LinearLayout.VERTICAL);
+        rightColumn.setGravity(Gravity.CENTER_VERTICAL);
+        rightColumn.setPadding(cssToPx(10), 0, cssToPx(2), 0);
+        LinearLayout.LayoutParams colParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.0f);
+        row.addView(rightColumn, colParams);
+
+        // Cabeçalho: ícone da marca + nome do anunciante + tag 'Anúncio' em pill cinzento + opções (3 pontos)
+        LinearLayout headerRow = new LinearLayout(getContext());
+        headerRow.setOrientation(LinearLayout.HORIZONTAL);
+        headerRow.setGravity(Gravity.CENTER_VERTICAL);
+
         if (ad.getIcon() != null && ad.getIcon().getDrawable() != null) {
-            ImageView icon = new ImageView(getContext());
-            icon.setImageDrawable(ad.getIcon().getDrawable());
-            icon.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            ImageView brandIcon = new ImageView(getContext());
+            brandIcon.setImageDrawable(ad.getIcon().getDrawable());
+            brandIcon.setScaleType(ImageView.ScaleType.CENTER_CROP);
             GradientDrawable iconBg = new GradientDrawable();
-            iconBg.setColor(Color.rgb(28, 28, 32));
-            iconBg.setCornerRadius(cssToPx(10));
-            icon.setBackground(iconBg);
-            icon.setClipToOutline(true);
-            row.addView(icon, new LinearLayout.LayoutParams(cssToPx(38), cssToPx(38)));
-            adView.setIconView(icon);
-        } else {
-            MediaView media = new MediaView(getContext());
-            media.setImageScaleType(ImageView.ScaleType.CENTER_CROP);
-            GradientDrawable mediaBg = new GradientDrawable();
-            mediaBg.setColor(Color.rgb(28, 28, 32));
-            mediaBg.setCornerRadius(cssToPx(10));
-            media.setBackground(mediaBg);
-            media.setClipToOutline(true);
-            row.addView(media, new LinearLayout.LayoutParams(cssToPx(42), cssToPx(38)));
-            adView.setMediaView(media);
+            iconBg.setColor(Color.rgb(36, 36, 42));
+            iconBg.setCornerRadius(cssToPx(4));
+            brandIcon.setBackground(iconBg);
+            brandIcon.setClipToOutline(true);
+            LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(cssToPx(14), cssToPx(14));
+            iconParams.rightMargin = cssToPx(5);
+            headerRow.addView(brandIcon, iconParams);
+            adView.setIconView(brandIcon);
         }
 
-        LinearLayout textColumn = new LinearLayout(getContext());
-        textColumn.setOrientation(LinearLayout.VERTICAL);
-        textColumn.setPadding(cssToPx(10), 0, cssToPx(8), 0);
-        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        row.addView(textColumn, textParams);
-
-        TextView advertiser = textView(9, slot.darkMode, false, 1);
-        String sponsor = ad.getAdvertiser() == null ? "Patrocinado" : ad.getAdvertiser();
-        advertiser.setText(sponsor + "  ·  Anúncio");
-        advertiser.setTextColor(Color.rgb(156, 156, 163));
-        textColumn.addView(advertiser);
+        TextView advertiser = new TextView(getContext());
+        advertiser.setTextSize(10.5f);
+        advertiser.setTextColor(slot.darkMode ? Color.rgb(212, 212, 216) : Color.rgb(63, 63, 70));
+        advertiser.setMaxLines(1);
+        advertiser.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        String sponsor = ad.getAdvertiser() != null && !ad.getAdvertiser().trim().isEmpty()
+            ? ad.getAdvertiser().trim()
+            : "Patrocinado";
+        advertiser.setText(sponsor);
+        LinearLayout.LayoutParams advParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        advParams.rightMargin = cssToPx(6);
+        headerRow.addView(advertiser, advParams);
         adView.setAdvertiserView(advertiser);
 
-        TextView headline = textView(12, slot.darkMode, true, 1);
-        headline.setText(ad.getHeadline() == null ? "" : ad.getHeadline());
-        headline.setTextColor(Color.WHITE);
-        textColumn.addView(headline);
+        TextView tag = new TextView(getContext());
+        tag.setText("Anúncio");
+        tag.setTextSize(8.5f);
+        tag.setTextColor(slot.darkMode ? Color.rgb(161, 161, 170) : Color.rgb(113, 113, 122));
+        tag.setPadding(cssToPx(5), cssToPx(1), cssToPx(5), cssToPx(1));
+        GradientDrawable tagBg = new GradientDrawable();
+        tagBg.setColor(slot.darkMode ? Color.rgb(39, 39, 42) : Color.rgb(228, 228, 231));
+        tagBg.setCornerRadius(cssToPx(4));
+        tagBg.setStroke(cssToPx(1), Color.argb(25, 255, 255, 255));
+        tag.setBackground(tagBg);
+        headerRow.addView(tag, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        View spacer = new View(getContext());
+        LinearLayout.LayoutParams spacerParams = new LinearLayout.LayoutParams(0, 0, 1.0f);
+        headerRow.addView(spacer, spacerParams);
+
+        AdChoicesView adChoicesView = new AdChoicesView(getContext());
+        headerRow.addView(adChoicesView, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+        adView.setAdChoicesView(adChoicesView);
+
+        TextView optionsDots = new TextView(getContext());
+        optionsDots.setText("⋮");
+        optionsDots.setTextSize(13f);
+        optionsDots.setTextColor(slot.darkMode ? Color.rgb(113, 113, 122) : Color.rgb(161, 161, 170));
+        optionsDots.setPadding(cssToPx(4), 0, cssToPx(2), 0);
+        headerRow.addView(optionsDots, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        rightColumn.addView(headerRow, new LinearLayout.LayoutParams(MATCH, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // Título a negrito em destaque
+        TextView headline = new TextView(getContext());
+        headline.setText(ad.getHeadline() != null ? ad.getHeadline() : "");
+        headline.setTextSize(12f);
+        headline.setTextColor(slot.darkMode ? Color.WHITE : Color.rgb(24, 24, 27));
+        headline.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        headline.setMaxLines(1);
+        headline.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams headlineParams = new LinearLayout.LayoutParams(
+            MATCH, ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        headlineParams.topMargin = cssToPx(2);
+        rightColumn.addView(headline, headlineParams);
         adView.setHeadlineView(headline);
 
+        // Descrição sucinta truncada em no máximo 2 linhas com reticências
         if (ad.getBody() != null && !ad.getBody().trim().isEmpty()) {
-            TextView body = textView(10, slot.darkMode, false, 1);
-            body.setTextColor(Color.rgb(130, 130, 138));
-            body.setText(ad.getBody());
-            textColumn.addView(body);
+            TextView body = new TextView(getContext());
+            body.setText(ad.getBody().trim());
+            body.setTextSize(10.5f);
+            body.setTextColor(slot.darkMode ? Color.rgb(161, 161, 170) : Color.rgb(100, 100, 108));
+            body.setMaxLines(2);
+            body.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            body.setLineSpacing(cssToPx(1), 1.0f);
+            LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
+                MATCH, ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            bodyParams.topMargin = cssToPx(1);
+            rightColumn.addView(body, bodyParams);
             adView.setBodyView(body);
         }
 
-        Button cta = new Button(getContext());
-        cta.setAllCaps(false);
-        cta.setTextSize(10.5f);
-        cta.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        cta.setMinWidth(0);
-        cta.setMinimumWidth(0);
-        cta.setPadding(cssToPx(12), 0, cssToPx(12), 0);
-        cta.setText(ad.getCallToAction() == null ? "Abrir" : ad.getCallToAction());
-        GradientDrawable ctaBg = new GradientDrawable();
-        ctaBg.setColor(Color.rgb(240, 240, 245));
-        ctaBg.setCornerRadius(cssToPx(14));
-        cta.setBackground(ctaBg);
-        cta.setTextColor(Color.rgb(15, 15, 18));
-        cta.setElevation(0);
-        cta.setStateListAnimator(null);
-        LinearLayout.LayoutParams ctaParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, cssToPx(28));
-        ctaParams.gravity = Gravity.CENTER_VERTICAL;
-        row.addView(cta, ctaParams);
-        adView.setCallToActionView(cta);
-
-        AdChoicesView adChoicesView = new AdChoicesView(getContext());
-        adView.setAdChoicesView(adChoicesView);
-
+        adView.setCallToActionView(adView);
         adView.addView(row, new FrameLayout.LayoutParams(MATCH, MATCH));
         adView.setNativeAd(ad);
         slot.host.removeAllViews();
@@ -323,9 +391,9 @@ public class GriotAdsPlugin extends Plugin {
 
     private GradientDrawable roundedBackground(boolean darkMode) {
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(20, 20, 23));
+        background.setColor(darkMode ? Color.rgb(24, 24, 27) : Color.rgb(244, 244, 246));
         background.setCornerRadius(cssToPx(16));
-        background.setStroke(cssToPx(1), Color.rgb(38, 38, 42));
+        background.setStroke(cssToPx(1), darkMode ? Color.rgb(39, 39, 42) : Color.rgb(228, 228, 231));
         return background;
     }
 

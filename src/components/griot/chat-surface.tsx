@@ -2552,25 +2552,11 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
         </div>
       )}
 
-      {/* Dock Fixo e Estável de Anúncio Nativo para Plano Free (Zero oscilação, fixo, 100% estável) */}
-      {showsAds && (
-        <div
-          data-griot-ad-dock="true"
-          className="fixed inset-x-0 top-[calc(max(env(safe-area-inset-top,0px),24px)+48px)] z-30 px-4 pointer-events-none"
-        >
-          <div className="pointer-events-auto mx-auto max-w-lg">
-            <NativeAdSlot slotId="chat-stationary-dock" hidden={isAnyOverlayActive} />
-          </div>
-        </div>
-      )}
-
       {/* Feed da conversa */}
       <div className="no-scrollbar h-full overflow-y-auto overflow-x-hidden w-full max-w-full overscroll-contain">
         <div
-          className={`mx-auto flex w-full max-w-lg flex-col space-y-5 px-5 pb-52 overflow-x-hidden max-w-full ${
-            showsAds
-              ? "pt-[calc(max(env(safe-area-inset-top,0px),24px)+126px)]"
-              : "pt-[calc(max(env(safe-area-inset-top,0px),24px)+52px)]"
+          className={`mx-auto flex w-full max-w-lg flex-col space-y-5 px-5 overflow-x-hidden max-w-full pt-[calc(max(env(safe-area-inset-top,0px),24px)+52px)] ${
+            showsAds ? "pb-72" : "pb-52"
           }`}
         >
           {/* No feed de mensagens, a barra de missão desaparece após o envio da mensagem */}
@@ -3357,6 +3343,13 @@ DIRETRIZES ESTRITAS DE FALA HUMANA:
                   <span>{t("Recusar")}</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Cartão de Anúncio Estilo ChatGPT - Ancorado imediatamente acima da barra de introdução de texto */}
+          {showsAds && (
+            <div className="mb-2 w-full">
+              <NativeAdSlot slotId="chat-stationary-dock" hidden={isAnyOverlayActive} />
             </div>
           )}
 
